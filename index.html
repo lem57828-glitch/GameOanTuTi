@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OTTv2 - Rock Paper Scissors Game (Multiplayer)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 { margin-bottom: 5px; color: #38bdf8; font-size: 1.8rem; text-align: center; }
+        .instructions {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            max-width: 600px;
+            text-align: center;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+
+        /* Bàn cờ 9x9 */
+        .board {
+            display: grid;
+            grid-template-columns: repeat(9, 50px);
+            grid-template-rows: repeat(9, 50px);
+            gap: 2px;
+            background-color: #334155;
+            padding: 4px;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        .cell {
+            background-color: #1e293b;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s;
+        }
+
+        .cell:hover {
+            background-color: #475569;
+        }
+
+        /* Đánh dấu ô đặc biệt a1 và i9 trên bàn cờ */
+        .goal-a1 { border: 2px dashed #ef4444; }
+        .goal-i9 { border: 2px dashed #3b82f6; }
+
+        /* Các quân cờ (có thể kéo thả qua lại giữa các người chơi nhờ can-move) */
+        .piece {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            cursor: grab;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .piece:active { cursor: grabbing; }
+
+        /* Phân loại phe chơi */
+        .p1 { background-color: #ef4444; color: white; } /* Đỏ */
+        .p2 { background-color: #3b82f6; color: white; } /* Xanh */
+
+        .status-panel {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #1e293b;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            font-size: 0.95rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Rock-Paper-Scissors v2 (OTTv2)</h1>
+    <div class="instructions">
+        <b>Luật chơi:</b> Bàn cờ 9x9. Các quân cờ (Đá 🪨, Giấy 📄, Kéo ✂️) di chuyển 1 ô bất kỳ hướng nào giống Vua trong cờ vua. 
+        Quân giống nhau không ăn được nhau (chỉ chặn đường). Đưa 1 quân bất kỳ về ô đích góc tương ứng (<b>a1</b> hoặc <b>i9</b>) hoặc tiêu diệt hết quân loại khắc chế để thắng!
+    </div>
+
+    <!-- Khu vực chứa các quân cờ dự trữ hoặc bàn cờ -->
+    <div class="board" id="chess-board">
+        <!-- Tạo bàn cờ 9x9 bằng Javascript hoặc HTML thuần. Dưới đây dùng JS sinh nhanh các ô cell -->
+    </div>
+
+    <div class="status-panel">
+        ✨ Trạng thái đồng bộ mạng lưới: <span id="sync-status" style="color: #4ade80;">Đang hoạt động (Nhiều người chơi)</span>
+    </div>
+
+    <!-- Nhúng thư viện playhtml để làm serverless real-time multiplayer -->
+    <script type="module">
+        import { playhtml } from "https://unpkg.com/playhtml";
+        playhtml.init();
+    </script>
+
+    <script>
+        // Khởi tạo bàn cờ 9x9 và gán thuộc tính can-move của playhtml cho các quân cờ
+        const board = document.getElementById('chess-board');
+        
+        // Tạo nhanh cấu trúc 9x9 ô vuông (từ hàng 1 đến 9, cột a đến i)
+        // Để đơn giản hóa mô phỏng kéo thả tự do qua playhtml trên không gian 9x9:
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                const cell = document.createElement('div');
+                cell.classList.add('cell');
+                
+                // Đánh dấu ô mục tiêu a1 (Góc trên trái: r=0, c=0) và i9 (Góc dưới phải: r=8, c=8)
+                if (r === 0 && c === 0) cell.classList.add('goal-a1');
+                if (r === 8 && c === 8) cell.classList.add('goal-i9');
+
+                board.appendChild(cell);
+            }
+        }
+
+        // Tạo các quân cờ ban đầu cho Player 1 (Đỏ) và Player 2 (Xanh) đặt tự do hoặc vào vị trí mẫu
+        // can-move giúp mọi người chơi thấy việc kéo thả quân cờ đồng thời theo thời gian thực.
+        const container = document.body;
+        
+        const piecesData = [
+            { type: 'p1', symbol: '🪨', text: 'Đá P1' },
+            { type: 'p1', symbol: '📄', text: 'Giấy P1' },
+            { type: 'p1', symbol: '✂️', text: 'Kéo P1' },
+            { type: 'p2', symbol: '🪨', text: 'Đá P2' },
+            { type: 'p2', symbol: '📄', text: 'Giấy P2' },
+            { type: 'p2', symbol: '✂️', text: 'Kéo P2' },
+        ];
+
+        // Tạo khung chứa quân cờ bên ngoài bàn cờ để người chơi kéo vào trận địa
+        const pieceContainer = document.createElement('div');
+        pieceContainer.style.display = 'flex';
+        pieceContainer.style.gap = '10px';
+        pieceContainer.style.marginTop = '15px';
+
+        piecesData.forEach((p, index) => {
+            const pieceDiv = document.createElement('div');
+            pieceDiv.className = `piece ${p.type}`;
+            pieceDiv.innerText = p.symbol;
+            pieceDiv.setAttribute('can-move', ''); // Kích hoạt tính năng kéo thả đồng bộ realtime của playhtml
+            pieceDiv.title = p.text;
+            pieceContainer.appendChild(pieceDiv);
+        });
+
+        document.body.appendChild(pieceContainer);
+    </script>
+</body>
+</html>
