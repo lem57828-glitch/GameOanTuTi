@@ -1,6 +1,7 @@
 """Harness chạy một bot thí sinh. Giao tiếp với máy chủ bằng JSON từng dòng qua stdin/stdout.
 
-Bot phải định nghĩa:  def make_move(state: dict) -> str
+Bot phải định nghĩa:  def make_move(state: dict) -> nước đi
+(dict {"from": "B4", "to": "C5"}, list ["B4", "C5"] hoặc chuỗi "B4-C5").
 Mọi print() của bot được chuyển sang log (stderr), không làm hỏng giao thức.
 
 Đây là lớp chặn "best-effort" (audit hook). Khi thi thật nên chạy kèm BOT_SANDBOX=docker
@@ -87,15 +88,14 @@ def main():
         return
 
     send({"type": "ready"})
-    base = {"moves": init["moves"], "beats": init["beats"], "total_turns": init["turns"]}
+    base = init.get("info", {})  # thông tin cố định của ván: màu, ô đích, bảng thắng...
 
     for line in sys.stdin:
         msg = json.loads(line)
         if msg.get("type") == "end":
             break
         state = dict(base)
-        state.update(turn=msg["turn"], total_turns=msg.get("total_turns", base["total_turns"]), my_moves=msg["my_moves"],
-                     opponent_moves=msg.get("opponent_moves"), results=msg.get("results"))
+        state.update(msg.get("state", {}))
         t0 = time.process_time()
         try:
             move = fn(state)
@@ -103,9 +103,13 @@ def main():
             if cpu > cpu_limit:
                 send({"error": f"Vượt CPU: {cpu * 1000:.0f} ms > {cpu_limit * 1000:.0f} ms", "cpu_ms": cpu * 1000})
             else:
-                send({"move": move if isinstance(move, str) else repr(move), "cpu_ms": cpu * 1000})
+                try:
+                    json.dumps(move)
+                except (TypeError, ValueError):
+                    move = repr(move)
+                send({"move": move, "cpu_ms": cpu * 1000})
         except BaseException as e:  # noqa: BLE001
-            print(f"[lượt {msg['turn']}] {type(e).__name__}: {e}", file=sys.stderr)
+            print(f"[nước {state.get('ply')}] {type(e).__name__}: {e}", file=sys.stderr)
             send({"error": f"{type(e).__name__}: {e}"})
 
 

@@ -122,13 +122,22 @@ function finalSession() {
 }
 
 /**
- * Soạn luật mới cho chung kết. Dữ liệu thắng/thua lấy từ một trận Swiss đã xác nhận, chọn ngẫu nhiên có ghi nhận.
+ * Soạn luật mới cho chung kết. Thế cờ ban đầu cố định ba loại quân nên luật mới đổi bảng khắc chế giữa chúng.
+ * Dữ liệu phát cho hai đội: kết quả và diễn biến các ván của một trận Swiss đã xác nhận, chọn ngẫu nhiên, ẩn tên đội.
  */
-function configureFinal({ name, moves, beats, description, briefing, durationMin, includeMoves, reveal }, adminId) {
+const PIECE_TYPES = ['ROCK', 'PAPER', 'SCISSORS'];
+
+function configureFinal({ name, beats, description, briefing, durationMin, includeMoves, reveal }, adminId) {
   const cur = finalSession();
   if (cur && cur.status !== 'draft') throw new UserError('Phiên chung kết đã bắt đầu, không sửa luật được');
+  const moves = PIECE_TYPES;
   const err = rules.validateRuleset({ moves, beats });
   if (err) throw new UserError(err);
+  // Mỗi loại phải ăn được ít nhất một loại khác và bị ít nhất một loại ăn, nếu không ván có thể không thể kết thúc bằng ăn quân.
+  for (const t of moves) {
+    if (!(beats[t] || []).length) throw new UserError(`${t} phải ăn được ít nhất một loại quân`);
+    if (!moves.some((o) => (beats[o] || []).includes(t))) throw new UserError(`${t} phải bị ít nhất một loại quân ăn`);
+  }
   const duration = Number(durationMin) || 75;
   if (duration < 15 || duration > 240) throw new UserError('Thời lượng 15-240 phút');
 
@@ -137,12 +146,14 @@ function configureFinal({ name, moves, beats, description, briefing, durationMin
   if (pool.length) {
     const pick = pool[Math.floor(Math.random() * pool.length)].id;
     const run = db.get(`SELECT turns_json FROM runs WHERE match_id = ? AND status = 'done' ORDER BY id DESC LIMIT 1`, pick);
-    const turns = JSON.parse(run.turns_json);
+    const games = JSON.parse(run.turns_json);
     data = {
-      source: `Trận Swiss #${pick} (ẩn tên đội)`,
-      note: 'Kết quả từng lượt theo góc nhìn bên A: W thắng, L thua, D hòa. Đây là dữ liệu dưới luật cũ.',
-      results: turns.map((t) => (t.r === 'a' ? 'W' : t.r === 'b' ? 'L' : 'D')),
-      moves: includeMoves ? turns.map((t) => [t.a, t.b]) : undefined,
+      source: `Trận Swiss #${pick} (ẩn tên đội, bên A/B)`,
+      note: 'Kết quả từng ván dưới luật cũ. W: bên A thắng, L: bên A thua, D: hòa.',
+      games: games.map((g) => ({
+        blue: g.blue, result: g.result === 'a' ? 'W' : g.result === 'b' ? 'L' : 'D', reason: g.reason, plies: g.plies, pieces: g.pieces,
+        moves: includeMoves ? g.moves.filter((m) => m.from).map(({ side, from, to, type, capture }) => ({ side, from, to, type, capture })) : undefined,
+      })),
     };
   }
   db.tx(() => {
@@ -153,7 +164,7 @@ function configureFinal({ name, moves, beats, description, briefing, durationMin
       ON CONFLICT(id) DO UPDATE SET ruleset_id = excluded.ruleset_id, briefing = excluded.briefing, data_json = excluded.data_json,
       duration_min = excluded.duration_min`, rsId, briefing || '', data ? JSON.stringify(data) : null, duration);
   });
-  db.audit(adminId, 'configure_final', { moves, beats, duration, dataSource: data && data.source });
+  db.audit(adminId, 'configure_final', { beats, duration, dataSource: data && data.source });
 }
 
 function startFinal(adminId) {
@@ -174,4 +185,4 @@ function endFinal(adminId) {
   db.audit(adminId, 'end_final', null);
 }
 
-module.exports = { achievement, prizes, setSideAward, issueCertificates, verify, finalSession, configureFinal, startFinal, endFinal, PRIZES, SIDE_AWARDS };
+module.exports = { PIECE_TYPES, achievement, prizes, setSideAward, issueCertificates, verify, finalSession, configureFinal, startFinal, endFinal, PRIZES, SIDE_AWARDS };

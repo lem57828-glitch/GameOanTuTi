@@ -26,17 +26,19 @@ module.exports = {
   limits: {
     codeBytes: 1024 * 1024,         // 1 MB mã nộp
     memoryMb: 256,                  // RAM mỗi bot
-    cpuMsPerTurn: 100,              // CPU mỗi lượt
-    wallMsPerTurn: 1000,            // chờ tối đa mỗi lượt
+    cpuMsPerTurn: num('CPU_MS_PER_MOVE', 200), // CPU mỗi nước (bàn cờ cần tìm kiếm nên nới hơn bản chọn đồng thời; đo lại trước khi chốt)
+    wallMsPerTurn: 1000,            // chờ tối đa mỗi nước
+    maxErrors: 3,                   // nước sai/lỗi trong một ván trước khi bị xử thua kỹ thuật
     startupMs: 3000,                // khởi động
     logBytes: 1024 * 1024,          // log mỗi bot/trận
     practicePerDay: num('PRACTICE_PER_DAY', 20),
   },
 
   match: {
-    turns: num('MATCH_TURNS', 100),       // lượt/trận
-    extraTurns: num('EXTRA_TURNS', 100),  // đấu phụ khi hòa ở vòng loại trực tiếp
-    validationTurns: 20,
+    games: 2,                              // một trận = 2 ván đổi màu (mỗi bot cầm Xanh một ván)
+    extraGames: 2,                         // đấu phụ khi hòa ở vòng loại trực tiếp: thêm 2 ván đổi màu
+    maxPlies: num('MAX_PLIES', 200),       // giới hạn nước mỗi ván (tổng hai bên)
+    validationPlies: 40,                   // kiểm thử hợp lệ: mỗi màu một ván ngắn
   },
 
   swiss: {

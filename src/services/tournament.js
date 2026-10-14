@@ -19,7 +19,7 @@ function createMatch(m) {
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   m.kind, m.phase_key ?? null, m.round_no ?? null, m.series_id ?? null, m.game_no ?? null, m.team_a ?? null, m.team_b ?? null,
   m.sub_a ?? null, m.sub_b ?? null, m.sample_bot ?? null, m.ruleset_id, m.reveal ? 1 : 0, m.decisive ? 1 : 0,
-  m.turns ?? config.match.turns, m.seed ?? newSeed(), m.requested_by ?? null).lastInsertRowid);
+  m.games ?? config.match.games, m.seed ?? newSeed(), m.requested_by ?? null).lastInsertRowid);
   if (m.kind !== 'bye') queue.enqueue('match', id, m.kind === 'practice' ? queue.PRIORITY.practice : queue.PRIORITY.official);
   return id;
 }
@@ -39,10 +39,10 @@ async function executeMatch(job, workerId) {
       botA: pathOf(m.sub_a),
       botB: m.sample_bot ? samplePath(m.sample_bot) : pathOf(m.sub_b),
       ruleset: db.ruleset(m.ruleset_id),
-      turns: m.turns,
-      reveal: !!m.reveal_opponent,
+      games: m.turns, // cột `turns` lưu số ván của trận
+      maxPlies: config.match.maxPlies,
       decisive: !!m.decisive,
-      extraTurns: m.decisive ? config.match.extraTurns : 0,
+      extraGames: m.decisive ? config.match.extraGames : 0,
       seed: m.seed,
     });
   } catch (e) {
@@ -53,7 +53,7 @@ async function executeMatch(job, workerId) {
 
   db.tx(() => {
     db.run(`UPDATE runs SET status = 'done', turns_json = ?, log_a = ?, log_b = ?, finished_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`,
-      JSON.stringify(res.turns), res.logA, res.logB, runId);
+      JSON.stringify(res.games), res.logA, res.logB, runId);
     db.run(`UPDATE matches SET status = 'done', result = ?, wins_a = ?, wins_b = ?, draws = ?, extra_turns_used = ?, decided_by = ?,
         finished_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`,
     res.result, res.winsA, res.winsB, res.draws, res.extraUsed, res.decidedBy, m.id);

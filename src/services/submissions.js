@@ -11,9 +11,9 @@ const { newSeed } = require('../rules');
 const SAMPLE_DIR = path.join(config.ROOT, 'sample-bots');
 const SAMPLE_BOTS = {
   random_bot: 'Ngẫu nhiên',
-  rock_bot: 'Luôn một lựa chọn',
-  cycle_bot: 'Xoay vòng',
-  adaptive_bot: 'Thích nghi (khi được thấy lịch sử)',
+  greedy_bot: 'Tham ăn (ăn quân khi được)',
+  rusher_bot: 'Lao về đích',
+  smart_bot: 'Nhìn trước một nước',
 };
 const samplePath = (name) => path.join(SAMPLE_DIR, `${name}.py`);
 
@@ -83,20 +83,24 @@ function rulesFor(phaseKey) {
   return { ruleset: db.ruleset(phase.ruleset_id), reveal: !!phase.reveal_opponent };
 }
 
-/** Kiểm thử hợp lệ: không loại bot vì chiến thuật yếu, chỉ vì lỗi khởi động, lỗi chạy, trả sai, quá thời gian. */
+/** Kiểm thử hợp lệ: mỗi màu một ván ngắn với bot ngẫu nhiên. Chỉ loại bot lỗi (không khởi động được, trả nước sai, quá giờ), không loại vì chiến thuật yếu. */
 async function validate(job) {
   const sub = db.get('SELECT * FROM submissions WHERE id = ?', job.ref_id);
   if (!sub || sub.status !== 'pending') return;
-  const { ruleset, reveal } = rulesFor(sub.phase_key);
+  const { ruleset } = rulesFor(sub.phase_key);
   const res = await runMatch({
-    botA: sub.path, botB: samplePath('random_bot'), ruleset, turns: config.match.validationTurns,
-    reveal, decisive: false, extraTurns: 0, seed: newSeed(),
+    botA: sub.path, botB: samplePath('random_bot'), ruleset, games: 2, extraGames: 0,
+    maxPlies: config.match.validationPlies, decisive: false, seed: newSeed(),
   });
-  const errors = res.turns.map((t, i) => (t.ea ? `Lượt ${i}: ${t.ea}` : null)).filter(Boolean);
+  const errors = [];
+  res.games.forEach((g, i) => {
+    const mySide = g.blue === 'a' ? 'blue' : 'pink';
+    for (const m of g.moves) if (m.side === mySide && m.err) errors.push(`Ván ${i + 1} (${mySide === 'blue' ? 'Xanh' : 'Hồng'}), nước ${g.moves.indexOf(m) + 1}: ${m.err}`);
+  });
   const ok = errors.length === 0;
   const report = [
-    ok ? `HỢP LỆ: chạy đủ ${res.turns.length} lượt với luật "${ruleset.name}" (dữ liệu đối thủ: ${reveal ? 'có' : 'giấu'}).`
-      : `KHÔNG HỢP LỆ: ${errors.length} lượt lỗi.`,
+    ok ? `HỢP LỆ: chạy 2 ván (mỗi màu một ván, tối đa ${config.match.validationPlies} nước) với luật "${ruleset.name}" không có lỗi.`
+      : `KHÔNG HỢP LỆ: ${errors.length} nước lỗi.`,
     ...errors.slice(0, 20),
     res.logA ? `--- Log của bot ---\n${res.logA.slice(0, 20000)}` : '',
   ].filter(Boolean).join('\n');

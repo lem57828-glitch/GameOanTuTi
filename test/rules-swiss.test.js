@@ -6,16 +6,7 @@ const swiss = require('../src/services/swiss');
 
 const RPS = { moves: ['ROCK', 'PAPER', 'SCISSORS'], beats: { ROCK: ['SCISSORS'], PAPER: ['ROCK'], SCISSORS: ['PAPER'] } };
 
-test('phân xử lượt: thắng, hòa, lựa chọn sai', () => {
-  assert.equal(rules.judge(RPS, 'ROCK', 'SCISSORS'), 'a');
-  assert.equal(rules.judge(RPS, 'ROCK', 'PAPER'), 'b');
-  assert.equal(rules.judge(RPS, 'PAPER', 'PAPER'), 'draw');
-  assert.equal(rules.judge(RPS, 'LIZARD', 'ROCK'), 'b', 'lựa chọn ngoài luật thua');
-  assert.equal(rules.judge(RPS, null, 'ROCK'), 'b', 'lỗi/quá giờ thua');
-  assert.equal(rules.judge(RPS, null, 'FOO'), 'draw', 'cả hai sai là hòa');
-});
-
-test('kết quả trận: nhiều lượt thắng hơn thì thắng, bằng nhau hòa', () => {
+test('kết quả trận: nhiều ván thắng hơn thì thắng, bằng nhau hòa', () => {
   assert.equal(rules.matchResult({ winsA: 40, winsB: 39 }), 'a');
   assert.equal(rules.matchResult({ winsA: 30, winsB: 30 }), 'draw');
   assert.deepEqual(rules.tally([{ r: 'a' }, { r: 'b' }, { r: 'draw' }, { r: 'a' }]), { winsA: 2, winsB: 1, draws: 1 });

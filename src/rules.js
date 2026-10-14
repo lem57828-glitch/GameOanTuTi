@@ -1,35 +1,22 @@
-// Bộ luật phía máy chủ: chỉ máy chủ phân xử lượt, không nhận kết quả do bot/trình duyệt tự khai.
+// Tiện ích luật dùng chung: kiểm tra bảng khắc chế, tổng hợp kết quả ván/trận, bộ sinh số ngẫu nhiên có seed.
 
 const MOVE_RE = /^[A-Z][A-Z0-9_]{0,19}$/;
 
 function validateRuleset({ moves, beats }) {
-  if (!Array.isArray(moves) || moves.length < 2 || moves.length > 12) return 'Cần 2-12 lựa chọn.';
-  if (new Set(moves).size !== moves.length) return 'Lựa chọn bị trùng.';
-  for (const m of moves) if (!MOVE_RE.test(m)) return `Tên lựa chọn không hợp lệ: ${m} (chữ in hoa, số, _).`;
-  if (!beats || typeof beats !== 'object') return 'Thiếu bảng thắng.';
+  if (!Array.isArray(moves) || moves.length < 2 || moves.length > 12) return 'Cần 2-12 loại quân.';
+  if (new Set(moves).size !== moves.length) return 'Loại quân bị trùng.';
+  for (const m of moves) if (!MOVE_RE.test(m)) return `Tên loại quân không hợp lệ: ${m} (chữ in hoa, số, _).`;
+  if (!beats || typeof beats !== 'object') return 'Thiếu bảng khắc chế.';
   for (const [m, losers] of Object.entries(beats)) {
-    if (!moves.includes(m)) return `Bảng thắng chứa lựa chọn lạ: ${m}`;
+    if (!moves.includes(m)) return `Bảng khắc chế chứa loại quân lạ: ${m}`;
     if (!Array.isArray(losers)) return `beats.${m} phải là danh sách.`;
     for (const l of losers) {
-      if (!moves.includes(l)) return `beats.${m} chứa lựa chọn lạ: ${l}`;
+      if (!moves.includes(l)) return `beats.${m} chứa loại quân lạ: ${l}`;
       if (l === m) return `${m} không thể thắng chính nó.`;
       if ((beats[l] || []).includes(m)) return `${m} và ${l} không thể thắng lẫn nhau.`;
     }
   }
   return null;
-}
-
-/** Phân xử một lượt. Lựa chọn null/không hợp lệ thua lựa chọn hợp lệ; cả hai không hợp lệ là hòa. */
-function judge(rs, a, b) {
-  const okA = rs.moves.includes(a);
-  const okB = rs.moves.includes(b);
-  if (!okA && !okB) return 'draw';
-  if (!okA) return 'b';
-  if (!okB) return 'a';
-  if (a === b) return 'draw';
-  if ((rs.beats[a] || []).includes(b)) return 'a';
-  if ((rs.beats[b] || []).includes(a)) return 'b';
-  return 'draw';
 }
 
 function tally(turns) {
@@ -38,7 +25,7 @@ function tally(turns) {
   return { winsA: a, winsB: b, draws: d };
 }
 
-/** Nhiều lượt thắng hơn thì thắng trận; bằng nhau là hòa. */
+/** Nhiều ván thắng hơn thì thắng trận; bằng nhau là hòa. */
 function matchResult({ winsA, winsB }) {
   return winsA > winsB ? 'a' : winsB > winsA ? 'b' : 'draw';
 }
@@ -66,4 +53,4 @@ function shuffle(arr, rand) {
 
 function newSeed() { return Math.floor(Math.random() * 2 ** 31); }
 
-module.exports = { validateRuleset, judge, tally, matchResult, rng, shuffle, newSeed };
+module.exports = { validateRuleset, tally, matchResult, rng, shuffle, newSeed };

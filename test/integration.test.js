@@ -14,19 +14,23 @@ const auth = require('../src/auth');
 const subs = require('../src/services/submissions');
 const T = require('../src/services/tournament');
 const { runMatch } = require('../src/runner/match');
+const board = require('../src/game/board');
 const { Worker } = require('../src/services/queue');
 const handlers = require('../src/handlers');
 
-const RPS = { moves: ['ROCK', 'PAPER', 'SCISSORS'], beats: { ROCK: ['SCISSORS'], PAPER: ['ROCK'], SCISSORS: ['PAPER'] } };
+const RS = { moves: ['ROCK', 'PAPER', 'SCISSORS'], beats: { ROCK: ['SCISSORS'], PAPER: ['ROCK'], SCISSORS: ['PAPER'] } };
 const botFile = (name, code) => {
   const dir = path.join(TMP, 'adhoc', name);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'bot.py'), code);
   return path.join(dir, 'bot.py');
 };
-const ROCK = botFile('rock', 'def make_move(state):\n    return "ROCK"\n');
-const PAPER = botFile('paper', 'def make_move(state):\n    return "PAPER"\n');
-const play = (botA, botB, extra = {}) => runMatch({ botA, botB, ruleset: RPS, turns: 10, reveal: false, decisive: false, extraTurns: 0, seed: 1, ...extra });
+const RANDOM = botFile('random', 'import random\ndef make_move(state):\n    return random.choice(state["legal_moves"])\n');
+const RUSHER = path.join(__dirname, '..', 'sample-bots', 'rusher_bot.py');
+const SMART = path.join(__dirname, '..', 'sample-bots', 'smart_bot.py');
+const play = (botA, botB, extra = {}) => runMatch({ botA, botB, ruleset: RS, games: 2, extraGames: 0, maxPlies: 60, decisive: false, seed: 1, ...extra });
+/** Các nước của bên A trong ván i. */
+const movesOfA = (r, i = 0) => r.games[i].moves.filter((m) => m.side === (r.games[i].blue === 'a' ? 'blue' : 'pink'));
 
 db.open();
 const worker = new Worker(handlers, 4).start();
@@ -34,94 +38,127 @@ test.after(() => { worker.stop(); db.close(); fs.rmSync(TMP, { recursive: true, 
 
 // ------------------------------------------------------------ bộ chạy bot
 
-test('bot luôn búa / luôn bao: kết quả đúng', async () => {
-  const r = await play(ROCK, PAPER);
-  assert.equal(r.winsB, 10);
+test('trận 2 ván đổi màu, mọi nước đều hợp lệ và ván kết thúc đúng luật', async () => {
+  const r = await play(SMART, RANDOM, { maxPlies: 200 });
+  assert.equal(r.games.length, 2);
+  assert.equal(r.games[0].blue, 'a');
+  assert.equal(r.games[1].blue, 'b');
+  for (const g of r.games) {
+    assert.ok(['goal', 'eliminate', 'no_moves', 'repetition', 'max_plies'].includes(g.reason), g.reason);
+    assert.ok(g.moves.every((m) => !m.err));
+    // Dựng lại ván từ danh sách nước: từng nước phải hợp lệ.
+    let st = board.newGame(200);
+    for (const m of g.moves) st = board.applyMove(RS, st, board.findLegal(RS, st, m)).state;
+    assert.equal(st.ply, g.plies);
+  }
+  assert.equal(r.winsA + r.winsB + r.draws, 2);
+});
+
+test('bot nhận đúng trạng thái: màu, ô đích, nước hợp lệ, bàn cờ', async () => {
+  const check = botFile('check', [
+    'def make_move(state):',
+    '    assert state["me"] in ("blue", "pink")',
+    '    assert state["my_goal"] == ("I9" if state["me"] == "blue" else "A1")',
+    '    assert len(state["my_pieces"]) <= 10 and state["legal_moves"]',
+    '    m = state["legal_moves"][0]',
+    '    assert state["board"][m["from"]]["side"] == state["me"]',
+    '    assert state["beats"]["ROCK"] == ["SCISSORS"]',
+    '    return m["from"] + "-" + m["to"]',
+  ].join('\n'));
+  const r = await play(check, RANDOM, { maxPlies: 20 });
+  assert.equal(movesOfA(r, 0).filter((m) => m.err).length, 0);
+  assert.equal(movesOfA(r, 1).filter((m) => m.err).length, 0);
+});
+
+test('nước sai: hệ thống đi thay, lỗi lần thứ 3 thì thua ván', async () => {
+  const bad = botFile('bad', 'def make_move(state):\n    return "Z9-Z9"\n');
+  const r = await play(bad, RANDOM);
+  for (const g of r.games) {
+    assert.equal(g.reason, 'errors');
+    assert.equal(g.result, 'b');
+  }
+  const mine = movesOfA(r);
+  assert.equal(mine.length, 3);
+  assert.ok(mine[0].auto && mine[1].auto, 'hai lỗi đầu được đi thay');
+  assert.match(mine[0].err, /không hợp lệ/);
   assert.equal(r.result, 'b');
 });
 
-test('bot trả sai lựa chọn thua lượt đó', async () => {
-  const bad = botFile('bad', 'def make_move(state):\n    return "BANANA"\n');
-  const r = await play(bad, ROCK);
-  assert.equal(r.winsB, 10);
-  assert.match(r.turns[0].ea, /không hợp lệ/);
-});
-
-test('bot crash khi khởi động: thua mọi lượt, có log lỗi', async () => {
-  const crash = botFile('crash', 'raise SystemExit("hỏng")\ndef make_move(state):\n    return "ROCK"\n');
-  const r = await play(crash, ROCK);
-  assert.equal(r.winsB, 10);
-  assert.ok(r.turns.every((t) => t.ea));
+test('bot crash khi khởi động: thua ván', async () => {
+  const crash = botFile('crash', 'raise SystemExit("hỏng")\ndef make_move(state):\n    return None\n');
+  const r = await play(crash, RANDOM);
+  assert.ok(r.games.every((g) => g.result === 'b' && g.reason === 'crash'));
 });
 
 test('bot thiếu make_move bị báo lỗi', async () => {
   const none = botFile('none', 'x = 1\n');
-  const r = await play(none, ROCK);
-  assert.match(r.turns[0].ea, /make_move/);
+  const r = await play(none, RANDOM, { games: 1 });
+  assert.match(r.games[0].moves[0].err, /make_move/);
 });
 
-test('vòng lặp vô hạn: bot bị dừng, thua các lượt còn lại, trận không treo', async () => {
+test('vòng lặp vô hạn: bot bị dừng, thua ván, trận không treo', async () => {
   const loop = botFile('loop', 'def make_move(state):\n    while True:\n        pass\n');
   const t0 = Date.now();
-  const r = await play(loop, ROCK, { turns: 5 });
-  assert.equal(r.winsB, 5);
+  const r = await play(loop, RANDOM, { games: 1 });
+  assert.equal(r.games[0].reason, 'crash');
+  assert.equal(r.games[0].result, 'b');
   assert.ok(Date.now() - t0 < 5000);
 });
 
-test('vượt CPU mỗi lượt thua lượt đó nhưng bot vẫn chạy tiếp', async () => {
-  const slow = botFile('slow', 'import time\ndef make_move(state):\n    if state["turn"] == 0:\n        t = time.process_time()\n        while time.process_time() - t < 0.3:\n            pass\n    return "PAPER"\n');
-  const r = await play(slow, ROCK, { turns: 3 });
-  assert.match(r.turns[0].ea, /CPU/);
-  assert.equal(r.turns[1].r, 'a');
+test('vượt CPU một nước: tính là lỗi, hệ thống đi thay, bot vẫn chạy tiếp', async () => {
+  const slow = botFile('slow', 'import time, random\ndef make_move(state):\n    if state["ply"] < 2:\n        t = time.process_time()\n        while time.process_time() - t < 0.5:\n            pass\n    return random.choice(state["legal_moves"])\n');
+  const r = await play(slow, RANDOM, { games: 1, maxPlies: 10 });
+  const mine = movesOfA(r);
+  assert.match(mine[0].err, /CPU/);
+  assert.ok(!mine[1].err);
 });
 
 test('chặn mạng, tiến trình con và đọc tệp ngoài thư mục bot', async () => {
   const evil = botFile('evil', [
+    'import random',
     'def make_move(state):',
-    '    t = state["turn"]',
-    '    if t == 0:',
+    '    n = len(state["history"]) // 2',
+    '    if n == 0:',
     '        import socket',
-    '    if t == 1:',
-    '        import subprocess',
-    '    if t == 2:',
-    `        open(${JSON.stringify(ROCK)}).read()`,
-    '    if t == 3:',
-    '        import os; os.system("echo hi")',
-    '    return "PAPER"',
+    '    if n == 1:',
+    `        open(${JSON.stringify(RANDOM)}).read()`,
+    '    return random.choice(state["legal_moves"])',
   ].join('\n'));
-  const r = await play(evil, ROCK, { turns: 5 });
-  for (let i = 0; i < 4; i++) assert.match(r.turns[i].ea || '', /PermissionError/, `lượt ${i}`);
-  assert.equal(r.turns[4].r, 'a', 'bot vẫn chạy sau khi bị chặn');
+  const r = await play(evil, RANDOM, { games: 1, maxPlies: 10 });
+  const mine = movesOfA(r);
+  assert.match(mine[0].err || '', /PermissionError/);
+  assert.match(mine[1].err || '', /PermissionError/);
+  assert.ok(!mine[2].err, 'bot vẫn chạy sau khi bị chặn');
+  const sub = botFile('sub', 'def make_move(state):\n    import os\n    os.system("echo hi")\n');
+  const r2 = await play(sub, RANDOM, { games: 1, maxPlies: 10 });
+  assert.match(movesOfA(r2)[0].err, /PermissionError/);
 });
 
 test('print của bot vào log, không làm hỏng giao thức', async () => {
-  const chatty = botFile('chatty', 'def make_move(state):\n    print("xin chào", state["turn"])\n    return "PAPER"\n');
-  const r = await play(chatty, ROCK, { turns: 3 });
-  assert.equal(r.winsA, 3);
-  assert.match(r.logA, /xin chào 2/);
-});
-
-test('giai đoạn giấu dữ liệu: bot không thấy lựa chọn và kết quả của đối thủ', async () => {
-  const spy = botFile('spy', 'def make_move(state):\n    assert state["opponent_moves"] is None and state["results"] is None\n    assert len(state["my_moves"]) == state["turn"]\n    return "PAPER"\n');
-  const hidden = await play(spy, ROCK, { turns: 4 });
-  assert.equal(hidden.winsA, 4);
-  const shown = await play(spy, ROCK, { turns: 4, reveal: true });
-  assert.ok(shown.turns.slice(1).every((t) => t.ea), 'khi công khai thì assert trong bot thất bại');
+  const chatty = botFile('chatty', 'import random\ndef make_move(state):\n    print("xin chào", state["ply"])\n    return random.choice(state["legal_moves"])\n');
+  const r = await play(chatty, RANDOM, { games: 1, maxPlies: 6 });
+  assert.ok(movesOfA(r).every((m) => !m.err));
+  assert.match(r.logA, /xin chào 4/);
 });
 
 test('vòng loại trực tiếp: hòa thì đấu phụ, vẫn hòa thì bốc thăm theo seed', async () => {
-  const r1 = await play(ROCK, ROCK, { decisive: true, extraTurns: 5, seed: 77 });
-  const r2 = await play(ROCK, ROCK, { decisive: true, extraTurns: 5, seed: 77 });
-  assert.equal(r1.turns.length, 15);
+  const opts = { maxPlies: 4, decisive: true, extraGames: 2, seed: 77 }; // 4 nước, đủ quân hai bên -> hòa mọi ván
+  const r1 = await play(RANDOM, RANDOM, opts);
+  const r2 = await play(RANDOM, RANDOM, opts);
+  assert.equal(r1.games.length, 4);
   assert.equal(r1.decidedBy, 'lot');
   assert.equal(r1.result, r2.result, 'bốc thăm tái lập được');
 });
 
-test('cùng seed cho cùng kết quả (bot dùng random)', async () => {
-  const rnd = botFile('rnd', 'import random\ndef make_move(state):\n    return random.choice(state["moves"])\n');
-  const a = await play(rnd, rnd, { turns: 30, seed: 5 });
-  const b = await play(rnd, rnd, { turns: 30, seed: 5 });
-  assert.deepEqual(a.turns, b.turns);
+test('cùng seed cho cùng diễn biến (bot dùng random)', async () => {
+  const a = await play(RANDOM, SMART, { seed: 5 });
+  const b = await play(RANDOM, SMART, { seed: 5 });
+  assert.deepEqual(a.games.map((g) => g.moves), b.games.map((g) => g.moves));
+});
+
+test('bot mẫu lao về đích thắng được bot ngẫu nhiên', async () => {
+  const r = await play(RUSHER, RANDOM, { maxPlies: 200, seed: 9 });
+  assert.ok(r.winsA >= 1);
 });
 
 // ------------------------------------------------------------ luồng giải
@@ -133,7 +170,7 @@ function makeTeam(i, code) {
   db.run('UPDATE users SET team_id = ? WHERE id = ?', tid, uid);
   const team = db.get('SELECT * FROM teams WHERE id = ?', tid);
   const sid = subs.submit({ user: { id: uid }, team, filename: 'b.py', code });
-  return { uid, tid, sid };
+  return { uid, tid, sid, file: db.get('SELECT path FROM submissions WHERE id = ?', sid).path };
 }
 const teams = [];
 
@@ -144,12 +181,13 @@ test('nộp bài: kiểm tra định dạng', () => {
 });
 
 test('kiểm thử bài nộp: bot tốt hợp lệ, bot trả sai không hợp lệ; bản hợp lệ đầu tiên thành bản thi', async () => {
+  const sample = (n) => fs.readFileSync(path.join(__dirname, '..', 'sample-bots', `${n}.py`), 'utf8');
   const codes = [
-    'def make_move(state):\n    return "ROCK"\n',
-    'def make_move(state):\n    return "PAPER"\n',
-    'def make_move(state):\n    return "SCISSORS"\n',
-    'import random\ndef make_move(state):\n    return random.choice(state["moves"])\n',
-    'def make_move(state):\n    return state["moves"][state["turn"] % 3]\n',
+    `# đội 1\n${sample('random_bot')}`,
+    sample('greedy_bot'),
+    sample('rusher_bot'),
+    sample('smart_bot'),
+    sample('starter_bot'),
     'def make_move(state):\n    return "NOPE"\n',
   ];
   codes.forEach((c, i) => teams.push(makeTeam(i + 1, c)));
@@ -162,9 +200,9 @@ test('kiểm thử bài nộp: bot tốt hợp lệ, bot trả sai không hợp 
 
 test('nộp trùng nội dung bị từ chối; khóa nộp bài chặn bài mới', () => {
   const team = db.get('SELECT * FROM teams WHERE id = ?', teams[0].tid);
-  assert.throws(() => subs.submit({ user: { id: teams[0].uid }, team, filename: 'b.py', code: 'def make_move(state):\n    return "ROCK"\n' }), /trùng/);
+  assert.throws(() => subs.submit({ user: { id: teams[0].uid }, team, filename: 'b.py', code: fs.readFileSync(teams[0].file, 'utf8') }), /trùng/);
   db.setSetting('submissions_open', 'false');
-  assert.throws(() => subs.submit({ user: { id: teams[0].uid }, team, filename: 'c.py', code: 'def make_move(state):\n    return "PAPER"\n' }), /khóa/);
+  assert.throws(() => subs.submit({ user: { id: teams[0].uid }, team, filename: 'c.py', code: 'def make_move(state):\n    return state["legal_moves"][0]\n' }), /khóa/);
   db.setSetting('submissions_open', 'true');
 });
 
@@ -179,7 +217,7 @@ test('khóa Swiss: chỉ đội có bot hợp lệ; đổi bản sau khi khóa k
   assert.equal(T.lockPhase('swiss', 1), 5);
   // Đội 1 nộp bản mới và chọn làm bản thi sau khi khóa.
   const team = db.get('SELECT * FROM teams WHERE id = ?', teams[0].tid);
-  const newSid = subs.submit({ user: { id: teams[0].uid }, team, filename: 'v2.py', code: 'def make_move(state):\n    return "PAPER"\n' });
+  const newSid = subs.submit({ user: { id: teams[0].uid }, team, filename: 'v2.py', code: 'def make_move(state):\n    return state["legal_moves"][-1]\n' });
   await worker.drain();
   db.run('UPDATE teams SET official_submission_id = ? WHERE id = ?', newSid, teams[0].tid);
   assert.equal(db.get(`SELECT submission_id FROM entries WHERE phase_key = 'swiss' AND team_id = ?`, teams[0].tid).submission_id, teams[0].sid);
@@ -250,22 +288,23 @@ test('API: phân quyền giữa hai đội và quyền quản trị', async () =
     assert.equal((await get('/admin/overview', c1)).status, 403);
     assert.equal((await get('/bots', null)).status, 401);
     const mine = await (await get(`/bots/${teams[0].sid}`, c1)).json();
-    assert.match(mine.code, /ROCK/);
+    assert.match(mine.code, /đội 1/);
 
     // Trận chạy thử của đội 1 không xem được từ đội 2.
     const pr = db.get(`SELECT id FROM matches WHERE kind = 'practice' AND team_a = ?`, teams[0].tid);
     assert.equal((await get(`/matches/${pr.id}`, c2)).status, 403);
     assert.equal((await get(`/matches/${pr.id}`, c1)).status, 200);
 
-    // Trận Swiss giấu dữ liệu: người trong trận chỉ thấy lựa chọn của mình; người ngoài không thấy diễn biến.
+    // Trận Swiss: đội trong trận xem lại được ván; người ngoài chỉ thấy kết quả từng ván.
     const sm = db.get(`SELECT * FROM matches WHERE kind = 'swiss' AND status = 'done' AND team_a = ?`, teams[0].tid)
       || db.get(`SELECT * FROM matches WHERE kind = 'swiss' AND status = 'done' AND team_b = ?`, teams[0].tid);
     if (sm) {
       const v1 = await (await get(`/matches/${sm.id}`, c1)).json();
-      assert.ok(v1.turns.every((t) => Object.keys(t).every((k) => ['mine', 'err'].includes(k))));
-      assert.equal(v1.logB, undefined);
+      assert.ok(v1.games[0].moves.length > 0, 'đội trong trận xem được diễn biến');
+      assert.equal(v1.logB, undefined, 'không thấy log đối thủ');
       const anon = await (await get(`/matches/${sm.id}`)).json();
-      assert.equal(anon.turns, undefined);
+      assert.equal(anon.games[0].moves, undefined, 'người ngoài chỉ thấy kết quả ván');
+      assert.ok(anon.games[0].reason);
     }
 
     // Chỉ đội trưởng chọn bản thi; thành viên thường bị từ chối.
@@ -280,4 +319,41 @@ test('API: phân quyền giữa hai đội và quyền quản trị', async () =
   } finally {
     server.close();
   }
+});
+
+// ------------------------------------------------------------ người vs bot mẫu trên bàn cờ
+
+test('người vs bot mẫu: chỉ nhận nước hợp lệ, bot đi ngay sau, ván dở dang chơi tiếp được', () => {
+  const pl = require('../src/services/play');
+  const g = pl.start(teams[0].uid, teams[0].tid, 'random_bot', 'blue');
+  assert.equal(g.toMove, 'blue');
+  assert.equal(g.maxPlies, 200);
+  assert.ok(g.legal.length > 0);
+  assert.throws(() => pl.move(teams[0].uid, g.id, { from: 'B5', to: 'B7' }), /không hợp lệ/);
+  assert.throws(() => pl.move(teams[0].uid, g.id, { from: 'H5', to: 'H4' }), /không hợp lệ/, 'không đi quân đối phương');
+  const v = pl.move(teams[0].uid, g.id, g.legal[0]);
+  assert.equal(v.ply, 2, 'bot đã trả lời');
+  assert.equal(v.toMove, 'blue');
+  assert.equal(pl.current(teams[0].uid).id, g.id);
+  // Cầm Hồng: bot Xanh đi trước ngay khi bắt đầu.
+  const p = pl.start(teams[1].uid, teams[1].tid, 'smart_bot', 'pink');
+  assert.equal(p.ply, 1);
+  assert.equal(p.toMove, 'pink');
+  pl.abandon(teams[1].uid, p.id);
+  assert.equal(pl.current(teams[1].uid), null);
+});
+
+test('người vs bot mẫu: chơi hết ván thì có kết quả và không đi thêm được', () => {
+  const pl = require('../src/services/play');
+  let g = pl.start(teams[2].uid, teams[2].tid, 'random_bot', 'blue');
+  const d = (s) => { const [x, y] = board.parseSq(s); return Math.max(8 - x, 8 - y); };
+  while (!g.end) {
+    // Người chơi lao thẳng về I9.
+    const mv = g.legal.reduce((a, b) => (d(b.to) < d(a.to) ? b : a));
+    g = pl.move(teams[2].uid, g.id, mv);
+  }
+  assert.ok(['W', 'L', 'D'].includes(g.result));
+  assert.ok(g.end.reason);
+  assert.throws(() => pl.move(teams[2].uid, g.id, { from: 'B5', to: 'B6' }), /kết thúc/);
+  assert.equal(pl.current(teams[2].uid), null);
 });

@@ -1,37 +1,51 @@
-"""Bot mẫu khởi đầu - BOT ARENA.
+"""Bot mẫu khởi đầu - BOT ARENA, luật OTTv2 (bàn cờ 9x9 búa/kéo/bao).
 
-Máy chủ gọi make_move(state) mỗi lượt. state gồm:
-  turn            lượt hiện tại, bắt đầu từ 0
-  total_turns     tổng số lượt của trận (có thể tăng khi đấu phụ)
-  moves           các lựa chọn hợp lệ, ví dụ ["ROCK", "PAPER", "SCISSORS"]
-  beats           bảng thắng, ví dụ {"ROCK": ["SCISSORS"], ...}
-  my_moves        các lựa chọn bạn đã ra
-  opponent_moves  lựa chọn của đối thủ, hoặc None nếu giai đoạn này giấu dữ liệu
-  results         "W"/"L"/"D" theo từng lượt, hoặc None nếu bị giấu
+Máy chủ gọi make_move(state) mỗi khi tới lượt bạn. state gồm:
+  me, opponent      màu của bạn / đối thủ: "blue" (Xanh, đi trước) hoặc "pink" (Hồng)
+  my_goal           ô đích của bạn: Xanh "I9", Hồng "A1"
+  opponent_goal     ô đích của đối thủ (góc nhà bạn - cần canh giữ)
+  types, beats      loại quân và bảng thắng, ví dụ beats["ROCK"] == ["SCISSORS"]
+  ply, max_plies    số nước đã đi trong ván và giới hạn nước
+  board             {"B4": {"side": "blue", "type": "ROCK"}, ...} các ô có quân
+  my_pieces         [{"square": "B4", "type": "ROCK"}, ...]
+  opponent_pieces   như trên, của đối thủ
+  legal_moves       [{"from": "B4", "to": "C5", "capture": None hoặc "SCISSORS"}, ...]
+  history           các nước đã đi trong ván
 
-Trả về một chuỗi trong state["moves"]. Sai lựa chọn, lỗi, quá 100 ms CPU = thua lượt đó.
-Quá 1 giây không trả lời: bot bị dừng và thua các lượt còn lại.
-Không dùng mạng, tiến trình con hay đọc tệp ngoài thư mục bot.
-Dùng module random bình thường: máy chủ đặt seed để trận chạy lại cho cùng kết quả.
+Trả về một nước trong legal_moves: dict {"from": "B4", "to": "C5"}, list ["B4", "C5"] hoặc chuỗi "B4-C5".
+Nước sai, lỗi, quá CPU: hệ thống đi thay một nước ngẫu nhiên và ghi lỗi; lỗi lần thứ 3 trong ván là thua.
+Quá 1 giây không trả lời: bot bị dừng và thua ván. Không dùng mạng, tiến trình con hay đọc tệp ngoài thư mục bot.
 """
 import random
 
+COLS = "ABCDEFGHI"
 
-def counter_of(move, beats):
-    """Trả về một lựa chọn thắng được `move` theo bảng luật (dùng được cả khi luật đổi)."""
-    winners = [m for m, losers in beats.items() if move in losers]
-    return random.choice(winners) if winners else None
+
+def xy(square):
+    """'C5' -> (2, 4): cột và hàng tính từ 0."""
+    return COLS.index(square[0]), int(square[1:]) - 1
+
+
+def distance(a, b):
+    """Số nước tối thiểu để đi từ ô a tới ô b (đi 8 hướng như quân vua)."""
+    (ax, ay), (bx, by) = xy(a), xy(b)
+    return max(abs(ax - bx), abs(ay - by))
 
 
 def make_move(state):
-    moves = state["moves"]
-    opp = state["opponent_moves"]
+    moves = state["legal_moves"]
+    goal = state["my_goal"]
 
-    # Giai đoạn giấu dữ liệu: không biết đối thủ, chơi ngẫu nhiên là khó bị khai thác nhất.
-    if not opp:
-        return random.choice(moves)
+    # 1. Có nước vào thẳng ô đích thì thắng ngay.
+    for m in moves:
+        if m["to"] == goal:
+            return m
 
-    # Có dữ liệu: đoán đối thủ lặp lại lựa chọn hay gặp nhất trong 20 lượt gần đây.
-    recent = opp[-20:]
-    guess = max(set(recent), key=recent.count)
-    return counter_of(guess, state["beats"]) or random.choice(moves)
+    # 2. Ưu tiên ăn quân.
+    captures = [m for m in moves if m["capture"]]
+    if captures:
+        return random.choice(captures)
+
+    # 3. Còn lại: tiến gần ô đích hơn, chọn ngẫu nhiên trong các nước tốt nhất.
+    best = min(distance(m["to"], goal) - distance(m["from"], goal) for m in moves)
+    return random.choice([m for m in moves if distance(m["to"], goal) - distance(m["from"], goal) == best])

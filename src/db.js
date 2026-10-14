@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS teams (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
--- Phiên bản luật: tập lựa chọn và quan hệ thắng. Luật chung kết là một bản ghi mới.
+-- Phiên bản luật: các loại quân và bảng khắc chế. Luật chung kết là một bản ghi mới.
 CREATE TABLE IF NOT EXISTS rulesets (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
@@ -214,16 +214,20 @@ CREATE TABLE IF NOT EXISTS human_games (
   id INTEGER PRIMARY KEY,
   user_id INTEGER NOT NULL,
   bot TEXT NOT NULL,
+  ruleset_id INTEGER,
+  reveal_opponent INTEGER NOT NULL DEFAULT 0,
+  turns INTEGER NOT NULL DEFAULT 100,
+  color TEXT,
   history TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 `;
 
 const CLASSIC = {
-  name: 'Cổ điển (búa/kéo/bao)',
+  name: 'OTTv2 cổ điển',
   moves: ['ROCK', 'PAPER', 'SCISSORS'],
   beats: { ROCK: ['SCISSORS'], PAPER: ['ROCK'], SCISSORS: ['PAPER'] },
-  description: 'Búa thắng kéo, kéo thắng bao, bao thắng búa. Trùng lựa chọn là hòa.',
+  description: 'Búa ăn kéo, kéo ăn bao, bao ăn búa. Quân cùng loại không ăn nhau mà chặn đường nhau.',
 };
 
 const PHASES = [
@@ -244,8 +248,23 @@ function open(file = config.DB_FILE) {
   db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
+  migrate();
   seed();
   return db;
+}
+
+// Thêm cột mới cho CSDL tạo từ phiên bản trước (CREATE TABLE IF NOT EXISTS không tự thêm cột).
+function migrate() {
+  const add = (table, col, def) => {
+    if (!db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+  };
+  add('human_games', 'ruleset_id', 'INTEGER');
+  add('human_games', 'reveal_opponent', 'INTEGER NOT NULL DEFAULT 0');
+  add('human_games', 'turns', 'INTEGER NOT NULL DEFAULT 100');
+  add('human_games', 'color', 'TEXT');
+  // Đổi tên bộ luật mặc định khi chuyển từ bản chọn đồng thời sang bàn cờ OTTv2.
+  db.prepare(`UPDATE rulesets SET name = 'OTTv2 cổ điển', description = 'Búa ăn kéo, kéo ăn bao, bao ăn búa. Quân cùng loại không ăn nhau mà chặn đường nhau.'
+    WHERE name = 'Cổ điển (búa/kéo/bao)'`).run();
 }
 
 function seed() {

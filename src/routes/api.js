@@ -9,6 +9,7 @@ const T = require('../services/tournament');
 const R = require('../services/results');
 const play = require('../services/play');
 const subs = require('../services/submissions');
+const board = require('../game/board');
 
 const { UserError } = subs;
 const api = express.Router();
@@ -73,7 +74,8 @@ api.get('/overview', h(() => {
 
 api.get('/rules', h(() => {
   const rs = db.ruleset(db.get(`SELECT ruleset_id FROM phases WHERE key = 'swiss'`).ruleset_id);
-  return { ruleset: rs, sampleBots: subs.SAMPLE_BOTS, prizes: R.PRIZES, swiss: config.swiss };
+  return { ruleset: rs, sampleBots: subs.SAMPLE_BOTS, prizes: R.PRIZES, swiss: config.swiss, match: config.match,
+    setup: board.initialPieces(), goals: board.GOAL };
 }));
 
 api.get('/sample-bots/:name', (req, res) => {
@@ -94,9 +96,10 @@ api.get('/verify/:code', h((req) => {
 }));
 
 /**
- * Chi tiết trận theo quyền dữ liệu:
- * - Quản trị: toàn bộ, kể cả log hai bên.
- * - Giai đoạn giấu dữ liệu: người ngoài chỉ thấy tỉ số; đội trong trận chỉ thấy lựa chọn và log của chính mình.
+ * Chi tiết trận theo quyền dữ liệu (bàn cờ):
+ * - Quản trị: toàn bộ diễn biến, lỗi và log hai bên.
+ * - Đội trong trận: toàn bộ diễn biến (bàn cờ vốn công khai với hai bên), chỉ thấy lỗi và log của bot mình.
+ * - Người ngoài: kết quả từng ván; diễn biến chỉ công khai ở giai đoạn bật "công khai" (mặc định chung kết).
  */
 api.get('/matches/:id', h((req) => {
   const m = db.get('SELECT * FROM matches WHERE id = ?', req.params.id);
@@ -108,19 +111,24 @@ api.get('/matches/:id', h((req) => {
   const out = {
     id: m.id, kind: m.kind, phase: m.phase_key, round: m.round_no, game: m.game_no, status: m.status,
     teamA: m.team_a, teamB: m.team_b, nameA: teamName(m.team_a), nameB: m.sample_bot ? `Bot mẫu: ${subs.SAMPLE_BOTS[m.sample_bot]}` : teamName(m.team_b),
-    winsA: m.wins_a, winsB: m.wins_b, draws: m.draws, result: m.result, decidedBy: m.decided_by, extraTurns: m.extra_turns_used,
+    winsA: m.wins_a, winsB: m.wins_b, draws: m.draws, result: m.result, decidedBy: m.decided_by, extraGames: m.extra_turns_used,
     confirmed: !!m.confirmed, finishedAt: m.finished_at, side, reveal: !!m.reveal_opponent, seed: isAdmin(req) ? m.seed : undefined,
-    ruleset: db.ruleset(m.ruleset_id),
+    ruleset: db.ruleset(m.ruleset_id), setup: board.initialPieces(), goals: board.GOAL,
   };
   if (!run) return out;
-  const turns = JSON.parse(run.turns_json);
-  const full = isAdmin(req) || m.kind === 'practice' || m.reveal_opponent;
-  if (full) out.turns = turns;
-  else if (side) {
-    out.turns = turns.map((t) => ({ mine: t[side], err: t[side === 'a' ? 'ea' : 'eb'] }));
-    out.hiddenNote = 'Giai đoạn này giấu lựa chọn đối thủ và kết quả từng lượt.';
-  }
-  if (isAdmin(req)) { out.logA = run.log_a; out.logB = run.log_b; out.runs = db.all('SELECT id, attempt, status, worker, started_at, finished_at, error FROM runs WHERE match_id = ?', m.id); }
+  const games = JSON.parse(run.turns_json);
+  const admin = isAdmin(req);
+  const full = admin || side || m.reveal_opponent;
+  out.games = games.map((g) => {
+    const base = { blue: g.blue, result: g.result, reason: g.reason, plies: g.plies, pieces: g.pieces };
+    if (!full) return base;
+    // Lỗi của bot đối thủ là thông tin riêng của đội đó.
+    const mine = side && (g.blue === side ? 'blue' : 'pink');
+    const moves = g.moves.map((mv) => (admin || mv.side === mine ? mv : { ...mv, err: mv.err ? 'lỗi' : undefined }));
+    return { ...base, moves };
+  });
+  if (!full) out.hiddenNote = 'Diễn biến trận ở giai đoạn này chỉ hiển thị cho hai đội trong trận.';
+  if (admin) { out.logA = run.log_a; out.logB = run.log_b; out.runs = db.all('SELECT id, attempt, status, worker, started_at, finished_at, error FROM runs WHERE match_id = ?', m.id); }
   else if (side) out.myLog = side === 'a' ? run.log_a : run.log_b;
   return out;
 }));
@@ -271,8 +279,10 @@ api.post('/practice', auth.requireTeam, h((req) => {
   return { id: T.requestPractice({ user: req.user, team: req.team, sampleBot, submissionId: Number(req.body.submissionId) || null }) };
 }));
 
-api.post('/play', auth.requireUser, h((req) => play.start(req.user.id, str(req.body.bot, 40))));
-api.post('/play/:id', auth.requireUser, h((req) => play.move(req.user.id, Number(req.params.id), str(req.body.move, 20).toUpperCase())));
+api.get('/play', auth.requireUser, h((req) => ({ game: play.current(req.user.id) })));
+api.post('/play', auth.requireUser, h((req) => play.start(req.user.id, req.team && req.team.id, str(req.body.bot, 40), str(req.body.color, 10))));
+api.delete('/play/:id', auth.requireUser, h((req) => { play.abandon(req.user.id, Number(req.params.id)); return { ok: true }; }));
+api.post('/play/:id', auth.requireUser, h((req) => play.move(req.user.id, Number(req.params.id), { from: str(req.body.from, 3), to: str(req.body.to, 3) })));
 
 api.get('/team/matches', auth.requireTeam, h((req) => db.all(`SELECT id, kind, phase_key, round_no, game_no, team_a, team_b, status, result,
     wins_a, wins_b, draws, decided_by, confirmed FROM matches WHERE kind IN ('swiss','bye','tiebreak','knockout') AND (team_a = ? OR team_b = ?)
@@ -284,7 +294,8 @@ api.get('/final', h((req) => {
   const f = R.finalSession();
   const s = db.get(`SELECT * FROM series WHERE phase_key = 'final' AND slot = 0`);
   const base = { status: f ? f.status : 'none', startedAt: f?.started_at, endsAt: f?.ends_at, durationMin: f?.duration_min,
-    serverTime: new Date().toISOString(), teams: s ? [teamName(s.team_a), teamName(s.team_b)] : [] };
+    serverTime: new Date().toISOString(), teams: s ? [teamName(s.team_a), teamName(s.team_b)] : [],
+    setup: board.initialPieces(), goals: board.GOAL };
   if (!f) return base;
   const finalist = req.team && s && (s.team_a === req.team.id || s.team_b === req.team.id);
   const finalDone = db.get(`SELECT status FROM phases WHERE key = 'final'`).status === 'done';

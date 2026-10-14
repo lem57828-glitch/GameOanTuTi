@@ -52,7 +52,7 @@
       <div class="grid g2" style="margin-top:16px">
         <div class="card">
           <h2>Sơ loại Swiss</h2>
-          <p>Trạng thái: ${badge(swiss.status)} • vòng ${o.swissRound}/${total} • luật: ${esc(swiss.ruleset_name)} • dữ liệu đối thủ: ${swiss.reveal_opponent ? 'có' : 'giấu'}</p>
+          <p>Trạng thái: ${badge(swiss.status)} • vòng ${o.swissRound}/${total} • luật: ${esc(swiss.ruleset_name)} • diễn biến: ${swiss.reveal_opponent ? 'công khai' : 'chỉ hai đội trong trận'}</p>
           <div class="row">
             ${swiss.status === 'pending' ? '<button class="btn primary" id="lock-swiss" data-confirm="Khóa bản thi của mọi đội cho toàn bộ sơ loại?">1. Khóa bản Swiss</button>' : ''}
             <button class="btn primary" id="next-round" ${canNext ? '' : 'disabled'}>Bắt đầu vòng ${o.swissRound + 1}</button>
@@ -134,24 +134,27 @@
     async final(pane) {
       const [f, o] = await Promise.all([api('/final'), api('/admin/overview')]);
       const fp = o.phases.find((p) => p.key === 'final');
-      const sample = {
-        moves: 'ROCK, PAPER, SCISSORS, LIZARD, SPOCK',
-        beats: JSON.stringify({ ROCK: ['SCISSORS', 'LIZARD'], PAPER: ['ROCK', 'SPOCK'], SCISSORS: ['PAPER', 'LIZARD'], LIZARD: ['SPOCK', 'PAPER'], SPOCK: ['SCISSORS', 'ROCK'] }, null, 1),
-      };
+      const TYPES = ['ROCK', 'PAPER', 'SCISSORS'];
+      const { TYPE_ICON, TYPE_VI } = window.BoardUI;
+      // Mặc định gợi ý: đảo chiều khắc chế.
+      const defBeats = { ROCK: ['PAPER'], PAPER: ['SCISSORS'], SCISSORS: ['ROCK'] };
       const rs = f.ruleset;
       pane.innerHTML = `<div class="grid g2">
         <div class="card"><h2>1. Soạn luật mới</h2>
           ${f.status === 'none' || f.status === 'draft' ? `<form id="cf">
             <div class="field"><label>Tên luật</label><input name="name" value="${esc(rs ? rs.name : 'Luật chung kết')}" required></div>
-            <div class="field"><label>Các lựa chọn (cách nhau bởi dấu phẩy)</label><input name="moves" value="${esc(rs ? rs.moves.join(', ') : sample.moves)}" required></div>
-            <div class="field"><label>Bảng thắng (JSON: lựa chọn → danh sách bị nó thắng)</label><textarea name="beats" class="mono" rows="7">${esc(rs ? JSON.stringify(rs.beats, null, 1) : sample.beats)}</textarea></div>
+            <div class="field"><label>Bảng khắc chế (dòng: quân đi, cột: quân bị ăn)</label>
+              <div class="table-wrap"><table><thead><tr><th></th>${TYPES.map((t) => `<th>${TYPE_ICON[t]} ${TYPE_VI[t]}</th>`).join('')}</tr></thead><tbody>
+              ${TYPES.map((a) => `<tr><th>${TYPE_ICON[a]} ${TYPE_VI[a]} ăn</th>${TYPES.map((d) => `<td>${a === d ? '—' : `<input type="checkbox" class="bt" data-a="${a}" data-d="${d}" ${((rs ? rs.beats : defBeats)[a] || []).includes(d) ? 'checked' : ''} aria-label="${TYPE_VI[a]} ăn ${TYPE_VI[d]}" style="width:auto;min-height:0">`}</td>`).join('')}</tr>`).join('')}
+              </tbody></table></div>
+              <p class="muted small">Quân cùng loại luôn chặn nhau. Hai loại không được ăn lẫn nhau; mỗi loại phải ăn được và bị ăn bởi ít nhất một loại.</p></div>
             <div class="field"><label>Mô tả luật</label><textarea name="description" rows="3">${esc(rs ? rs.description : '')}</textarea></div>
             <div class="field"><label>Ghi chú phát cho đội</label><textarea name="briefing" rows="3">${esc(f.briefing || '')}</textarea></div>
             <div class="grid g2"><div class="field"><label>Thời lượng (phút)</label><input name="durationMin" type="number" min="15" max="240" value="${f.durationMin || 75}"></div><div></div></div>
-            <label class="checkbox"><input type="checkbox" name="reveal" ${fp.reveal_opponent ? 'checked' : ''}> Bot được thấy lịch sử đối thủ trong chung kết</label>
-            <label class="checkbox"><input type="checkbox" name="includeMoves" checked> Dữ liệu trận lịch sử kèm lựa chọn từng lượt (ngoài thắng/thua)</label>
+            <label class="checkbox"><input type="checkbox" name="reveal" ${fp.reveal_opponent ? 'checked' : ''}> Công khai diễn biến các trận chung kết cho mọi người xem</label>
+            <label class="checkbox"><input type="checkbox" name="includeMoves" checked> Dữ liệu trận lịch sử kèm toàn bộ nước đi (ngoài kết quả từng ván)</label>
             <button class="btn primary" style="margin-top:12px">Lưu luật &amp; chọn ngẫu nhiên dữ liệu</button></form>`
-            : `<p>${esc(rs.name)}: ${rs.moves.map(esc).join(', ')}</p><p class="muted small">Đã khóa vì phiên đã bắt đầu.</p>`}
+            : `<p><b>${esc(rs.name)}</b></p><p class="small">${window.BoardUI.beatsHtml(rs.beats)}</p><p class="muted small">Đã khóa vì phiên đã bắt đầu.</p>`}
         </div>
         <div class="card"><h2>2. Điều hành phiên</h2>
           <p>Hai đội: <b>${f.teams.length ? f.teams.map(esc).join(' vs ') : 'chưa xác định (cần xong bán kết)'}</b></p>
@@ -164,13 +167,13 @@
           <p>Giai đoạn: ${badge(fp.status)} • ${fp.best_of} trận, thắng ${Math.floor(fp.best_of / 2) + 1} là vô địch</p>
           <button class="btn primary" id="fplay" ${f.status === 'ended' && ['pending', 'locked'].includes(fp.status) ? '' : 'disabled'} data-confirm="Khóa bản chung kết của hai đội và cho thi đấu?">Khóa bản &amp; cho thi</button>
           <p class="muted small" style="margin-top:12px">Web không tự bảo đảm việc không dùng AI: cần phòng thi, máy cấu hình sẵn và giám sát. Yêu cầu đội giải thích phần sửa trước khi khóa bản.</p>
-          ${f.data ? `<h3>Dữ liệu đã chọn</h3><p class="small">${esc(f.data.source)} • ${f.data.results.length} lượt</p>` : ''}
+          ${f.data ? `<h3>Dữ liệu đã chọn</h3><p class="small">${esc(f.data.source)} • ${f.data.games.length} ván</p>` : ''}
         </div></div>`;
       on($('#cf'), 'submit', async (e) => {
         const d = formData(e.target);
-        let beats;
-        try { beats = JSON.parse(d.beats); } catch { throw new Error('Bảng thắng không phải JSON hợp lệ'); }
-        await post('/final/configure', { ...d, moves: d.moves.split(',').map((x) => x.trim().toUpperCase()).filter(Boolean), beats,
+        const beats = Object.fromEntries(TYPES.map((t) => [t, []]));
+        $$('.bt:checked', e.target).forEach((c) => beats[c.dataset.a].push(c.dataset.d));
+        await post('/final/configure', { ...d, beats,
           reveal: !!d.reveal, includeMoves: !!d.includeMoves, durationMin: Number(d.durationMin) });
         toast('Đã lưu luật chung kết');
         PANES.final(pane);

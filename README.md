@@ -1,12 +1,37 @@
 # BOT ARENA — Cuộc thi Bot Oẳn Tù Tì
 
-Nền tảng web cho cuộc thi lập trình bot búa/kéo/bao dành cho sinh viên năm nhất, xây theo
+Nền tảng web cho cuộc thi lập trình bot cờ búa/kéo/bao (OTTv2) dành cho sinh viên năm nhất, xây theo
 *Đề án cuộc thi Bot Oẳn Tù Tì — bản tổng hợp 13/10/2026*.
 Hệ thống nhận bài, kiểm thử cách ly, chạy trận tự động, tổ chức sơ loại Swiss chọn 32 đội, quản lý
 vòng chính và chung kết đổi luật, cấp chứng nhận có trang xác minh.
 
-**Biến thể đã chốt:** chọn búa/kéo/bao theo lượt (bot trả `ROCK` / `PAPER` / `SCISSORS`).
-Bàn cờ 9×9 không nằm trong phạm vi mùa này.
+**Biến thể đã chốt:** bàn cờ OTTv2 9×9. Bot nhận thế cờ và danh sách nước hợp lệ, trả về một nước đi.
+
+## Luật OTTv2
+
+```
+     A  B  C  D  E  F  G  H  I
+ 9   .  .  .  .  .  .  .  .  ★   ← đích của Xanh
+ 8   .  .  .  .  p  r  .  .  .
+ 7   .  .  .  .  s  p  r  .  .
+ 6   .  .  .  .  .  s  p  r  .
+ 5   .  P  S  .  .  .  s  p  .
+ 4   .  R  P  S  .  .  .  .  .
+ 3   .  .  R  P  S  .  .  .  .
+ 2   .  .  .  R  P  .  .  .  .
+ 1   ★  .  .  .  .  .  .  .  .   ← đích của Hồng
+```
+Chữ hoa: Xanh, chữ thường: Hồng. R = Búa, P = Bao, S = Kéo. Mỗi bên 3 Búa, 4 Bao, 3 Kéo.
+
+- Xanh đi trước. Mỗi lượt đi **một quân, một ô** theo 8 hướng (như quân vua).
+- Đi vào ô có quân đối phương mà quân mình khắc thì **ăn** quân đó: Búa ăn Kéo, Kéo ăn Bao, Bao ăn Búa.
+  Quân mình, quân đối phương **cùng loại** và quân đối phương **mạnh hơn** đều chặn đường (không đi vào được).
+- **Thắng:** đưa một quân vào ô đích (Xanh → I9, Hồng → A1) hoặc ăn hết **một loại** quân của đối phương.
+- Tới lượt mà không còn nước hợp lệ: **thua**.
+- Lặp cùng thế cờ 3 lần hoặc quá 200 nước (mỗi bên 100): bên còn **nhiều quân hơn** thắng, bằng nhau là hòa.
+- **Một trận = 2 ván đổi màu** (mỗi bot cầm Xanh một ván). Thắng ván 1 điểm, hòa 0,5; nhiều điểm hơn thắng trận.
+
+Engine luật: [src/game/board.js](src/game/board.js) (hàm thuần, có kiểm thử riêng).
 
 ## Chạy nhanh
 
@@ -30,7 +55,7 @@ npm run create-admin -- btc@truong.edu.vn "Ban tổ chức" matkhau-manh
 npm start
 ```
 
-Kiểm thử: `npm test` (37 ca: luật, ghép Swiss, tranh suất ranh giới, bot lỗi, chạy lại, khóa phiên bản, phân quyền).
+Kiểm thử: `npm test` (50 ca: luật bàn cờ, ghép Swiss, tranh suất ranh giới, bot lỗi/treo/gian lận, chạy lại, khóa phiên bản, phân quyền, người chơi).
 
 ## Chức năng (đối chiếu mục 05 của đề án)
 
@@ -39,11 +64,11 @@ Kiểm thử: `npm test` (37 ca: luật, ghép Swiss, tranh suất ranh giới, 
 | Trang chủ & hướng dẫn | Nút Nộp bot / Chơi thử, quỹ thưởng, lịch giai đoạn, thông báo, thể lệ, giao diện bot, tải bot mẫu |
 | Tài khoản & đội | Đăng ký, đăng nhập, lập đội 1-3 người, mã mời, chuyển đội trưởng, mời rời; khóa đổi thành viên khi Swiss khóa |
 | Bot của tôi | Tải/kéo thả hoặc dán mã, kiểm thử cách ly, xem lỗi + log + mã, lưu phiên bản (SHA-256, người nộp, giờ máy chủ, môi trường), đội trưởng chọn bản thi |
-| Chơi thử | Người vs bot mẫu; máy chủ chốt nước bot trước rồi mới phân xử, không tính điểm |
-| Chạy thử bot | Bot vs 4 bot mẫu, 1 trận đang chạy/đội, 20 trận/ngày, xem từng lượt và lỗi |
+| Chơi thử | Người đánh cờ với 4 bot mẫu, chọn màu, máy chủ kiểm tra mọi nước; không tính điểm |
+| Chạy thử bot | Bot vs 4 bot mẫu, 1 trận đang chạy/đội, 20 trận/ngày, xem lại từng ván trên bàn cờ |
 | Đấu chính thức | Hàng đợi + worker chạy tự động; tắt trình duyệt không ảnh hưởng |
 | Xếp hạng | Điểm Swiss, ĐTB đối thủ, hiệu số, ranh giới Top 32, trạng thái tạm/đã xác nhận, nhánh 32 → chung kết, bảng thưởng |
-| Phòng chung kết | Soạn luật mới, chọn ngẫu nhiên dữ liệu một trận lịch sử, đếm giờ theo máy chủ, chỉ hai đội chung kết nhận luật, nộp bản riêng, khóa khi hết giờ |
+| Phòng chung kết | Soạn bảng khắc chế mới, chọn ngẫu nhiên một trận lịch sử (xem lại được), đếm giờ theo máy chủ, chỉ hai đội chung kết nhận luật, nộp bản riêng, khóa khi hết giờ |
 | Thành tích | Vòng cao nhất, giải, chứng nhận điện tử có mã + trang xác minh in được |
 | Hỗ trợ & quản trị | Khiếu nại, khóa vòng, ghép vòng, xác nhận vòng, chạy lại trận, rút đội, giải phụ, cấp chứng nhận, nhật ký |
 
@@ -53,29 +78,32 @@ Kiểm thử: `npm test` (37 ca: luật, ghép Swiss, tranh suất ranh giới, 
 import random
 
 def make_move(state):
-    # turn, total_turns, moves, beats, my_moves, opponent_moves, results
-    return random.choice(state["moves"])
+    # me / opponent: "blue" | "pink"      my_goal / opponent_goal: "I9" | "A1"
+    # beats: {"ROCK": ["SCISSORS"], ...}   board: {"B4": {"side": "blue", "type": "ROCK"}, ...}
+    # my_pieces, opponent_pieces, history, ply, max_plies
+    # legal_moves: [{"from": "B4", "to": "C5", "capture": None | "SCISSORS"}, ...]
+    return random.choice(state["legal_moves"])   # hoặc ["B4", "C5"] hoặc "B4-C5"
 ```
 
-- Trả về một chuỗi trong `state["moves"]`. Sai lựa chọn, lỗi hoặc quá 100 ms CPU: thua lượt đó.
-- Quá 1 giây không trả lời: bot bị dừng, thua các lượt còn lại (tránh treo trận).
-- **Quyền dữ liệu:** trước chung kết `opponent_moves` và `results` là `None` (đề án mục 04).
-  Mỗi giai đoạn có cờ `reveal_opponent`; mặc định chỉ chung kết bật.
-- `random` được đặt seed theo trận, nên chạy lại cho đúng kết quả cũ (tra soát được).
-- Mẫu: [sample-bots/starter_bot.py](sample-bots/starter_bot.py).
+- Nước sai, lỗi (exception) hoặc quá 200 ms CPU: hệ thống đi thay một nước hợp lệ ngẫu nhiên (theo seed) và ghi lỗi;
+  lỗi lần thứ 3 trong ván thì **thua ván**.
+- Quá 1 giây không trả lời, crash, thoát: bot bị dừng và **thua ván** đó (ván sau khởi động lại).
+- Bàn cờ công khai nên bot luôn thấy toàn bộ thế cờ và các nước đã đi trong ván.
+- `random` được đặt seed theo ván, nên chạy lại cho đúng diễn biến cũ (tra soát được).
+- Bot mẫu trong [sample-bots/](sample-bots/): khởi đầu, ngẫu nhiên, tham ăn, lao về đích, nhìn trước một nước.
 
 ## Thể thức đã cài
 
-- **Trận:** 100 lượt, thắng nhiều lượt hơn thì thắng, bằng nhau hòa. Swiss: thắng 3, hòa 1, thua 0, bye 3 (không cộng hiệu số).
+- **Trận:** 2 ván đổi màu, nhiều ván thắng hơn thì thắng trận. Swiss: thắng 3, hòa 1, thua 0, bye 3 (không cộng hiệu số).
 - **Ghép Swiss:** vòng 1 bốc thăm theo seed (lưu vào nhật ký); các vòng sau ghép trong nhóm điểm, quay lui để tránh tái đấu.
   Số lẻ: bye cho đội chưa nghỉ, ít điểm nhất; nếu chọn đó buộc phải tái đấu thì thử ứng viên kế tiếp.
   Tái đấu không thể tránh thì vẫn ghép và báo số lần trong nhật ký.
-- **Xếp hạng:** điểm → điểm TB cuối sơ loại của đối thủ thực sự đã gặp (bye không tính) → hiệu số lượt.
+- **Xếp hạng:** điểm → điểm TB cuối sơ loại của đối thủ thực sự đã gặp (bye không tính) → hiệu số ván thắng-thua.
 - **Ranh giới Top 32:** chỉ nhóm bằng hoàn toàn vắt qua vị trí 32 phải tranh suất. Nhóm ≤ 10: loại trực tiếp rút gọn
   (K−S trận, miễn đấu theo bốc thăm). Nhóm > 10: thêm đúng một vòng trong nhóm rồi loại rút gọn phần còn lại
   (50 đội/32 suất = 25 + 18 = 43 trận như ví dụ đề án). Đội bằng điểm nhưng chắc suất: bốc thăm phân hạt giống.
 - **Vòng chính:** hạt giống 1–32 kiểu chuẩn; vòng 32/16/tứ kết 1 trận; bán kết đủ 3 trận; chung kết thắng 2/3.
-  Hòa: thêm 100 lượt, vẫn hòa thì bốc thăm theo seed trận. Dưới 32 đội: cặp thiếu đối thủ thì đội còn lại đi tiếp.
+  Hòa: thêm 2 ván đổi màu, vẫn hòa thì bốc thăm theo seed trận. Dưới 32 đội: cặp thiếu đối thủ thì đội còn lại đi tiếp.
 - **Phiên bản:** khóa theo giai đoạn (bảng `entries`). Đổi bản sau khi khóa chỉ áp dụng cho giai đoạn sau.
 - **Chạy lại:** trận (`matches`) tách khỏi lần chạy (`runs`); điểm tính lại từ kết quả trận nên không cộng hai lần.
 - **Thưởng:** tự tính và cộng dồn theo đội: Top 32 (200k), bán kết (1,5tr), nhì (3tr), nhất (5tr), 2 giải phụ (800k) do BTC trao. Tổng 19.000.000đ.
@@ -109,7 +137,7 @@ Worker mất nhịp tim 60 giây thì tác vụ được đưa lại hàng đợ
 | `MATCH_CONCURRENCY` | 4 | Số trận đồng thời (đề án: thử nâng lên 8 sau benchmark) |
 | `EMBEDDED_WORKER` | `true` | Chạy worker chung tiến trình web |
 | `PYTHON_BIN` | `python` / `python3` | Trình thông dịch Python |
-| `MATCH_TURNS`, `EXTRA_TURNS`, `SWISS_ROUNDS`, `PRACTICE_PER_DAY` | 100, 100, 10, 20 | Thông số thể thức |
+| `MAX_PLIES`, `CPU_MS_PER_MOVE`, `SWISS_ROUNDS`, `PRACTICE_PER_DAY` | 200, 200, 10, 20 | Thông số thể thức |
 
 ## An toàn khi chạy mã thí sinh — đọc trước khi mở thi
 
@@ -123,16 +151,21 @@ Worker mất nhịp tim 60 giây thì tác vụ được đưa lại hàng đợ
 
 ## Hiệu năng đo được (máy dev Windows, `process`, 4 trận đồng thời)
 
-Một trận 100 lượt khoảng 0,15 giây. Demo 60 đội: 10 vòng Swiss (≈ 290 trận) + vòng chính + chung kết xong trong ≈ 25 giây.
-Ước lượng 500 đội × 10 vòng ≈ 2.500 trận ≈ 2–4 phút chạy thuần. Chế độ `docker` chậm hơn đáng kể vì khởi động container,
-cần benchmark lại trước khi công bố năng lực (đề án mục 09).
+Một trận 2 ván với bot mẫu khoảng 0,2–0,6 giây. Demo 40 đội: 10 vòng Swiss (190 trận) + vòng chính + chung kết xong trong ≈ 46 giây.
+Ước lượng 500 đội × 10 vòng ≈ 2.500 trận ≈ 5–10 phút chạy thuần với bot nhẹ; bot tìm kiếm sâu (dùng gần hết 200 ms/nước)
+có thể lâu hơn nhiều. Cần benchmark lại với bot thật và chế độ `docker` trước khi công bố năng lực (đề án mục 09).
 
-## Những điểm đề án để mở, đã tự chốt (có thể đổi)
+## Những điểm đề án để mở, đã chốt cùng người dùng hoặc tự chốt (có thể đổi)
 
-- Bot hết 1 giây chờ bị dừng hẳn (thua các lượt còn lại) thay vì chỉ thua lượt đó, để tránh bot treo làm nghẽn worker.
-- Kiểm thử hợp lệ: 20 lượt với bot ngẫu nhiên, không có lượt lỗi nào thì hợp lệ.
-- Dữ liệu chung kết: chuỗi kết quả W/L/D từng lượt của một trận Swiss đã xác nhận chọn ngẫu nhiên (ẩn tên đội), tùy chọn kèm lựa chọn.
-- Xem trận ở giai đoạn giấu dữ liệu: người ngoài chỉ thấy tỉ số; đội trong trận chỉ thấy lựa chọn và log của mình; quản trị thấy hết.
+- Đi vào quân đối phương mạnh hơn: **cấm** (chặn đường như quân cùng loại).
+- Hết nước đi: thua. Lặp 3 lần hoặc quá 200 nước: so số quân, bằng nhau là hòa.
+- Một trận Swiss: 2 ván đổi màu. Hiệu số dùng để xếp hạng là ván thắng trừ ván thua.
+- Nước sai/lỗi: hệ thống đi thay, lỗi thứ 3 thì thua ván. Quá 1 giây: bot bị dừng, thua ván.
+- Kiểm thử hợp lệ: mỗi màu một ván 40 nước với bot ngẫu nhiên, không có nước lỗi nào thì hợp lệ.
+- Chung kết đổi luật: đổi **bảng khắc chế** giữa ba loại quân (thế cờ, ô đích, giới hạn nước giữ nguyên).
+  Dữ liệu phát cho hai đội: kết quả và toàn bộ nước đi của các ván trong một trận Swiss chọn ngẫu nhiên (ẩn tên đội).
+- Xem trận: đội trong trận xem lại toàn bộ ván nhưng chỉ thấy lỗi/log của bot mình; người ngoài chỉ thấy kết quả từng ván,
+  trừ giai đoạn bật công khai (mặc định chung kết); quản trị thấy hết.
 - Bản hợp lệ đầu tiên tự thành bản thi; trong phiên chung kết, bản chung kết hợp lệ đầu tiên tự thay thế.
 - Chưa làm: người vs người, thách đấu bot đội khác (đề án ghi chưa ưu tiên); xuất PDF chứng nhận (dùng In → Lưu PDF trên trang xác minh); gửi email.
 
@@ -148,7 +181,7 @@ src/
   services/submissions.js       nộp & kiểm thử bài
   services/results.js           thưởng, chứng nhận, phòng chung kết
   services/queue.js, play.js
-public/                         index.html, app.css, app.js, admin.js
+public/                         index.html, app.css, app.js, admin.js, board.js (vẽ bàn cờ, xem lại ván)
 sample-bots/                    bot mẫu cho thí sinh và cho chạy thử
 scripts/demo.js, create-admin.js
 test/                           node:test

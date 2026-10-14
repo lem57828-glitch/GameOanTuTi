@@ -8,10 +8,6 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const money = (n) => `${Number(n || 0).toLocaleString('vi-VN')}đ`;
 const fmtTime = (iso) => (iso ? new Date(iso).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : '');
-const MOVE_ICON = { ROCK: '✊', PAPER: '✋', SCISSORS: '✌️', LIZARD: '🦎', SPOCK: '🖖' };
-const MOVE_VI = { ROCK: 'Búa', PAPER: 'Bao', SCISSORS: 'Kéo' };
-const icon = (m) => MOVE_ICON[m] || (m ? m[0] : '–');
-const moveName = (m) => MOVE_VI[m] || m || '–';
 const PHASE_VI = { swiss: 'Sơ loại Swiss', r32: 'Vòng 32', r16: 'Vòng 16', qf: 'Tứ kết', sf: 'Bán kết', final: 'Chung kết', main: 'Thi chính' };
 const STATUS_VI = {
   pending: ['Chưa bắt đầu', ''], locked: ['Đã khóa bản', 'warn'], running: ['Đang diễn ra', 'info'], done: ['Đã xong', 'ok'],
@@ -140,9 +136,9 @@ route(/^\/$/, async (root) => {
   root.innerHTML = `
   <section class="card hero">
     <div>
-      <div class="eyebrow">Giải đấu lập trình bot búa kéo bao dành cho sinh viên năm nhất</div>
+      <div class="eyebrow">Giải đấu lập trình bot cờ búa-kéo-bao OTTv2 cho sinh viên năm nhất</div>
       <h1>Code bot.<br>Thử chiến thuật.<br><span class="hl">Vào Top 32.</span></h1>
-      <p class="muted">Viết một hàm Python, để bot tự thi đấu trên máy chủ. Thua một trận không bị loại: sơ loại Swiss ${o.swissRounds} vòng chọn 32 đội vào vòng chính.</p>
+      <p class="muted">Viết một hàm Python điều khiển 10 quân búa, kéo, bao trên bàn cờ 9×9: đưa quân vào ô đích hoặc ăn hết một loại quân đối thủ. Bot tự thi trên máy chủ; thua một trận không bị loại: sơ loại Swiss ${o.swissRounds} vòng chọn 32 đội vào vòng chính.</p>
       <div class="row">
         <a class="btn primary" href="#/bot">⬆ Nộp bot</a>
         <a class="btn" href="#/dau-truong">▶ Chơi thử</a>
@@ -163,8 +159,8 @@ route(/^\/$/, async (root) => {
     <div class="card">
       <div class="card-head"><h2>Bắt đầu ngay</h2>${me.user && !me.team ? '<span class="badge accent">Chưa có đội</span>' : ''}</div>
       <div class="stack">
-        <a class="card linkcard" href="#/dau-truong"><div class="ico">🎮</div><div><b>Người vs Bot mẫu</b><div class="muted small">Tự chơi để hiểu luật, không tính điểm giải</div></div></a>
-        <a class="card linkcard" href="#/dau-truong"><div class="ico">&lt;/&gt;</div><div><b>Chạy thử bot</b><div class="muted small">Bot của đội đấu bot mẫu, xem từng lượt và lỗi</div></div></a>
+        <a class="card linkcard" href="#/dau-truong"><div class="ico">🎮</div><div><b>Người vs Bot mẫu</b><div class="muted small">Tự đánh cờ với bot mẫu để hiểu luật, không tính điểm giải</div></div></a>
+        <a class="card linkcard" href="#/dau-truong"><div class="ico">&lt;/&gt;</div><div><b>Chạy thử bot</b><div class="muted small">Bot của đội đấu bot mẫu, xem lại từng nước và lỗi</div></div></a>
         <a class="card linkcard" href="#/huong-dan"><div class="ico">📘</div><div><b>Hướng dẫn &amp; thể lệ</b><div class="muted small">Giao diện bot, giới hạn, cách tính điểm</div></div></a>
       </div>
     </div>
@@ -201,7 +197,7 @@ route(/^\/$/, async (root) => {
 
 route(/^\/huong-dan$/, async (root) => {
   const [o, r] = await Promise.all([api('/overview'), api('/rules')]);
-  const L = o.limits;
+  const L = o.limits, M = r.match, B = window.BoardUI;
   root.innerHTML = `
   <div class="grid g2">
   <div class="stack">
@@ -210,48 +206,63 @@ route(/^\/huong-dan$/, async (root) => {
       <ol>
         <li>Tạo tài khoản, lập đội 1-3 người (mỗi người một đội).</li>
         <li>Tải <a href="/api/sample-bots/starter_bot">bot mẫu</a>, sửa hàm <code>make_move</code>.</li>
-        <li>Nộp tệp <code>.py</code> ở <a href="#/bot">Bot của tôi</a>. Hệ thống kiểm thử cách ly và báo hợp lệ hay lỗi.</li>
-        <li>Chạy thử với bot mẫu (${L.practicePerDay} trận/ngày), sửa và nộp lại không giới hạn trước hạn.</li>
-        <li>Đội trưởng chọn bản thi. Khi giai đoạn khóa, bản đó được dùng cho toàn bộ giai đoạn; bot tự thi, không cần mở máy.</li>
+        <li>Nộp tệp <code>.py</code> ở <a href="#/bot">Bot của tôi</a>. Hệ thống cho bot đánh thử mỗi màu một ván và báo hợp lệ hay lỗi.</li>
+        <li>Chạy thử với bot mẫu (${L.practicePerDay} trận/ngày), xem lại từng nước, sửa và nộp lại không giới hạn trước hạn.</li>
+        <li>Đội trưởng chọn bản thi. Khi giai đoạn khóa, bản đó được dùng cho cả giai đoạn; bot tự thi, không cần mở máy.</li>
       </ol>
-      <p class="muted small">Kiểm tra hợp lệ chỉ loại bot lỗi (không khởi động được, trả sai, quá giờ), không loại bot vì chiến thuật yếu.</p>
+      <p class="muted small">Kiểm tra hợp lệ chỉ loại bot lỗi (không khởi động được, trả nước sai, quá giờ), không loại bot vì chiến thuật yếu.</p>
+    </div>
+    <div class="card">
+      <h2>Luật OTTv2 (bàn cờ búa/kéo/bao)</h2>
+      ${B.render({ pieces: r.setup, goals: r.goals })}
+      <ul style="margin-top:12px">
+        <li>Bàn 9×9, mỗi bên 10 quân: 3 ✊ Búa, 4 ✋ Bao, 3 ✌️ Kéo, xếp như hình. <b>Xanh đi trước.</b></li>
+        <li>Mỗi lượt đi <b>một quân, một ô</b> theo 8 hướng (như quân vua).</li>
+        <li>Đi vào ô có quân đối phương mà quân mình khắc thì <b>ăn</b> quân đó: ${B.beatsHtml(r.ruleset.beats)}</li>
+        <li>Quân mình, quân đối phương <b>cùng loại</b> và quân đối phương <b>mạnh hơn</b> đều chặn đường: không đi vào được.</li>
+        <li><b>Thắng</b> khi đưa một quân vào ô đích (<span class="dot blue"></span>Xanh → <b>I9</b>, <span class="dot pink"></span>Hồng → <b>A1</b>)
+          hoặc <b>ăn hết một loại quân</b> của đối phương.</li>
+        <li>Tới lượt mà không còn nước đi hợp lệ thì <b>thua</b>.</li>
+        <li>Lặp cùng thế cờ 3 lần hoặc quá ${M.maxPlies} nước (mỗi bên ${M.maxPlies / 2}): bên còn <b>nhiều quân hơn</b> thắng, bằng nhau là hòa.</li>
+      </ul>
     </div>
     <div class="card">
       <h2>Giao diện bot</h2>
       <pre>import random
 
 def make_move(state):
-    # state["turn"]           lượt hiện tại, từ 0
-    # state["total_turns"]    tổng số lượt (tăng khi đấu phụ)
-    # state["moves"]          ["ROCK", "PAPER", "SCISSORS"]
-    # state["beats"]          {"ROCK": ["SCISSORS"], ...}
-    # state["my_moves"]       lựa chọn bạn đã ra
-    # state["opponent_moves"] None khi giai đoạn giấu dữ liệu
-    # state["results"]        None khi giai đoạn giấu dữ liệu
-    return random.choice(state["moves"])</pre>
-      <p><b>Quyền dữ liệu:</b> trước chung kết, bot <u>không</u> được biết lựa chọn của đối thủ hay kết quả từng lượt (<code>None</code>). Hãy dùng
-      <code>state["moves"]</code> và <code>state["beats"]</code> thay vì viết cứng, vì chung kết sẽ đổi luật.</p>
-      <p>Bot mẫu: ${Object.entries(r.sampleBots).map(([k, v]) => `<a href="/api/sample-bots/${k}">${esc(v)}</a>`).join(' • ')}</p>
+    # state["me"]            "blue" (Xanh) hoặc "pink" (Hồng)
+    # state["my_goal"]       ô đích của bạn: "I9" hoặc "A1"
+    # state["opponent_goal"] ô đích của đối thủ (góc nhà bạn)
+    # state["beats"]         {"ROCK": ["SCISSORS"], ...}
+    # state["board"]         {"B4": {"side": "blue", "type": "ROCK"}, ...}
+    # state["my_pieces"], state["opponent_pieces"]
+    # state["legal_moves"]   [{"from": "B4", "to": "C5", "capture": None}, ...]
+    # state["ply"], state["max_plies"], state["history"]
+    return random.choice(state["legal_moves"])   # hoặc "B4-C5"</pre>
+      <p>Bàn cờ là công khai nên bot luôn thấy toàn bộ thế cờ và các nước đã đi trong ván. Hãy dùng <code>state["beats"]</code> thay vì viết cứng
+        quan hệ ăn quân, vì chung kết sẽ đổi luật.</p>
+      <p>Bot mẫu: <a href="/api/sample-bots/starter_bot">Khởi đầu</a> • ${Object.entries(r.sampleBots).map(([k, v]) => `<a href="/api/sample-bots/${k}">${esc(v)}</a>`).join(' • ')}</p>
     </div>
+  </div>
+  <div class="stack">
     <div class="card">
       <h2>Giới hạn kỹ thuật</h2>
       <div class="table-wrap"><table><tbody>
         <tr><td>Kích thước mã</td><td>${L.codeBytes / 1024 / 1024} MB, một tệp .py</td></tr>
         <tr><td>Bộ nhớ</td><td>${L.memoryMb} MB mỗi bot</td></tr>
-        <tr><td>CPU mỗi lượt</td><td>${L.cpuMsPerTurn} ms (vượt: thua lượt đó)</td></tr>
-        <tr><td>Chờ tối đa mỗi lượt</td><td>${L.wallMsPerTurn / 1000} giây (vượt: bot bị dừng, thua các lượt còn lại)</td></tr>
+        <tr><td>CPU mỗi nước</td><td>${L.cpuMsPerTurn} ms</td></tr>
+        <tr><td>Nước sai, lỗi, quá CPU</td><td>Hệ thống đi thay một nước hợp lệ ngẫu nhiên và ghi lỗi; lỗi lần thứ ${L.maxErrors} trong ván là <b>thua ván</b></td></tr>
+        <tr><td>Chờ tối đa mỗi nước</td><td>${L.wallMsPerTurn / 1000} giây; quá giờ thì bot bị dừng và <b>thua ván</b></td></tr>
         <tr><td>Khởi động</td><td>${L.startupMs / 1000} giây</td></tr>
-        <tr><td>Log (print)</td><td>${L.logBytes / 1024 / 1024} MB mỗi bot/trận</td></tr>
+        <tr><td>Log (print)</td><td>${L.logBytes / 1024 / 1024} MB mỗi bot/ván</td></tr>
         <tr><td>Mạng, tiến trình con, tệp</td><td>Bị chặn; không đọc được bài đội khác</td></tr>
       </tbody></table></div>
     </div>
-  </div>
-  <div class="stack">
     <div class="card">
-      <h2>Luật một trận</h2>
-      <p>Một <b>lượt</b> là hai bot chọn đồng thời. Một <b>trận</b> gồm ${o.match.turns} lượt; bên thắng nhiều lượt hơn thắng trận, bằng nhau là hòa.
-      Lựa chọn sai, lỗi hoặc quá giờ là thua lượt đó.</p>
-      <div class="row">${r.ruleset.moves.map((m) => `<span class="badge info">${icon(m)} ${moveName(m)} thắng ${r.ruleset.beats[m].map(moveName).join(', ')}</span>`).join('')}</div>
+      <h2>Một trận</h2>
+      <p>Một <b>trận</b> gồm <b>${M.games} ván đổi màu</b>: mỗi bot cầm Xanh (đi trước) một ván và Hồng một ván.
+      Thắng ván 1 điểm, hòa 0,5. Nhiều điểm ván hơn thắng trận, bằng nhau là hòa trận.</p>
     </div>
     <div class="card">
       <h2>Sơ loại Swiss</h2>
@@ -260,14 +271,15 @@ def make_move(state):
       <div class="table-wrap"><table><thead><tr><th>Kết quả trận</th><th>Điểm Swiss</th></tr></thead><tbody>
         <tr><td>Thắng</td><td>${r.swiss.win}</td></tr><tr><td>Hòa</td><td>${r.swiss.draw}</td></tr><tr><td>Thua</td><td>${r.swiss.loss}</td></tr>
       </tbody></table></div>
-      <p style="margin-top:12px"><b>Xếp hạng:</b> tổng điểm Swiss → điểm trung bình cuối sơ loại của các đối thủ đã gặp → hiệu số lượt thắng-thua.</p>
+      <p style="margin-top:12px"><b>Xếp hạng:</b> tổng điểm Swiss → điểm trung bình cuối sơ loại của các đối thủ đã gặp → hiệu số ván thắng-thua.</p>
       <p><b>Bằng điểm ở vị trí 32:</b> chỉ nhóm vắt qua ranh giới đấu tranh suất. Nhóm ≤ 10 đội: loại trực tiếp rút gọn (K-S trận, có miễn đấu theo bốc thăm).
       Nhóm lớn hơn: thêm đúng một vòng trong nhóm rồi xử lý phần còn lại. Đội bằng điểm nhưng chắc suất được bốc thăm phân hạt giống.</p>
     </div>
     <div class="card">
       <h2>Vòng chính &amp; chung kết</h2>
-      <p>Vòng 32, 16 và tứ kết: mỗi cặp một trận. Bán kết: đủ 3 trận, thắng ít nhất 2 đi tiếp. Hòa ở vòng loại trực tiếp: thêm ${o.match.extraTurns} lượt, vẫn hòa thì bốc thăm có ghi nhận.</p>
-      <p><b>Chung kết đổi luật:</b> hai đội nhận cùng luật mới và dữ liệu một trận lịch sử, tự sửa bot trong 60-90 phút, <b>không dùng AI</b> hay hỗ trợ bên ngoài, rồi khóa bản và thi.</p>
+      <p>Vòng 32, 16 và tứ kết: mỗi cặp một trận. Bán kết: đủ 3 trận, thắng ít nhất 2 đi tiếp. Chung kết: thắng 2/3 trận.
+      Trận hòa ở vòng loại trực tiếp: thêm ${M.extraGames} ván đổi màu, vẫn hòa thì bốc thăm có ghi nhận.</p>
+      <p><b>Chung kết đổi luật:</b> hai đội nhận cùng bảng khắc chế mới và dữ liệu một trận lịch sử, tự sửa bot trong 60-90 phút, <b>không dùng AI</b> hay hỗ trợ bên ngoài, rồi khóa bản và thi.</p>
       <p class="muted small">Được nâng cấp bot giữa các giai đoạn, không sửa giữa các trận cùng giai đoạn.</p>
     </div>
     <div class="card">
@@ -474,34 +486,86 @@ async function humanPane(pane) {
     return;
   }
   const r = await api('/rules');
-  let game = null;
-  pane.innerHTML = `<div class="card">
-    <div class="row" style="margin-bottom:16px"><label for="bot" style="margin:0">Đối thủ</label>
-      <select id="bot" style="width:auto">${Object.entries(r.sampleBots).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}</select>
-      <button class="btn" id="new">↻ Ván mới</button></div>
-    <div class="scoreboard">
-      <div class="side you"><div>👤 <b>Bạn</b></div><div class="num" id="sy">0</div></div>
-      <div><div class="muted small">Chọn nước đi của bạn</div><div class="muted small" id="turns">Lượt 0</div></div>
-      <div class="side bot"><div>🤖 <b>Bot mẫu</b></div><div class="num" id="sb">0</div></div>
-    </div>
-    <div class="reveal" id="reveal" aria-live="polite" style="margin:16px 0"></div>
-    <div class="choices">${r.ruleset.moves.map((m, i) => `<button class="choice c${i % 3}" data-m="${m}"><span class="e">${icon(m)}</span>${moveName(m)}</button>`).join('')}</div>
-    <div class="turns" id="hist" style="margin-top:20px"></div>
-    <p class="muted small" style="margin-top:12px">Máy chủ chốt lựa chọn của bot trước khi nhận lựa chọn của bạn và tự phân xử kết quả.</p></div>`;
-  const start = async () => {
-    game = await api('/play', { method: 'POST', body: { bot: $('#bot').value } });
-    $('#sy').textContent = '0'; $('#sb').textContent = '0'; $('#turns').textContent = 'Lượt 0'; $('#hist').innerHTML = ''; $('#reveal').textContent = '';
+  const { game } = await api('/play');
+  if (game) return humanGame(pane, game, r);
+  const B = window.BoardUI;
+  pane.innerHTML = `<div class="card"><div class="game-layout">
+    <div>${B.render({ pieces: r.setup, goals: r.goals })}</div>
+    <div>
+      <h2>Ván thử theo luật thi</h2>
+      <p>Bạn đóng vai một bot, đấu một ván với bot mẫu theo đúng luật OTTv2 dùng khi thi: giới hạn ${r.match.maxPlies} nước, lặp thế cờ 3 lần, thắng bằng ô đích hoặc ăn hết một loại quân.</p>
+      <div class="field"><label for="bot">Đối thủ</label>
+        <select id="bot">${Object.entries(r.sampleBots).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}</select></div>
+      <div class="field"><label for="color">Bạn cầm</label>
+        <select id="color"><option value="blue">Xanh — đi trước, đích I9</option><option value="pink">Hồng — đi sau, đích A1</option></select></div>
+      <button class="btn primary" id="go">▶ Bắt đầu ván</button>
+      <p class="muted small" style="margin-top:12px">Cách đi: bấm vào quân của bạn để xem các ô đi được (chấm xanh), ô có vòng đỏ là ăn được quân. Bấm ô để đi.
+        Kết quả không tính điểm giải.</p>
+    </div></div></div>`;
+  on($('#go'), 'click', async () => humanGame(pane, await api('/play', { method: 'POST', body: { bot: $('#bot').value, color: $('#color').value } }), r));
+}
+
+function humanGame(pane, g, r) {
+  const B = window.BoardUI;
+  let selected = null;
+  let busy = false;
+  const labels = { [g.color]: 'Bạn', [g.botColor]: `Bot mẫu: ${r.sampleBots[g.bot]}` };
+  pane.innerHTML = `<div class="card"><div class="game-layout">
+    <div id="bd"></div>
+    <div>
+      <div class="card-head" style="margin-bottom:8px"><div><b id="status"></b><div class="muted small" id="sub"></div></div>
+        <button class="btn sm" id="quit">Bỏ ván</button></div>
+      <div id="counts"></div>
+      <div id="endbox"></div>
+      <div class="small" style="margin:8px 0">${B.beatsHtml(g.ruleset.beats)}</div>
+      <ol class="movelist" id="moves"></ol>
+    </div></div></div>`;
+
+  const draw = () => {
+    const mine = g.legal.filter((m) => m.from === selected);
+    const last = g.history[g.history.length - 1];
+    $('#bd').innerHTML = B.render({ pieces: g.pieces, goals: g.goals, selected, targets: mine, last, clickable: !g.end });
+    $('#counts').innerHTML = B.countsHtml(g.pieces, labels);
+    $$('#counts .side-box').forEach((el) => el.classList.toggle('turn', !g.end && el.classList.contains(g.toMove)));
+    $('#status').textContent = g.end ? 'Ván đã kết thúc' : g.toMove === g.color ? `Lượt của bạn (${B.SIDE_VI[g.color]})` : 'Bot đang đi…';
+    $('#sub').textContent = `Nước ${g.ply}/${g.maxPlies} • đích của bạn: ${g.goals[g.color]}${g.repetitions > 1 ? ` • thế cờ lặp ${g.repetitions}/3` : ''}`;
+    $('#moves').innerHTML = g.history.map((m, i) => `<li><span class="dot ${m.side}"></span>${i + 1}. ${B.TYPE_ICON[m.type]} ${m.from}→${m.to}${m.capture ? ` ✖${B.TYPE_ICON[m.capture]}` : ''}</li>`).join('');
+    const ml = $('#moves'); ml.scrollTop = ml.scrollHeight;
+    if (g.end) {
+      const title = { W: '🏆 Bạn thắng', L: 'Bot mẫu thắng', D: '🤝 Hòa' }[g.result];
+      const why = B.REASON_VI[g.end.reason] || g.end.reason;
+      $('#endbox').innerHTML = `<div class="notice ${g.result === 'W' ? 'ok' : g.result === 'L' ? 'bad' : ''}" style="margin-bottom:10px">
+        <b>${title}</b> — ${esc(g.end.winner ? `${B.SIDE_VI[g.end.winner]} thắng vì ${why}` : why)}.
+        <div class="row" style="margin-top:8px"><button class="btn sm primary" id="again">↻ Ván mới</button></div></div>`;
+      $('#quit').classList.add('hidden');
+      on($('#again'), 'click', () => humanPane(pane));
+    }
   };
-  on($('#new'), 'click', start);
-  $('#bot').addEventListener('change', start);
-  $$('.choice').forEach((b) => on(b, 'click', async () => {
-    const res = await api(`/play/${game.id}`, { method: 'POST', body: { move: b.dataset.m } });
-    $('#sy').textContent = res.score.you; $('#sb').textContent = res.score.bot; $('#turns').textContent = `Lượt ${res.turns} • Hòa ${res.score.draws}`;
-    const word = res.result === 'W' ? '<b style="color:var(--ok)">Bạn thắng!</b>' : res.result === 'L' ? '<b style="color:var(--bad)">Bot thắng</b>' : '<b>Hòa</b>';
-    $('#reveal').innerHTML = `${icon(res.you)} ${moveName(res.you)} &nbsp;vs&nbsp; ${icon(res.bot)} ${moveName(res.bot)} — ${word}`;
-    $('#hist').insertAdjacentHTML('beforeend', `<span class="${res.result}" title="${moveName(res.you)} vs ${moveName(res.bot)}">${icon(res.you)}</span>`);
-  }));
-  await start();
+
+  $('#bd').addEventListener('click', async (e) => {
+    const cell = e.target.closest('.cell');
+    if (!cell || g.end || busy || g.toMove !== g.color) return;
+    const s = cell.dataset.sq;
+    const target = g.legal.find((m) => m.from === selected && m.to === s);
+    if (target) {
+      busy = true;
+      try {
+        g = await api(`/play/${g.id}`, { method: 'POST', body: { from: target.from, to: target.to } });
+        selected = null;
+      } catch (err) { toast(err.message, true); } finally { busy = false; }
+      return draw();
+    }
+    const p = g.pieces[s];
+    selected = p && p.side === g.color && g.legal.some((m) => m.from === s) ? s : null;
+    if (p && p.side === g.color && !selected) toast('Quân này đang bị chặn, không có nước đi');
+    draw();
+  });
+  on($('#quit'), 'click', async () => {
+    if (!confirm('Bỏ ván này?')) return;
+    await api(`/play/${g.id}`, { method: 'DELETE' });
+    humanPane(pane);
+  });
+  draw();
 }
 
 async function practicePane(pane) {
@@ -541,43 +605,55 @@ async function practicePane(pane) {
 
 route(/^\/tran\/(\d+)$/, async (root, id) => {
   const m = await api(`/matches/${id}`);
-  const persp = m.side || 'a';
-  const flip = persp === 'b';
+  const B = window.BoardUI;
+  const flip = m.side === 'b';
   const left = flip ? m.nameB : m.nameA, right = flip ? m.nameA : m.nameB;
   const wl = flip ? m.winsB : m.winsA, wr = flip ? m.winsA : m.winsB;
-  const verdict = m.status !== 'done' ? badge(m.status) : m.result === 'draw' ? '<span class="badge">Hòa</span>'
-    : `<span class="badge ok">${esc(m.result === 'a' ? m.nameA : m.nameB)} thắng</span>`;
-  const decided = { extra: `sau ${m.extraTurns} lượt đấu phụ`, lot: 'bằng bốc thăm có ghi nhận (seed trận)' }[m.decidedBy];
-  let turnsHtml = '';
-  if (m.turns && m.turns[0] && 'r' in m.turns[0]) {
-    turnsHtml = `<div class="turns">${m.turns.map((t, i) => {
-      const me = flip ? t.b : t.a, op = flip ? t.a : t.b, err = flip ? t.eb : t.ea, opErr = flip ? t.ea : t.eb;
-      const r = t.r === 'draw' ? 'D' : (t.r === 'a') !== flip ? 'W' : 'L';
-      return `<span class="${r}${err ? ' E' : ''}" title="Lượt ${i}: ${esc(moveName(me))} vs ${esc(moveName(op))}${err ? ` — lỗi: ${esc(err)}` : ''}${opErr ? ` — đối thủ lỗi: ${esc(opErr)}` : ''}">${icon(me)}</span>`;
-    }).join('')}</div><p class="muted small">Mỗi ô là một lượt theo góc nhìn ${esc(left)}: xanh thắng, đỏ thua, xám hòa; viền đỏ là lượt bị lỗi. Rê chuột để xem chi tiết.</p>`;
-    const errs = m.turns.map((t, i) => [i, flip ? t.eb : t.ea]).filter(([, e]) => e);
-    if (errs.length) turnsHtml += `<h3>Lỗi của ${esc(left)}</h3><pre>${errs.slice(0, 50).map(([i, e]) => `Lượt ${i}: ${esc(e)}`).join('\n')}</pre>`;
-  } else if (m.turns) {
-    turnsHtml = `<div class="notice">${esc(m.hiddenNote)} Bạn chỉ xem được lựa chọn của bot mình.</div>
-      <div class="turns" style="margin-top:12px">${m.turns.map((t, i) => `<span class="${t.err ? 'E' : ''}" title="Lượt ${i}: ${esc(moveName(t.mine))}${t.err ? ` — lỗi: ${esc(t.err)}` : ''}">${icon(t.mine)}</span>`).join('')}</div>`;
-  } else if (m.status === 'done') {
-    turnsHtml = '<p class="muted">Giai đoạn này giấu diễn biến từng lượt với người ngoài trận.</p>';
-  }
+  const verdict = m.status !== 'done' ? badge(m.status) : m.result === 'draw' ? '<span class="badge">Hòa trận</span>'
+    : `<span class="badge ok">${esc(m.result === 'a' ? m.nameA : m.nameB)} thắng trận</span>`;
+  const decided = { extra: `sau ${m.extraGames} ván đấu phụ`, lot: 'bằng bốc thăm có ghi nhận (seed trận) sau đấu phụ' }[m.decidedBy];
+  const nameOf = (x) => (x === 'a' ? m.nameA : m.nameB);
+  const gameTitle = (g, i) => {
+    const blueName = nameOf(g.blue), pinkName = nameOf(g.blue === 'a' ? 'b' : 'a');
+    const res = g.result === 'draw' ? 'Hòa' : `${esc(nameOf(g.result))} thắng`;
+    return `Ván ${i + 1}: <span class="dot blue"></span>${esc(blueName)} vs <span class="dot pink"></span>${esc(pinkName)} — <b>${res}</b>
+      <span class="muted small">(${esc(B.REASON_VI[g.reason] || g.reason)}, ${g.plies} nước, còn ${g.pieces.blue}–${g.pieces.pink} quân)</span>`;
+  };
   const log = m.myLog;
   root.innerHTML = `<div class="card">
     <p class="muted small">${m.kind === 'practice' ? 'Chạy thử (không tính điểm)' : `${esc(PHASE_VI[m.phase] || '')} ${m.kind === 'knockout' ? `• trận ${m.game}` : m.kind === 'tiebreak' ? '• tranh suất' : `• vòng ${m.round}`}`}
-      • luật: ${esc(m.ruleset.name)} • ${m.reveal ? 'bot thấy dữ liệu đối thủ' : 'giấu dữ liệu đối thủ'} ${m.confirmed ? '• <span class="badge ok">Đã xác nhận</span>' : m.kind !== 'practice' && m.status === 'done' ? '• <span class="badge warn">Kết quả tạm</span>' : ''}</p>
-    <div class="scoreboard"><div class="side you"><b>${esc(left)}</b><div class="num">${wl ?? '–'}</div></div>
-      <div>${verdict}<div class="muted small">Hòa ${m.draws ?? '–'}</div></div>
-      <div class="side bot"><b>${esc(right)}</b><div class="num">${wr ?? '–'}</div></div></div>
+      • luật: ${esc(m.ruleset.name)} ${m.confirmed ? '• <span class="badge ok">Đã xác nhận</span>' : m.kind !== 'practice' && m.status === 'done' ? '• <span class="badge warn">Kết quả tạm</span>' : ''}</p>
+    <div class="scoreboard"><div class="side you"><b>${esc(left)}</b><div class="num">${wl ?? '–'}</div><div class="small muted">ván thắng</div></div>
+      <div>${verdict}<div class="muted small">Hòa ${m.draws ?? '–'} ván</div></div>
+      <div class="side bot"><b>${esc(right)}</b><div class="num">${wr ?? '–'}</div><div class="small muted">ván thắng</div></div></div>
     ${decided ? `<p class="small" style="margin-top:12px;text-align:center">Phân định ${decided}.</p>` : ''}
   </div>
-  <div class="card"><h2>Diễn biến</h2>${turnsHtml || '<p class="muted">Trận chưa chạy xong.</p>'}</div>
+  <div class="card"><h2>Diễn biến</h2><div id="games">${m.games ? '' : '<p class="muted">Trận chưa chạy xong.</p>'}</div></div>
   ${log != null ? `<div class="card"><h2>Log bot của bạn</h2><pre>${esc(log || '(trống)')}</pre></div>` : ''}
   ${m.logA != null && m.runs ? `<div class="card"><h2>Quản trị: log &amp; lần chạy</h2><p class="small">Seed ${m.seed}</p>
     <div class="table-wrap"><table><thead><tr><th>Lần</th><th>Trạng thái</th><th>Worker</th><th>Bắt đầu</th><th>Lỗi</th></tr></thead><tbody>
     ${m.runs.map((r) => `<tr><td>${r.attempt}</td><td>${esc(r.status)}</td><td class="small">${esc(r.worker || '')}</td><td class="small">${fmtTime(r.started_at)}</td><td class="small">${esc(r.error || '')}</td></tr>`).join('')}</tbody></table></div>
     <div class="grid g2" style="margin-top:12px"><div><h3>${esc(m.nameA)}</h3><pre>${esc(m.logA || '(trống)')}</pre></div><div><h3>${esc(m.nameB)}</h3><pre>${esc(m.logB || '(trống)')}</pre></div></div></div>` : ''}`;
+
+  if (m.games) {
+    const box = $('#games');
+    if (!m.games[0] || !m.games[0].moves) {
+      box.innerHTML = `<p class="muted">${esc(m.hiddenNote || '')}</p><ul>${m.games.map((g, i) => `<li>${gameTitle(g, i)}</li>`).join('')}</ul>`;
+    } else {
+      box.innerHTML = `<div class="gametabs">${m.games.map((g, i) => `<button class="btn sm" data-g="${i}">Ván ${i + 1}</button>`).join('')}</div><div id="rp"></div>`;
+      let stop = null;
+      const show = (i) => {
+        if (stop) stop();
+        $$('[data-g]', box).forEach((b) => b.classList.toggle('primary', Number(b.dataset.g) === i));
+        const g = m.games[i];
+        const labels = { blue: nameOf(g.blue), pink: nameOf(g.blue === 'a' ? 'b' : 'a') };
+        stop = window.BoardUI.replayer($('#rp'), { setup: m.setup, goals: m.goals, moves: g.moves, labels, header: `<p>${gameTitle(g, i)}</p>` });
+      };
+      $$('[data-g]', box).forEach((b) => b.addEventListener('click', () => show(Number(b.dataset.g))));
+      cleanups.push(() => stop && stop());
+      show(0);
+    }
+  }
   if (m.status !== 'done') every(2000, async () => { const n = await api(`/matches/${id}`); if (n.status === 'done') render(); });
 });
 
@@ -658,15 +734,17 @@ route(/^\/chung-ket$/, async (root) => {
   </div>
   ${rs ? `<div class="grid g2" style="margin-top:16px">
     <div class="card"><h2>Luật mới: ${esc(rs.name)}</h2><p>${esc(rs.description || '')}</p>
-      <div class="table-wrap"><table><thead><tr><th>Lựa chọn</th><th>Thắng</th></tr></thead><tbody>
-      ${rs.moves.map((m) => `<tr><td>${icon(m)} <b>${esc(m)}</b></td><td>${(rs.beats[m] || []).map((x) => `${icon(x)} ${esc(x)}`).join(', ') || '—'}</td></tr>`).join('')}</tbody></table></div>
-      <p style="margin-top:12px">Bot ${f.reveal ? '<b>được thấy</b>' : '<b>không</b> thấy'} lịch sử đối thủ trong chung kết.</p>
+      <div class="table-wrap"><table><thead><tr><th>Quân</th><th>Ăn được</th></tr></thead><tbody>
+      ${rs.moves.map((m) => `<tr><td>${window.BoardUI.TYPE_ICON[m]} <b>${window.BoardUI.TYPE_VI[m]}</b></td><td>${(rs.beats[m] || []).map((x) => `${window.BoardUI.TYPE_ICON[x]} ${window.BoardUI.TYPE_VI[x]}`).join(', ') || '—'}</td></tr>`).join('')}</tbody></table></div>
+      <p class="small" style="margin-top:12px">Thế cờ ban đầu, ô đích, giới hạn nước giữ nguyên. Diễn biến các trận chung kết ${f.reveal ? '<b>được công khai</b>' : 'chỉ hai đội xem được'}.</p>
       ${f.briefing ? `<h3>Ghi chú của ban tổ chức</h3><p>${esc(f.briefing)}</p>` : ''}</div>
-    <div class="card"><h2>Dữ liệu thắng/thua</h2>
+    <div class="card"><h2>Dữ liệu trận lịch sử</h2>
       ${f.data ? `<p class="small muted">${esc(f.data.source)}. ${esc(f.data.note)}</p>
-        <div class="turns">${f.data.results.map((r, i) => `<span class="${r}" title="Lượt ${i}${f.data.moves ? `: ${f.data.moves[i][0]} vs ${f.data.moves[i][1]}` : ''}">${f.data.moves ? icon(f.data.moves[i][0]) : r}</span>`).join('')}</div>
-        <p class="small" style="margin-top:8px">W ${f.data.results.filter((x) => x === 'W').length} • L ${f.data.results.filter((x) => x === 'L').length} • D ${f.data.results.filter((x) => x === 'D').length}</p>` : '<p class="muted">Không có dữ liệu lịch sử.</p>'}</div>
-  </div>` : ''}
+        <ul>${f.data.games.map((g, i) => `<li>Ván ${i + 1}: bên ${g.blue.toUpperCase()} cầm Xanh — <b>${g.result}</b>
+          <span class="small muted">(${esc(window.BoardUI.REASON_VI[g.reason] || g.reason)}, ${g.plies} nước, còn ${g.pieces.blue}–${g.pieces.pink} quân)</span>
+          ${g.moves ? `<button class="btn sm" data-fg="${i}">Xem lại</button>` : ''}</li>`).join('')}</ul>` : '<p class="muted">Không có dữ liệu lịch sử.</p>'}</div>
+  </div>
+  <div class="card hidden" id="frp" style="margin-top:16px"></div>` : ''}
   ${f.finalist ? `<div class="card" style="margin-top:16px"><h2>Nộp bot chung kết</h2>
     ${f.status === 'running' ? `<form id="ff"><textarea name="code" class="mono" rows="14" placeholder="def make_move(state): ..."></textarea>
       <div class="row" style="margin-top:8px"><button class="btn primary">Nộp bản chung kết</button><label class="btn">Hoặc chọn tệp<input type="file" id="ffile" accept=".py" class="hidden"></label></div></form>`
@@ -690,6 +768,14 @@ route(/^\/chung-ket$/, async (root) => {
   const submitFinal = async (filename, code) => { await api('/bots', { method: 'POST', body: { filename, code } }); toast('Đã nộp, đang kiểm thử với luật mới…'); setTimeout(render, 2500); };
   on($('#ff'), 'submit', (e) => submitFinal('final.py', e.target.code.value));
   on($('#ffile'), 'change', async (e) => { const fl = e.target.files[0]; if (fl) await submitFinal(fl.name, await fl.text()); });
+  $$('[data-fg]').forEach((b) => b.addEventListener('click', () => {
+    const g = f.data.games[Number(b.dataset.fg)];
+    $('#frp').classList.remove('hidden');
+    const stop = window.BoardUI.replayer($('#frp'), { setup: f.setup, goals: f.goals, moves: g.moves, labels: { blue: `Bên ${g.blue.toUpperCase()}`, pink: `Bên ${g.blue === 'a' ? 'B' : 'A'}` },
+      header: `<h3>Ván ${Number(b.dataset.fg) + 1} của trận lịch sử (luật cũ)</h3>` });
+    cleanups.push(stop);
+    $('#frp').scrollIntoView({ behavior: 'smooth' });
+  }));
   if (f.status === 'draft' || f.status === 'none') every(5000, async () => { const n = await api('/final'); if (n.status !== f.status) render(); });
 });
 

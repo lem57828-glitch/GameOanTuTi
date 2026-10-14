@@ -1,4 +1,4 @@
-// Một tiến trình bot: khởi động harness, gửi trạng thái từng lượt, nhận lựa chọn trong giới hạn thời gian.
+// Một tiến trình bot: khởi động harness, gửi trạng thái bàn cờ mỗi khi tới lượt, nhận nước đi trong giới hạn thời gian.
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const readline = require('node:readline');
@@ -77,12 +77,11 @@ class BotProcess {
     });
   }
 
-  /** Trả về { move } hoặc { error, timeout?, dead? }. Hết thời gian chờ thì bot bị dừng vì có thể bị kẹt. */
-  async ask(payload) {
-    this.send({ type: 'turn', ...payload });
+  /** Trả về { move } (giá trị bot trả, chưa kiểm tra) hoặc { error, timeout?, dead? }. Hết thời gian chờ thì bot bị dừng vì có thể bị kẹt. */
+  async ask(state) {
+    this.send({ type: 'turn', state });
     const res = await this.receive(config.limits.wallMsPerTurn, 'Quá 1 giây chờ');
     if (res.timeout) this.kill('Quá thời gian chờ, bot bị dừng');
-    if (typeof res.move === 'string') return { move: res.move.trim().toUpperCase() };
     return res;
   }
 

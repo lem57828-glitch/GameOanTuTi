@@ -29,15 +29,28 @@ const R = require('../src/services/results');
 const { Worker } = require('../src/services/queue');
 const handlers = require('../src/handlers');
 
+const sample = (n) => fs.readFileSync(path.join(config.ROOT, 'sample-bots', `${n}.py`), 'utf8');
 const BOTS = {
-  random: `import random\ndef make_move(state):\n    return random.choice(state["moves"])\n`,
-  biased: `import random\nW = [random.random() for _ in range(3)]\ndef make_move(state):\n    return random.choices(state["moves"][:3], weights=W)[0]\n`,
-  cycle: `def make_move(state):\n    return state["moves"][state["turn"] % len(state["moves"])]\n`,
-  rock: `def make_move(state):\n    return "ROCK"\n`,
-  mirror: `import random\ndef make_move(state):\n    mine = state["my_moves"]\n    if mine and random.random() < 0.6:\n        return mine[-1]\n    return random.choice(state["moves"])\n`,
-  adaptive: fs.readFileSync(path.join(config.ROOT, 'sample-bots', 'adaptive_bot.py'), 'utf8'),
-  crashLate: `import random\ndef make_move(state):\n    if state["turn"] == 60:\n        raise RuntimeError("lỗi giả lập ở lượt 60")\n    return random.choice(state["moves"])\n`,
-  invalid: `def make_move(state):\n    return "FOO"\n`,
+  random: sample('random_bot'),
+  greedy: sample('greedy_bot'),
+  rusher: sample('rusher_bot'),
+  smart: sample('smart_bot'),
+  starter: sample('starter_bot'),
+  // Ưu tiên quân Búa: đi Búa nếu được, còn lại ngẫu nhiên.
+  rockFirst: `import random
+def make_move(state):
+    rocks = [m for m in state["legal_moves"] if state["board"][m["from"]]["type"] == "ROCK"]
+    return random.choice(rocks or state["legal_moves"])
+`,
+  crashLate: `import random
+def make_move(state):
+    if state["ply"] >= 60:
+        raise RuntimeError("lỗi giả lập từ nước 60")
+    return random.choice(state["legal_moves"])
+`,
+  invalid: `def make_move(state):
+    return "Z9-Z9"
+`,
 };
 const kinds = Object.keys(BOTS);
 
@@ -73,10 +86,10 @@ async function main() {
   log(`Kiểm thử bài nộp: ${valid} hợp lệ, ${N - valid} không hợp lệ.`);
 
   // Một đội chạy thử với bot mẫu.
-  T.requestPractice({ user: { id: 2 }, team: db.get('SELECT * FROM teams WHERE id = 1'), sampleBot: 'adaptive_bot' });
+  T.requestPractice({ user: { id: 2 }, team: db.get('SELECT * FROM teams WHERE id = 1'), sampleBot: 'smart_bot' });
   await worker.drain();
 
-  if (STOP === 'swiss') return done(worker, 'Đã khóa nhận bài, chưa chạy Swiss.');
+  if (STOP === 'swiss') return done(worker, 'Đã có đội và bot, chưa khóa Swiss: vào Quản trị để khóa bản và chạy vòng.');
   log(`Khóa Swiss: ${T.lockPhase('swiss', adminId)} đội.`);
   const rounds = Number(db.setting('swiss_rounds'));
   for (let r = 1; r <= rounds; r++) {
@@ -103,11 +116,10 @@ async function main() {
   }
 
   R.configureFinal({
-    name: 'Luật chung kết: thêm LIZARD và SPOCK',
-    moves: ['ROCK', 'PAPER', 'SCISSORS', 'LIZARD', 'SPOCK'],
-    beats: { ROCK: ['SCISSORS', 'LIZARD'], PAPER: ['ROCK', 'SPOCK'], SCISSORS: ['PAPER', 'LIZARD'], LIZARD: ['SPOCK', 'PAPER'], SPOCK: ['SCISSORS', 'ROCK'] },
-    description: 'Mỗi lựa chọn thắng hai lựa chọn khác. Bot được thấy lịch sử đối thủ trong chung kết.',
-    briefing: 'Sửa hàm make_move cho luật 5 lựa chọn. Không dùng AI hay hỗ trợ bên ngoài.',
+    name: 'Luật chung kết: đảo chiều khắc chế',
+    beats: { ROCK: ['PAPER'], PAPER: ['SCISSORS'], SCISSORS: ['ROCK'] },
+    description: 'Đảo chiều: búa ăn bao, bao ăn kéo, kéo ăn búa. Quân cùng loại vẫn chặn nhau.',
+    briefing: 'Sửa make_move theo bảng khắc chế mới. Không dùng AI hay hỗ trợ bên ngoài.',
     durationMin: 75, includeMoves: true, reveal: true,
   }, adminId);
   R.startFinal(adminId);
@@ -117,7 +129,7 @@ async function main() {
   const fin = db.get(`SELECT * FROM series WHERE phase_key = 'final'`);
   for (const tid of [fin.team_a, fin.team_b]) {
     const team = db.get('SELECT * FROM teams WHERE id = ?', tid);
-    subs.submit({ user: { id: team.captain_id }, team, filename: 'final.py', code: BOTS.adaptive });
+    subs.submit({ user: { id: team.captain_id }, team, filename: 'final.py', code: BOTS.smart });
   }
   await worker.drain();
   R.endFinal(adminId);
