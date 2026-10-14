@@ -357,3 +357,37 @@ test('người vs bot mẫu: chơi hết ván thì có kết quả và không đ
   assert.throws(() => pl.move(teams[2].uid, g.id, { from: 'B5', to: 'B6' }), /kết thúc/);
   assert.equal(pl.current(teams[2].uid), null);
 });
+
+// ------------------------------------------------------------ đăng ký & đăng nhập
+
+test('đăng ký/đăng nhập: chỉ đếm lần sai, nhiều người cùng IP vẫn đăng nhập được', async () => {
+  const express = require('express');
+  const server = express().use('/api', require('../src/routes/api')).listen(0);
+  const base = `http://127.0.0.1:${server.address().port}/api`;
+  const post = (p, body, cookie) => fetch(`${base}${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(cookie ? { cookie } : {}) }, body: JSON.stringify(body) });
+  try {
+    // Đăng ký: tên tiếng Việt, email không phân biệt hoa thường, tự đăng nhập sau khi đăng ký.
+    const r = await post('/auth/register', { email: 'Lan.Anh@Truong.edu.vn', name: 'Trần Lan Anh', password: 'matkhau123' });
+    assert.equal(r.status, 200);
+    const me = await (await fetch(`${base}/me`, { headers: { cookie: r.headers.get('set-cookie').split(';')[0] } })).json();
+    assert.equal(me.user.name, 'Trần Lan Anh');
+    assert.equal(me.user.email, 'lan.anh@truong.edu.vn');
+    assert.equal((await post('/auth/register', { email: 'LAN.ANH@truong.edu.vn', name: 'X Y', password: 'matkhau123' })).status, 409);
+    assert.equal((await post('/auth/register', { email: 'x@y.vn', name: 'X Y', password: 'ngan' })).status, 400);
+    assert.equal((await post('/auth/register', { email: 'khong-phai-email', name: 'X Y', password: 'matkhau123' })).status, 400);
+
+    // 30 lần đăng nhập đúng liên tiếp từ cùng một IP (như cả lớp dùng chung Wi-Fi): không bị chặn.
+    for (let i = 0; i < 30; i++) assert.equal((await post('/auth/login', { email: 'lan.anh@truong.edu.vn', password: 'matkhau123' })).status, 200);
+
+    // Sai 5 lần thì khóa riêng tài khoản đó, kể cả khi lần sau nhập đúng; tài khoản khác không bị ảnh hưởng.
+    for (let i = 0; i < 5; i++) assert.equal((await post('/auth/login', { email: 'u1@t.local', password: 'sai-mat-khau' })).status, 401);
+    assert.equal((await post('/auth/login', { email: 'u1@t.local', password: 'matkhau123' })).status, 429);
+    assert.equal((await post('/auth/login', { email: 'u2@t.local', password: 'matkhau123' })).status, 200);
+
+    // Đăng xuất xóa phiên.
+    const lo = await post('/auth/logout', {});
+    assert.match(lo.headers.get('set-cookie'), /Max-Age=0/);
+  } finally {
+    server.close();
+  }
+});

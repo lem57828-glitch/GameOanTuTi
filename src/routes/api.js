@@ -35,15 +35,19 @@ const str = (v, max = 200) => String(v ?? '').trim().slice(0, max);
 const teamName = (id) => (id == null ? null : db.get('SELECT name FROM teams WHERE id = ?', id)?.name ?? null);
 const isAdmin = (req) => req.user && req.user.role === 'admin';
 
-// Đơn giản hóa chống dò mật khẩu: giới hạn theo IP.
-const attempts = new Map();
-function throttle(req) {
+// Chống dò mật khẩu. Chỉ đếm lần đăng nhập SAI, vì cả phòng thi/sự kiện thường dùng chung một IP:
+// mỗi tài khoản tối đa 5 lần sai/15 phút, mỗi IP tối đa 50 lần sai/phút. Đăng ký: mỗi IP 60 tài khoản/10 phút.
+const buckets = new Map();
+function hits(key, windowMs) {
   const now = Date.now();
-  const a = (attempts.get(req.ip) || []).filter((t) => now - t < 60_000);
-  need(a.length < 10, 'Thử quá nhiều lần, chờ 1 phút', 429);
-  a.push(now);
-  attempts.set(req.ip, a);
+  const list = (buckets.get(key) || []).filter((t) => now - t < windowMs);
+  buckets.set(key, list);
+  return list;
 }
+const record = (key) => buckets.get(key).push(Date.now());
+const LOGIN_FAIL = { perEmail: [5, 15 * 60_000], perIp: [50, 60_000] };
+const REGISTER = [60, 10 * 60_000];
+setInterval(() => { for (const [k, v] of buckets) if (!v.length || Date.now() - v[v.length - 1] > 15 * 60_000) buckets.delete(k); }, 5 * 60_000).unref();
 
 // ================================================================ công khai
 
@@ -136,24 +140,36 @@ api.get('/matches/:id', h((req) => {
 // ================================================================ tài khoản
 
 api.post('/auth/register', h((req, res) => {
-  throttle(req);
+  const ipKey = `reg:${req.ip}`;
+  need(hits(ipKey, REGISTER[1]).length < REGISTER[0], 'Có quá nhiều tài khoản được tạo từ mạng này, thử lại sau ít phút', 429);
   const email = str(req.body.email, 120).toLowerCase();
   const name = str(req.body.name, 80);
   const password = String(req.body.password || '');
   need(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email), 'Email không hợp lệ');
   need(name.length >= 2, 'Nhập họ tên');
   need(password.length >= 8, 'Mật khẩu tối thiểu 8 ký tự');
+  need(password.length <= 200, 'Mật khẩu tối đa 200 ký tự');
   need(!db.get('SELECT 1 FROM users WHERE email = ?', email), 'Email đã được đăng ký', 409);
   const id = db.run('INSERT INTO users (email, name, student_id, school, password_hash) VALUES (?,?,?,?,?)',
     email, name, str(req.body.student_id, 30), str(req.body.school, 120), auth.hashPassword(password)).lastInsertRowid;
+  record(ipKey);
   auth.setSession(res, Number(id));
   return { ok: true };
 }));
 
 api.post('/auth/login', h((req, res) => {
-  throttle(req);
-  const u = db.get('SELECT * FROM users WHERE email = ?', str(req.body.email, 120).toLowerCase());
-  need(u && auth.checkPassword(String(req.body.password || ''), u.password_hash), 'Sai email hoặc mật khẩu', 401);
+  const email = str(req.body.email, 120).toLowerCase();
+  const password = String(req.body.password || '');
+  const emailKey = `fail:${email}`, ipKey = `failip:${req.ip}`;
+  need(hits(emailKey, LOGIN_FAIL.perEmail[1]).length < LOGIN_FAIL.perEmail[0], 'Tài khoản này nhập sai quá nhiều lần, thử lại sau 15 phút', 429);
+  need(hits(ipKey, LOGIN_FAIL.perIp[1]).length < LOGIN_FAIL.perIp[0], 'Có quá nhiều lần đăng nhập sai từ mạng này, chờ 1 phút', 429);
+  const u = password.length <= 200 && db.get('SELECT * FROM users WHERE email = ?', email);
+  if (!u || !auth.checkPassword(password, u.password_hash)) {
+    record(emailKey);
+    record(ipKey);
+    throw new UserError('Sai email hoặc mật khẩu', 401);
+  }
+  buckets.delete(emailKey);
   auth.setSession(res, u.id);
   return { ok: true };
 }));
