@@ -57,6 +57,7 @@ api.get('/overview', h(() => {
   const fin = R.finalSession();
   return {
     competition: db.setting('competition_name', 'BOT ARENA'),
+    teamsOpen: !teamsLocked(),
     submissionsOpen: db.setting('submissions_open') === 'true',
     practiceOpen: db.setting('practice_open') === 'true',
     currentPhase: db.setting('current_phase'),
@@ -195,10 +196,16 @@ api.get('/me', h((req) => {
 
 // ================================================================ đội
 
-const teamsLocked = () => db.get(`SELECT status FROM phases WHERE key = 'swiss'`).status !== 'pending';
+const teamsLocked = () => {
+  const opt = db.setting('teams_open');
+  if (opt === 'true') return false;
+  if (opt === 'false') return true;
+  return db.get(`SELECT status FROM phases WHERE key = 'swiss'`).status !== 'pending';
+};
 const inviteCode = () => crypto.randomBytes(4).toString('hex').toUpperCase();
 
 api.post('/teams', auth.requireUser, h((req) => {
+  need(req.user.role !== 'admin', 'Tài khoản Ban tổ chức không tham gia thi đấu với tư cách thí sinh');
   need(!req.user.team_id, 'Bạn đã thuộc một đội');
   need(!teamsLocked(), 'Sơ loại Swiss đã bắt đầu nên không thể lập đội mới. Bạn vẫn chơi thử với bot mẫu được.', 403);
   const name = str(req.body.name, 60);
@@ -211,6 +218,7 @@ api.post('/teams', auth.requireUser, h((req) => {
 }));
 
 api.post('/teams/join', auth.requireUser, h((req) => {
+  need(req.user.role !== 'admin', 'Tài khoản Ban tổ chức không tham gia thi đấu với tư cách thí sinh');
   need(!req.user.team_id, 'Bạn đã thuộc một đội');
   need(!teamsLocked(), 'Sơ loại Swiss đã bắt đầu nên danh sách thành viên đã được khóa.', 403);
   const t = db.get('SELECT * FROM teams WHERE invite_code = ?', str(req.body.code, 20).toUpperCase());
@@ -356,6 +364,7 @@ api.use('/admin', admin);
 
 admin.get('/overview', h(() => ({
   queue: queue.stats(),
+  teamsOpen: !teamsLocked(),
   phases: db.all('SELECT p.*, r.name AS ruleset_name FROM phases p JOIN rulesets r ON r.id = p.ruleset_id ORDER BY ord'),
   settings: Object.fromEntries(db.all('SELECT key, value FROM settings').filter((s) => !['cut_state', 'qualified'].includes(s.key)).map((s) => [s.key, s.value])),
   swissRound: db.get(`SELECT MAX(round_no) AS r FROM matches WHERE kind IN ('swiss','bye')`).r || 0,
@@ -378,7 +387,7 @@ admin.post('/teams/:id/withdraw', h((req) => {
   return { ok: true };
 }));
 
-const EDITABLE = ['submissions_open', 'practice_open', 'challenges_open', 'swiss_rounds', 'competition_name', 'organizer'];
+const EDITABLE = ['submissions_open', 'teams_open', 'practice_open', 'challenges_open', 'swiss_rounds', 'competition_name', 'organizer'];
 admin.post('/settings', h((req) => {
   const key = str(req.body.key, 40);
   need(EDITABLE.includes(key), 'Không sửa được khóa này');

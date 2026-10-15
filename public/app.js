@@ -93,15 +93,34 @@ async function render() {
 
 function renderNav(path) {
   const u = state.me.user;
-  const items = [['/', 'Trang chủ'], ['/huong-dan', 'Hướng dẫn'], ['/dau-truong', 'Đấu trường'], ['/bot', 'Bot của tôi'], ['/doi', 'Đội'],
-    ['/xep-hang', 'Bảng xếp hạng'], ['/chung-ket', 'Chung kết'], ['/thanh-tich', 'Thành tích'], ['/ho-tro', 'Hỗ trợ']];
-  if (u && u.role === 'admin') items.push(['/quan-tri', 'Quản trị']);
+  const isAdmin = u && u.role === 'admin';
+  const items = isAdmin ? [
+    ['/quan-tri', '⚡ Bảng Quản trị BTC'],
+    ['/', 'Trang chủ'],
+    ['/xep-hang', 'Bảng xếp hạng'],
+    ['/dau-truong', 'Đấu trường'],
+    ['/huong-dan', 'Thể lệ'],
+    ['/thanh-tich', 'Chứng nhận'],
+  ] : [
+    ['/', 'Trang chủ'],
+    ['/huong-dan', 'Hướng dẫn'],
+    ['/dau-truong', 'Đấu trường'],
+    ['/bot', 'Bot của tôi'],
+    ['/doi', 'Đội'],
+    ['/xep-hang', 'Bảng xếp hạng'],
+    ['/chung-ket', 'Chung kết'],
+    ['/thanh-tich', 'Thành tích'],
+    ['/ho-tro', 'Hỗ trợ'],
+  ];
   $('#nav').innerHTML = items.map(([href, label]) => {
     const active = href === '/' ? path === '/' : path.startsWith(href);
     return `<a href="#${href}" class="${active ? 'active' : ''}">${label}</a>`;
   }).join('');
   $('#userbox').innerHTML = u
-    ? `<span class="avatar" title="${esc(u.email)}">${esc(u.name[0].toUpperCase())}</span><span class="small">${esc(u.name)}</span>
+    ? `${isAdmin ? '<span class="badge info" style="font-weight:700">👑 Ban Tổ Chức</span>' : ''}
+       <span class="avatar" ${isAdmin ? 'style="background:var(--primary);color:#fff"' : ''} title="${esc(u.email)}">${isAdmin ? 'BTC' : esc(u.name[0].toUpperCase())}</span>
+       <span class="small" style="font-weight:600">${esc(u.name)}</span>
+       ${isAdmin ? '<a class="btn sm primary" href="#/quan-tri">Quản trị</a>' : ''}
        <button class="btn sm" id="logout">Thoát</button>`
     : '<a class="btn sm" href="#/dang-nhap">Đăng nhập</a><a class="btn sm primary" href="#/dang-ky">Đăng ký</a>';
   on($('#logout'), 'click', async () => { await api('/auth/logout', { method: 'POST' }); await refreshMe(); location.hash = '#/'; });
@@ -117,6 +136,19 @@ function needLogin(root) {
 }
 function needTeam(root) {
   if (needLogin(root)) return true;
+  if (state.me.user && state.me.user.role === 'admin') {
+    root.innerHTML = `<div class="card" style="max-width:640px;margin:30px auto;text-align:center">
+      <div style="font-size:3rem;margin-bottom:12px">🛡️</div>
+      <h2>Khu vực dành cho Thí sinh</h2>
+      <p>Bạn đang đăng nhập bằng tài khoản <b>Ban Tổ Chức (Admin)</b>.<br>
+      Tài khoản quản trị viên không tham gia thi đấu với tư cách thí sinh để bảo đảm tính công bằng của giải đấu.</p>
+      <div class="row" style="justify-content:center;margin-top:20px">
+        <a class="btn primary" href="#/quan-tri">⚡ Vào Bảng điều hành Quản trị</a>
+        <a class="btn" href="#/xep-hang">Xem Bảng xếp hạng</a>
+      </div>
+    </div>`;
+    return true;
+  }
   if (state.me.team) return false;
   root.innerHTML = `<div class="card"><h2>Bạn chưa có đội</h2><p>Mỗi đội 1-3 sinh viên. Bạn có thể tự lập đội một người hoặc nhập mã mời của đội trưởng.
     Trong lúc chờ, bạn vẫn có thể <a href="#/dau-truong">chơi thử với bot mẫu</a>.</p><a class="btn primary" href="#/doi">Lập hoặc tham gia đội</a></div>`;
@@ -133,16 +165,43 @@ route(/^\/$/, async (root) => {
   const steps = [
     ['1', 'Nộp bot', !!hasBot], ['2', 'Chạy thử', false], ['3', 'Swiss', o.phases[0].status === 'done'], ['🏆', 'Top 32', !!(me.team && /Top 32|vòng 16|tứ kết|bán kết|chung kết|Vô địch|Á quân/i.test(me.team.achievement || ''))],
   ];
+  const isAdmin = me.user && me.user.role === 'admin';
   root.innerHTML = `
+  ${isAdmin ? `
+  <div class="card" style="margin-bottom:16px;border-left:5px solid #2563eb;background:rgba(37,99,235,0.04)">
+    <div class="card-head">
+      <div>
+        <h2 style="margin:0;display:flex;align-items:center;gap:8px">👑 BẢNG ĐIỀU HÀNH BAN TỔ CHỨC</h2>
+        <div class="muted small">Đang đăng nhập: <b>${esc(me.user.name)}</b> (${esc(me.user.email)}) • Toàn quyền quản trị giải đấu</div>
+      </div>
+      <a class="btn primary" href="#/quan-tri">⚡ Vào Bảng Quản Trị Chi Tiết →</a>
+    </div>
+    <div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap">
+      <a class="btn sm" href="#/quan-tri/ops">⚡ Vòng Swiss &amp; Đấu chính</a>
+      <a class="btn sm" href="#/quan-tri/matches">⚔️ Giám sát &amp; Chạy lại trận (${o.stats.matches})</a>
+      <a class="btn sm" href="#/quan-tri/teams">👥 Danh sách ${o.stats.teams} đội thi</a>
+      <a class="btn sm" href="#/quan-tri/final">🏆 Cấu hình Chung kết</a>
+      <a class="btn sm" href="#/quan-tri/awards">🎁 Trao giải &amp; Cấp chứng nhận</a>
+      <a class="btn sm" href="#/quan-tri/support">📩 Xử lý Khiếu nại thí sinh</a>
+      <a class="btn sm" href="#/quan-tri/audit">📋 Nhật ký hệ thống</a>
+    </div>
+  </div>` : ''}
+
   <section class="card hero">
     <div>
       <div class="eyebrow">Giải đấu lập trình bot cờ búa-kéo-bao OTTv2 cho sinh viên năm nhất</div>
       <h1>Code bot.<br>Thử chiến thuật.<br><span class="hl">Vào Top 32.</span></h1>
       <p class="muted">Viết một hàm Python điều khiển 10 quân búa, kéo, bao trên bàn cờ 9×9: đưa quân vào ô đích hoặc ăn hết một loại quân đối thủ. Bot tự thi trên máy chủ; thua một trận không bị loại: sơ loại Swiss ${o.swissRounds} vòng chọn 32 đội vào vòng chính.</p>
       <div class="row">
-        <a class="btn primary" href="#/bot">⬆ Nộp bot</a>
-        <a class="btn" href="#/dau-truong">▶ Chơi thử</a>
-        <a class="btn" href="/api/sample-bots/starter_bot">⬇ Tải bot mẫu</a>
+        ${isAdmin ? `
+          <a class="btn primary" href="#/quan-tri">⚡ Vào Bảng Điều Hành BTC</a>
+          <a class="btn" href="#/xep-hang">📊 Bảng xếp hạng</a>
+          <a class="btn" href="#/dau-truong">▶ Chơi thử bàn cờ</a>
+        ` : `
+          <a class="btn primary" href="#/bot">⬆ Nộp bot</a>
+          <a class="btn" href="#/dau-truong">▶ Chơi thử</a>
+          <a class="btn" href="/api/sample-bots/starter_bot">⬇ Tải bot mẫu</a>
+        `}
       </div>
     </div>
     <div class="hero-art" aria-hidden="true"><span>✊</span><span>✌️</span><span>✋</span></div>
@@ -157,7 +216,7 @@ route(/^\/$/, async (root) => {
 
   <div class="grid g2" style="margin-top:16px">
     <div class="card">
-      <div class="card-head"><h2>Bắt đầu ngay</h2>${me.user && !me.team ? '<span class="badge accent">Chưa có đội</span>' : ''}</div>
+      <div class="card-head"><h2>Bắt đầu ngay</h2>${isAdmin ? '<span class="badge ok">👑 Ban Tổ Chức</span>' : me.user && !me.team ? '<span class="badge accent">Chưa có đội</span>' : ''}</div>
       <div class="stack">
         <a class="card linkcard" href="#/dau-truong"><div class="ico">🎮</div><div><b>Người vs Bot mẫu</b><div class="muted small">Tự đánh cờ với bot mẫu để hiểu luật, không tính điểm giải</div></div></a>
         <a class="card linkcard" href="#/dau-truong"><div class="ico">&lt;/&gt;</div><div><b>Chạy thử bot</b><div class="muted small">Bot của đội đấu bot mẫu, xem lại từng nước và lỗi</div></div></a>
@@ -309,7 +368,11 @@ route(/^\/dang-nhap$/, async (root) => {
   on($('#f'), 'submit', async (e) => {
     await api('/auth/login', { method: 'POST', body: formData(e.target) });
     await refreshMe();
-    location.hash = state.me.team ? '#/bot' : '#/doi';
+    if (state.me.user && state.me.user.role === 'admin') {
+      location.hash = '#/quan-tri';
+    } else {
+      location.hash = state.me.team ? '#/bot' : '#/doi';
+    }
   });
 });
 
@@ -335,13 +398,26 @@ route(/^\/dang-ky$/, async (root) => {
 
 route(/^\/doi$/, async (root) => {
   if (needLogin(root)) return;
+  if (state.me.user && state.me.user.role === 'admin') {
+    root.innerHTML = `<div class="card" style="max-width:680px;margin:30px auto;text-align:center">
+      <div style="font-size:3rem;margin-bottom:12px">👥</div>
+      <h2>Quản lý Đội thi — Ban Tổ Chức</h2>
+      <p>Bạn đang đăng nhập bằng tài khoản <b>Ban Tổ Chức (Admin)</b>.<br>
+      Tài khoản quản trị viên không tham gia lập đội hoặc vào đội thi của thí sinh. Bạn có toàn quyền quản lý, kiểm tra thành viên và rút/khôi phục đội thi tại Bảng Quản trị.</p>
+      <div class="row" style="justify-content:center;margin-top:20px">
+        <a class="btn primary" href="#/quan-tri/teams">👥 Xem &amp; Quản lý Đội thi</a>
+        <a class="btn" href="#/quan-tri">⚡ Bảng Điều Hành Chung</a>
+      </div>
+    </div>`;
+    return;
+  }
   await refreshMe();
   const t = state.me.team;
   if (!t) {
     const ov = await api('/overview');
-    if (ov.phases[0].status !== 'pending') {
-      root.innerHTML = `<div class="card"><h2>Đã khóa lập đội</h2>
-        <p>Sơ loại Swiss đã bắt đầu nên không thể lập đội mới hay vào đội. Danh sách thành viên được khóa để giải thưởng và chứng nhận cấp đúng người.</p>
+    if (!ov.teamsOpen) {
+      root.innerHTML = `<div class="card"><h2>Đã khóa thành lập đội</h2>
+        <p>Ban tổ chức đang đóng đăng ký hoặc sơ loại Swiss đã bắt đầu nên không thể lập đội mới hay vào đội. Danh sách thành viên được khóa để giải thưởng và chứng nhận cấp đúng người.</p>
         <p>Bạn vẫn có thể <a href="#/dau-truong">đánh cờ với bot mẫu</a> và xem <a href="#/xep-hang">bảng xếp hạng</a>.</p></div>`;
       return;
     }
@@ -476,13 +552,17 @@ route(/^\/bot$/, async (root) => {
 // ============================================================ đấu trường
 
 route(/^\/dau-truong$/, async (root) => {
-  const show = (tab) => {
+  const show = async (tab) => {
     cleanups.forEach((f) => f()); cleanups = [];
     root.innerHTML = `<div class="card-head"><div><h1 style="margin:0">Đấu trường thử nghiệm</h1>
       <p class="muted" style="margin:0">Thử bot, rèn chiến thuật và làm quen với cách thức thi đấu.</p></div>
       <div class="notice warn small">⚠ Không tính điểm giải. Kết quả ở đây không ảnh hưởng bảng xếp hạng.</div></div><div id="pane"></div>`;
     root.insertBefore(tabs('arena', { human: '👤 Người vs Bot mẫu', practice: '🤖 Bot vs Bot mẫu', challenge: '⚔️ Thách đấu đội khác' }, tab, show), $('#pane'));
-    return ({ practice: practicePane, challenge: challengePane }[tab] || humanPane)($('#pane'));
+    try {
+      await ({ practice: practicePane, challenge: challengePane }[tab] || humanPane)($('#pane'));
+    } catch (err) {
+      $('#pane').innerHTML = `<div class="card"><h2>Không tải được phần này</h2><p class="muted">${esc(err.message)}</p></div>`;
+    }
   };
   await show(savedTab('arena', 'human'));
 });
@@ -808,7 +888,18 @@ route(/^\/chung-ket$/, async (root) => {
   const skew = Date.parse(f.serverTime) - Date.now(); // đếm giờ theo máy chủ
   const statusText = { none: 'Chưa thiết lập', draft: 'Chuẩn bị', running: 'Đang diễn ra', ended: 'Đã hết giờ' }[f.status];
   const rs = f.ruleset;
+  const isAdmin = state.me.user && state.me.user.role === 'admin';
   root.innerHTML = `
+  ${isAdmin ? `
+  <div class="card" style="margin-bottom:16px;border-left:5px solid #2563eb;background:rgba(37,99,235,0.04)">
+    <div class="card-head">
+      <div>
+        <b style="font-size:1.05rem">👑 Góc Ban Tổ Chức — Quản lý Chung kết</b>
+        <div class="muted small">Bạn có quyền thiết lập ma trận luật mới, trích xuất dữ liệu mẫu, đếm giờ và kích hoạt thi chung kết.</div>
+      </div>
+      <a class="btn primary sm" href="#/quan-tri/final">⚡ Đi đến trang Điều hành Chung kết →</a>
+    </div>
+  </div>` : ''}
   <div class="card" style="text-align:center">
     <p class="muted small" style="margin:0">PHÒNG CHUNG KẾT • ${esc(statusText)}</p>
     <h1>${f.teams.length ? f.teams.map(esc).join(' <span class="muted">vs</span> ') : 'Chung kết đổi luật'}</h1>
@@ -914,7 +1005,19 @@ route(/^\/xac-minh\/([A-Za-z0-9-]+)$/, async (root, code) => {
 route(/^\/ho-tro$/, async (root) => {
   if (needLogin(root)) return;
   const list = await api('/tickets');
-  root.innerHTML = `<div class="grid g2">
+  const isAdmin = state.me.user && state.me.user.role === 'admin';
+  root.innerHTML = `
+  ${isAdmin ? `
+  <div class="card" style="margin-bottom:16px;border-left:5px solid #2563eb;background:rgba(37,99,235,0.04)">
+    <div class="card-head">
+      <div>
+        <b style="font-size:1.05rem">👑 Góc Ban Tổ Chức — Xử lý Khiếu nại &amp; Hỗ trợ</b>
+        <div class="muted small">Xem danh sách các yêu cầu/khiếu nại của thí sinh và gửi phản hồi chính thức từ BTC.</div>
+      </div>
+      <a class="btn primary sm" href="#/quan-tri/support">📩 Đi đến trang Trả lời Khiếu nại →</a>
+    </div>
+  </div>` : ''}
+  <div class="grid g2">
     <div class="card"><h1>Hỗ trợ &amp; khiếu nại</h1><p class="muted">Báo lỗi bot, hỏi luật hoặc khiếu nại kết quả trận (ghi mã trận nếu có).</p>
       <form id="tf"><div class="field"><label for="ts">Tiêu đề</label><input id="ts" name="subject" required maxlength="120"></div>
       <div class="field"><label for="tm">Mã trận (không bắt buộc)</label><input id="tm" name="matchId" inputmode="numeric"></div>

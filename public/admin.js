@@ -10,19 +10,22 @@
     render();
   }));
 
-  route(/^\/quan-tri$/, async (root) => {
+  route(/^\/quan-tri(?:\/([a-z]+))?$/, async (root, initialTab) => {
     if (!state.me.user || state.me.user.role !== 'admin') {
       root.innerHTML = '<div class="card"><h2>Chỉ dành cho quản trị viên</h2></div>';
       return;
     }
     const names = { ops: 'Điều hành', matches: 'Trận đấu', teams: 'Đội', final: 'Chung kết', awards: 'Thưởng & chứng nhận', support: 'Thông báo & hỗ trợ', audit: 'Nhật ký' };
+    const validTab = (t) => (t && names[t] ? t : null);
     const show = async (tab) => {
       window.Arena.cleanups.forEach((f) => f()); window.Arena.cleanups = [];
-      root.innerHTML = '<h1>Quản trị</h1><div id="pane"></div>';
-      root.insertBefore(tabs('admin', names, tab, show), $('#pane'));
+      root.innerHTML = '<h1>Quản trị giải đấu — Ban Tổ Chức</h1><div id="pane"></div>';
+      root.insertBefore(tabs('admin', names, tab, (newTab) => {
+        location.hash = `#/quan-tri/${newTab}`;
+      }), $('#pane'));
       await PANES[tab]($('#pane'));
     };
-    await show(savedTab('admin', 'ops'));
+    await show(validTab(initialTab) || savedTab('admin', 'ops'));
   });
 
   const PANES = {
@@ -76,10 +79,13 @@
         </div>
       </div>
       <div class="card" style="margin-top:16px"><h2>Cài đặt</h2>
-        <div class="grid g3">
+        <div class="grid g4">
+          <div><label>Thành lập &amp; Đổi thành viên đội</label><button class="btn" data-toggle="teams_open" data-v="${o.teamsOpen ? 'false' : 'true'}">${o.teamsOpen ? '🟢 Đang mở — bấm để khóa' : '🔴 Đang khóa — bấm để mở'}</button></div>
           <div><label>Nhận bài nộp</label><button class="btn" data-toggle="submissions_open" data-v="${s.submissions_open === 'true' ? 'false' : 'true'}">${s.submissions_open === 'true' ? '🟢 Đang mở — bấm để khóa' : '🔴 Đang khóa — bấm để mở'}</button></div>
           <div><label>Thách đấu giữa các đội</label><button class="btn" data-toggle="challenges_open" data-v="${s.challenges_open === 'true' ? 'false' : 'true'}">${s.challenges_open === 'true' ? '🟢 Đang mở — bấm để khóa' : '🔴 Đang khóa — bấm để mở'}</button></div>
           <div><label>Chạy thử</label><button class="btn" data-toggle="practice_open" data-v="${s.practice_open === 'true' ? 'false' : 'true'}">${s.practice_open === 'true' ? '🟢 Đang mở — bấm để khóa' : '🔴 Đang khóa — bấm để mở'}</button></div>
+        </div>
+        <div class="grid g3" style="margin-top:12px">
           <form class="setting" data-key="swiss_rounds"><label>Số vòng Swiss</label><div class="row"><input name="value" type="number" min="1" max="20" value="${esc(s.swiss_rounds)}" style="width:100px"><button class="btn sm">Lưu</button></div></form>
           <form class="setting" data-key="competition_name"><label>Tên cuộc thi (in trên chứng nhận)</label><div class="row"><input name="value" value="${esc(s.competition_name || 'BOT ARENA - Cuộc thi Bot Oẳn Tù Tì')}"><button class="btn sm">Lưu</button></div></form>
           <form class="setting" data-key="organizer"><label>Đơn vị tổ chức</label><div class="row"><input name="value" value="${esc(s.organizer || 'Ban tổ chức BOT ARENA')}"><button class="btn sm">Lưu</button></div></form>
@@ -98,7 +104,7 @@
       $$('form.setting').forEach((f) => on(f, 'submit', async () => { await post('/settings', { key: f.dataset.key, value: f.value.value }); toast('Đã lưu'); }));
       every(4000, async () => {
         const n = await api('/admin/overview');
-        if (JSON.stringify(n.rounds) !== JSON.stringify(o.rounds) || JSON.stringify(n.queue) !== JSON.stringify(o.queue) || JSON.stringify(n.cut) !== JSON.stringify(o.cut)) PANES.ops(pane);
+        if (JSON.stringify(n.rounds) !== JSON.stringify(o.rounds) || JSON.stringify(n.queue) !== JSON.stringify(o.queue) || JSON.stringify(n.cut) !== JSON.stringify(o.cut) || n.teamsOpen !== o.teamsOpen) PANES.ops(pane);
       });
     },
 
@@ -122,13 +128,22 @@
     },
 
     async teams(pane) {
-      const list = await api('/admin/teams');
-      pane.innerHTML = `<div class="card"><div class="card-head"><h2>${list.length} đội</h2></div><div class="table-wrap"><table>
+      const [list, o] = await Promise.all([api('/admin/teams'), api('/admin/overview')]);
+      pane.innerHTML = `<div class="card">
+        <div class="card-head">
+          <div>
+            <h2 style="margin:0">${list.length} đội</h2>
+            <div class="muted small" style="margin-top:4px">Trạng thái thành lập đội: ${o.teamsOpen ? '<b style="color:var(--ok)">🟢 Đang mở cho thí sinh lập đội</b>' : '<b style="color:var(--bad)">🔴 Đang khóa thành lập đội</b>'}</div>
+          </div>
+          <button class="btn ${o.teamsOpen ? 'danger' : 'primary'} sm" data-toggle="teams_open" data-v="${o.teamsOpen ? 'false' : 'true'}">${o.teamsOpen ? '🔒 Khóa lập đội' : '🔓 Cho phép lập đội'}</button>
+        </div>
+        <div class="table-wrap" style="margin-top:12px"><table>
         <thead><tr><th>#</th><th>Đội</th><th>Đội trưởng</th><th>TV</th><th>Bản nộp</th><th>Bản thi</th><th></th></tr></thead><tbody>
         ${list.map((t) => `<tr><td>${t.id}</td><td><b>${esc(t.name)}</b> ${t.withdrawn ? '<span class="badge bad">Đã rút</span>' : ''}</td><td>${esc(t.captain)}</td><td>${t.members}</td><td>${t.submissions}</td>
           <td>${t.official_version ? `v${t.official_version} ${badge(t.official_status)}` : '<span class="muted">—</span>'}</td>
           <td class="right"><button class="btn sm ${t.withdrawn ? '' : 'danger'}" data-wd="${t.id}" data-v="${t.withdrawn ? 0 : 1}" data-confirm="${t.withdrawn ? 'Khôi phục' : 'Đánh dấu rút'} đội ${esc(t.name)}?">${t.withdrawn ? 'Khôi phục' : 'Rút'}</button></td></tr>`).join('')}
         </tbody></table></div><p class="muted small">Đội rút không được khóa vào giai đoạn mới; trận đã đấu giữ nguyên.</p></div>`;
+      act('[data-toggle]', async (b) => { await post('/settings', { key: b.dataset.toggle, value: b.dataset.v }); PANES.teams(pane); }, 'Đã cập nhật trạng thái');
       act('[data-wd]', (b) => post(`/teams/${b.dataset.wd}/withdraw`, { withdrawn: b.dataset.v === '1' }), 'Đã cập nhật');
     },
 
