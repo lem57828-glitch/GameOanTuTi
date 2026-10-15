@@ -66,6 +66,7 @@ Kiểm thử: `npm test` (50 ca: luật bàn cờ, ghép Swiss, tranh suất ran
 | Bot của tôi | Tải/kéo thả hoặc dán mã, kiểm thử cách ly, xem lỗi + log + mã, lưu phiên bản (SHA-256, người nộp, giờ máy chủ, môi trường), đội trưởng chọn bản thi |
 | Chơi thử | Người đánh cờ với 4 bot mẫu, chọn màu, máy chủ kiểm tra mọi nước; không tính điểm |
 | Chạy thử bot | Bot vs 4 bot mẫu, 1 trận đang chạy/đội, 20 trận/ngày, xem lại từng ván trên bàn cờ |
+| Thách đấu | Đội mời bot đội khác đấu giao hữu, đội kia đồng ý mới chạy, không tính điểm |
 | Đấu chính thức | Hàng đợi + worker chạy tự động; tắt trình duyệt không ảnh hưởng |
 | Xếp hạng | Điểm Swiss, ĐTB đối thủ, hiệu số, ranh giới Top 32, trạng thái tạm/đã xác nhận, nhánh 32 → chung kết, bảng thưởng |
 | Phòng chung kết | Soạn bảng khắc chế mới, chọn ngẫu nhiên một trận lịch sử (xem lại được), đếm giờ theo máy chủ, chỉ hai đội chung kết nhận luật, nộp bản riêng, khóa khi hết giờ |
@@ -167,7 +168,9 @@ có thể lâu hơn nhiều. Cần benchmark lại với bot thật và chế đ
 - Xem trận: đội trong trận xem lại toàn bộ ván nhưng chỉ thấy lỗi/log của bot mình; người ngoài chỉ thấy kết quả từng ván,
   trừ giai đoạn bật công khai (mặc định chung kết); quản trị thấy hết.
 - Bản hợp lệ đầu tiên tự thành bản thi; trong phiên chung kết, bản chung kết hợp lệ đầu tiên tự thay thế.
-- Chưa làm: người vs người, thách đấu bot đội khác (đề án ghi chưa ưu tiên); xuất PDF chứng nhận (dùng In → Lưu PDF trên trang xác minh); gửi email.
+- Thách đấu: đội A mời bot đội B đấu giao hữu 2 ván, chỉ chạy khi đội B đồng ý và chọn phiên bản bot; không tính điểm, chỉ hai đội xem được;
+  mỗi đội 10 lời mời/ngày, hết hạn sau 24 giờ, quản trị có nút khóa.
+- Chưa làm: người vs người (hai người tự đánh cờ); xuất PDF chứng nhận (dùng In → Lưu PDF trên trang xác minh); gửi email.
 
 ## Cấu trúc thư mục
 

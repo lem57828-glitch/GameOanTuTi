@@ -221,6 +221,23 @@ CREATE TABLE IF NOT EXISTS human_games (
   history TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+
+-- Thách đấu: đội A mời bot đội B đấu giao hữu; chỉ chạy khi đội B đồng ý. Không tính điểm giải.
+CREATE TABLE IF NOT EXISTS challenges (
+  id INTEGER PRIMARY KEY,
+  from_team INTEGER NOT NULL REFERENCES teams(id),
+  to_team INTEGER NOT NULL REFERENCES teams(id),
+  from_sub INTEGER NOT NULL REFERENCES submissions(id),
+  to_sub INTEGER REFERENCES submissions(id),
+  status TEXT NOT NULL DEFAULT 'pending',
+  match_id INTEGER REFERENCES matches(id),
+  created_by INTEGER NOT NULL,
+  responded_by INTEGER,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  responded_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_challenge_to ON challenges(to_team, status);
+CREATE INDEX IF NOT EXISTS idx_challenge_from ON challenges(from_team, status);
 `;
 
 const CLASSIC = {
@@ -280,6 +297,7 @@ function seed() {
   const defaults = {
     submissions_open: 'true',
     practice_open: 'true',
+    challenges_open: 'true',
     current_phase: 'swiss',
     swiss_rounds: String(config.swiss.rounds),
   };

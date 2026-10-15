@@ -391,3 +391,59 @@ test('đăng ký/đăng nhập: chỉ đếm lần sai, nhiều người cùng I
     server.close();
   }
 });
+
+// ------------------------------------------------------------ thách đấu giữa hai đội
+
+test('thách đấu: cần đội kia đồng ý, chạy 2 ván, không tính điểm, chỉ hai đội xem được', async () => {
+  const ch = require('../src/services/challenges');
+  const team = (i) => db.get('SELECT * FROM teams WHERE id = ?', teams[i].tid);
+  const user = (i) => ({ id: teams[i].uid });
+  const before = T.swissStandings().rows.map((r) => [r.teamId, r.points]);
+
+  assert.throws(() => ch.send({ user: user(0), team: team(0), toTeamId: teams[0].tid }), /tự thách đấu/);
+  assert.throws(() => ch.send({ user: user(0), team: team(0), toTeamId: teams[5].tid }), /chưa có bot hợp lệ/);
+  const id = ch.send({ user: user(0), team: team(0), toTeamId: teams[1].tid });
+  assert.throws(() => ch.send({ user: user(1), team: team(1), toTeamId: teams[0].tid }), /đang có một lời thách đấu/);
+  assert.throws(() => ch.accept({ user: user(0), team: team(0), id }), /Chỉ đội được thách đấu/);
+  assert.equal(ch.overview(team(1)).incoming.length, 1);
+
+  const matchId = ch.accept({ user: user(1), team: team(1), id });
+  await worker.drain();
+  const m = db.get('SELECT * FROM matches WHERE id = ?', matchId);
+  assert.equal(m.kind, 'challenge');
+  assert.equal(m.status, 'done');
+  assert.equal(m.wins_a + m.wins_b + m.draws, 2);
+  assert.equal(m.sub_a, team(0).official_submission_id, 'mặc định dùng bản thi hiện tại của đội mời');
+  assert.equal(m.sub_b, team(1).official_submission_id);
+  assert.deepEqual(T.swissStandings().rows.map((r) => [r.teamId, r.points]), before, 'không ảnh hưởng bảng điểm');
+  assert.throws(() => ch.decline({ user: user(1), team: team(1), id }), /không còn chờ/);
+
+  // Từ chối và hủy.
+  const id2 = ch.send({ user: user(2), team: team(2), toTeamId: teams[3].tid });
+  ch.decline({ user: user(3), team: team(3), id: id2 });
+  const id3 = ch.send({ user: user(2), team: team(2), toTeamId: teams[4].tid });
+  assert.throws(() => ch.cancel({ team: team(4), id: id3 }), /Chỉ đội gửi/);
+  ch.cancel({ team: team(2), id: id3 });
+  assert.deepEqual(ch.overview(team(2)).history.map((h) => h.status).sort(), ['cancelled', 'declined']);
+
+  // Ban tổ chức khóa thách đấu.
+  db.setSetting('challenges_open', 'false');
+  assert.throws(() => ch.send({ user: user(3), team: team(3), toTeamId: teams[4].tid }), /tạm khóa/);
+  db.setSetting('challenges_open', 'true');
+
+  // Quyền xem: hai đội trong trận xem được, đội thứ ba thì không.
+  const express = require('express');
+  const server = express().use('/api', require('../src/routes/api')).listen(0);
+  const base = `http://127.0.0.1:${server.address().port}/api`;
+  const cookie = async (email) => (await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: 'matkhau123' }) })).headers.get('set-cookie').split(';')[0];
+  try {
+    const view = async (email) => fetch(`${base}/matches/${matchId}`, { headers: { cookie: await cookie(email) } });
+    const v = await view('u2@t.local');
+    assert.equal(v.status, 200);
+    assert.ok((await v.json()).games[0].moves.length > 0);
+    assert.equal((await view('u3@t.local')).status, 403);
+  } finally {
+    server.close();
+  }
+});

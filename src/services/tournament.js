@@ -20,7 +20,8 @@ function createMatch(m) {
   m.kind, m.phase_key ?? null, m.round_no ?? null, m.series_id ?? null, m.game_no ?? null, m.team_a ?? null, m.team_b ?? null,
   m.sub_a ?? null, m.sub_b ?? null, m.sample_bot ?? null, m.ruleset_id, m.reveal ? 1 : 0, m.decisive ? 1 : 0,
   m.games ?? config.match.games, m.seed ?? newSeed(), m.requested_by ?? null).lastInsertRowid);
-  if (m.kind !== 'bye') queue.enqueue('match', id, m.kind === 'practice' ? queue.PRIORITY.practice : queue.PRIORITY.official);
+  // Chạy thử và thách đấu xếp sau thi chính thức và kiểm tra bài.
+  if (m.kind !== 'bye') queue.enqueue('match', id, ['practice', 'challenge'].includes(m.kind) ? queue.PRIORITY.practice : queue.PRIORITY.official);
   return id;
 }
 

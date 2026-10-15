@@ -78,6 +78,7 @@
       <div class="card" style="margin-top:16px"><h2>Cài đặt</h2>
         <div class="grid g3">
           <div><label>Nhận bài nộp</label><button class="btn" data-toggle="submissions_open" data-v="${s.submissions_open === 'true' ? 'false' : 'true'}">${s.submissions_open === 'true' ? '🟢 Đang mở — bấm để khóa' : '🔴 Đang khóa — bấm để mở'}</button></div>
+          <div><label>Thách đấu giữa các đội</label><button class="btn" data-toggle="challenges_open" data-v="${s.challenges_open === 'true' ? 'false' : 'true'}">${s.challenges_open === 'true' ? '🟢 Đang mở — bấm để khóa' : '🔴 Đang khóa — bấm để mở'}</button></div>
           <div><label>Chạy thử</label><button class="btn" data-toggle="practice_open" data-v="${s.practice_open === 'true' ? 'false' : 'true'}">${s.practice_open === 'true' ? '🟢 Đang mở — bấm để khóa' : '🔴 Đang khóa — bấm để mở'}</button></div>
           <form class="setting" data-key="swiss_rounds"><label>Số vòng Swiss</label><div class="row"><input name="value" type="number" min="1" max="20" value="${esc(s.swiss_rounds)}" style="width:100px"><button class="btn sm">Lưu</button></div></form>
           <form class="setting" data-key="competition_name"><label>Tên cuộc thi (in trên chứng nhận)</label><div class="row"><input name="value" value="${esc(s.competition_name || 'BOT ARENA - Cuộc thi Bot Oẳn Tù Tì')}"><button class="btn sm">Lưu</button></div></form>
@@ -111,7 +112,7 @@
           <select name="status" style="width:auto"><option value="">Mọi trạng thái</option>${['queued', 'running', 'done', 'error'].map((s) => `<option ${q.get('status') === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
           <button class="btn">Lọc</button></form>
         <div class="table-wrap"><table><thead><tr><th>#</th><th>Giai đoạn</th><th>Đội A</th><th>Đội B</th><th>Tỉ số</th><th>Trạng thái</th><th></th></tr></thead><tbody>
-        ${list.map((m) => `<tr><td><a href="#/tran/${m.id}">${m.id}</a></td><td class="small">${esc(PHASE_VI[m.phase_key] || '')} ${m.kind === 'bye' ? 'bye' : m.kind === 'tiebreak' ? 'tranh suất' : m.kind === 'knockout' ? `T${m.game_no}` : `v${m.round_no}`}</td>
+        ${list.map((m) => `<tr><td><a href="#/tran/${m.id}">${m.id}</a></td><td class="small">${esc(PHASE_VI[m.phase_key] || '')} ${m.kind === 'bye' ? 'bye' : m.kind === 'challenge' ? 'thách đấu' : m.kind === 'tiebreak' ? 'tranh suất' : m.kind === 'knockout' ? `T${m.game_no}` : `v${m.round_no}`}</td>
           <td>${esc(m.name_a)}</td><td>${esc(m.name_b || '')}</td><td>${m.status === 'done' && m.kind !== 'bye' ? `${m.wins_a}-${m.wins_b} (${m.draws})${m.decided_by === 'lot' ? ' *' : ''}` : ''}</td>
           <td>${badge(m.status)} ${m.confirmed ? '<span class="badge ok">XN</span>' : ''}</td>
           <td class="right">${m.kind !== 'bye' ? `<button class="btn sm" data-rerun="${m.id}" data-confirm="Chạy lại trận #${m.id}? Kết quả cũ bị thay, không cộng dồn.">Chạy lại</button>` : ''}</td></tr>`).join('')}

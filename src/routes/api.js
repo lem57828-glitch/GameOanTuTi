@@ -8,6 +8,7 @@ const queue = require('../services/queue');
 const T = require('../services/tournament');
 const R = require('../services/results');
 const play = require('../services/play');
+const challenges = require('../services/challenges');
 const subs = require('../services/submissions');
 const board = require('../game/board');
 
@@ -111,6 +112,7 @@ api.get('/matches/:id', h((req) => {
   const my = req.team && req.team.id;
   const side = my && m.team_a === my ? 'a' : my && m.team_b === my ? 'b' : null;
   if (m.kind === 'practice') need(isAdmin(req) || side === 'a', 'Không có quyền xem trận chạy thử của đội khác', 403);
+  if (m.kind === 'challenge') need(isAdmin(req) || side, 'Trận thách đấu chỉ hai đội trong trận xem được', 403);
   const run = db.get(`SELECT * FROM runs WHERE match_id = ? AND status = 'done' ORDER BY id DESC LIMIT 1`, m.id);
   const out = {
     id: m.id, kind: m.kind, phase: m.phase_key, round: m.round_no, game: m.game_no, status: m.status,
@@ -198,7 +200,7 @@ const inviteCode = () => crypto.randomBytes(4).toString('hex').toUpperCase();
 
 api.post('/teams', auth.requireUser, h((req) => {
   need(!req.user.team_id, 'Bạn đã thuộc một đội');
-  need(!teamsLocked(), 'Đã khóa thành lập đội');
+  need(!teamsLocked(), 'Sơ loại Swiss đã bắt đầu nên không thể lập đội mới. Bạn vẫn chơi thử với bot mẫu được.', 403);
   const name = str(req.body.name, 60);
   need(name.length >= 2, 'Tên đội tối thiểu 2 ký tự');
   db.tx(() => {
@@ -210,7 +212,7 @@ api.post('/teams', auth.requireUser, h((req) => {
 
 api.post('/teams/join', auth.requireUser, h((req) => {
   need(!req.user.team_id, 'Bạn đã thuộc một đội');
-  need(!teamsLocked(), 'Đã khóa thay đổi thành viên');
+  need(!teamsLocked(), 'Sơ loại Swiss đã bắt đầu nên danh sách thành viên đã được khóa.', 403);
   const t = db.get('SELECT * FROM teams WHERE invite_code = ?', str(req.body.code, 20).toUpperCase());
   need(t, 'Mã mời không đúng', 404);
   need(db.get('SELECT COUNT(*) AS n FROM users WHERE team_id = ?', t.id).n < 3, 'Đội đã đủ 3 thành viên');
@@ -219,7 +221,7 @@ api.post('/teams/join', auth.requireUser, h((req) => {
 }));
 
 api.post('/teams/leave', auth.requireTeam, h((req) => {
-  need(!teamsLocked(), 'Đã khóa thay đổi thành viên');
+  need(!teamsLocked(), 'Sơ loại Swiss đã bắt đầu nên danh sách thành viên đã được khóa.', 403);
   const members = db.all('SELECT id FROM users WHERE team_id = ?', req.team.id);
   need(req.team.captain_id !== req.user.id || members.length === 1, 'Đội trưởng cần chuyển quyền hoặc mời thành viên rời trước');
   db.tx(() => {
@@ -230,7 +232,7 @@ api.post('/teams/leave', auth.requireTeam, h((req) => {
 }));
 
 api.post('/teams/kick', auth.requireTeam, auth.requireCaptain, h((req) => {
-  need(!teamsLocked(), 'Đã khóa thay đổi thành viên');
+  need(!teamsLocked(), 'Sơ loại Swiss đã bắt đầu nên danh sách thành viên đã được khóa.', 403);
   const uid = Number(req.body.userId);
   need(uid !== req.user.id, 'Không thể tự mời mình rời đội');
   db.run('UPDATE users SET team_id = NULL WHERE id = ? AND team_id = ?', uid, req.team.id);
@@ -299,6 +301,13 @@ api.get('/play', auth.requireUser, h((req) => ({ game: play.current(req.user.id)
 api.post('/play', auth.requireUser, h((req) => play.start(req.user.id, req.team && req.team.id, str(req.body.bot, 40), str(req.body.color, 10))));
 api.delete('/play/:id', auth.requireUser, h((req) => { play.abandon(req.user.id, Number(req.params.id)); return { ok: true }; }));
 api.post('/play/:id', auth.requireUser, h((req) => play.move(req.user.id, Number(req.params.id), { from: str(req.body.from, 3), to: str(req.body.to, 3) })));
+
+// Thách đấu bot giữa hai đội
+api.get('/challenges', auth.requireTeam, h((req) => challenges.overview(req.team)));
+api.post('/challenges', auth.requireTeam, h((req) => ({ id: challenges.send({ user: req.user, team: req.team, toTeamId: Number(req.body.toTeamId), submissionId: Number(req.body.submissionId) || null }) })));
+api.post('/challenges/:id/accept', auth.requireTeam, h((req) => ({ matchId: challenges.accept({ user: req.user, team: req.team, id: Number(req.params.id), submissionId: Number(req.body.submissionId) || null }) })));
+api.post('/challenges/:id/decline', auth.requireTeam, h((req) => { challenges.decline({ user: req.user, team: req.team, id: Number(req.params.id) }); return { ok: true }; }));
+api.delete('/challenges/:id', auth.requireTeam, h((req) => { challenges.cancel({ team: req.team, id: Number(req.params.id) }); return { ok: true }; }));
 
 api.get('/team/matches', auth.requireTeam, h((req) => db.all(`SELECT id, kind, phase_key, round_no, game_no, team_a, team_b, status, result,
     wins_a, wins_b, draws, decided_by, confirmed FROM matches WHERE kind IN ('swiss','bye','tiebreak','knockout') AND (team_a = ? OR team_b = ?)
@@ -369,7 +378,7 @@ admin.post('/teams/:id/withdraw', h((req) => {
   return { ok: true };
 }));
 
-const EDITABLE = ['submissions_open', 'practice_open', 'swiss_rounds', 'competition_name', 'organizer'];
+const EDITABLE = ['submissions_open', 'practice_open', 'challenges_open', 'swiss_rounds', 'competition_name', 'organizer'];
 admin.post('/settings', h((req) => {
   const key = str(req.body.key, 40);
   need(EDITABLE.includes(key), 'Không sửa được khóa này');

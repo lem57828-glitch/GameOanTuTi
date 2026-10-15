@@ -338,6 +338,13 @@ route(/^\/doi$/, async (root) => {
   await refreshMe();
   const t = state.me.team;
   if (!t) {
+    const ov = await api('/overview');
+    if (ov.phases[0].status !== 'pending') {
+      root.innerHTML = `<div class="card"><h2>Đã khóa lập đội</h2>
+        <p>Sơ loại Swiss đã bắt đầu nên không thể lập đội mới hay vào đội. Danh sách thành viên được khóa để giải thưởng và chứng nhận cấp đúng người.</p>
+        <p>Bạn vẫn có thể <a href="#/dau-truong">đánh cờ với bot mẫu</a> và xem <a href="#/xep-hang">bảng xếp hạng</a>.</p></div>`;
+      return;
+    }
     root.innerHTML = `<div class="grid g2">
       <div class="card"><h2>Lập đội mới</h2><p class="muted">Bạn sẽ là đội trưởng: nộp bài, chọn bản thi, mời thành viên.</p>
         <form id="create"><div class="field"><label for="tn">Tên đội</label><input id="tn" name="name" required maxlength="60"></div><button class="btn primary">Lập đội</button></form></div>
@@ -474,8 +481,8 @@ route(/^\/dau-truong$/, async (root) => {
     root.innerHTML = `<div class="card-head"><div><h1 style="margin:0">Đấu trường thử nghiệm</h1>
       <p class="muted" style="margin:0">Thử bot, rèn chiến thuật và làm quen với cách thức thi đấu.</p></div>
       <div class="notice warn small">⚠ Không tính điểm giải. Kết quả ở đây không ảnh hưởng bảng xếp hạng.</div></div><div id="pane"></div>`;
-    root.insertBefore(tabs('arena', { human: '👤 Người vs Bot mẫu', practice: '🤖 Bot vs Bot mẫu' }, tab, show), $('#pane'));
-    return (tab === 'practice' ? practicePane : humanPane)($('#pane'));
+    root.insertBefore(tabs('arena', { human: '👤 Người vs Bot mẫu', practice: '🤖 Bot vs Bot mẫu', challenge: '⚔️ Thách đấu đội khác' }, tab, show), $('#pane'));
+    return ({ practice: practicePane, challenge: challengePane }[tab] || humanPane)($('#pane'));
   };
   await show(savedTab('arena', 'human'));
 });
@@ -568,6 +575,84 @@ function humanGame(pane, g, r) {
   draw();
 }
 
+async function challengePane(pane) {
+  if (!state.me.team) {
+    pane.innerHTML = '<div class="card"><p>Cần có đội và một bản bot hợp lệ để thách đấu đội khác.</p><a class="btn primary" href="#/doi">Lập hoặc tham gia đội</a></div>';
+    return;
+  }
+  const draw = async () => {
+    const [c, b] = await Promise.all([api('/challenges'), api('/bots')]);
+    const valid = b.submissions.filter((s) => s.status === 'valid' && s.phase_key === 'main');
+    const versionSelect = (name) => `<select name="${name}">${valid.map((s) => `<option value="${s.id}" ${s.id === b.official ? 'selected' : ''}>v${s.version}${s.id === b.official ? ' (bản thi)' : ''}</option>`).join('')}</select>`;
+    const score = (ch, myId) => {
+      const m = ch.match;
+      if (!m) return '';
+      if (m.status !== 'done') return badge(m.status);
+      const iAmA = ch.from.id === myId;
+      const my = iAmA ? m.wins_a : m.wins_b, op = iAmA ? m.wins_b : m.wins_a;
+      const res = m.result === 'draw' ? '<span class="badge">Hòa</span>' : (m.result === 'a') === iAmA ? '<span class="badge ok">Thắng</span>' : '<span class="badge bad">Thua</span>';
+      return `${res} <b>${my}–${op}</b> <span class="muted small">(hòa ${m.draws} ván)</span>`;
+    };
+    const myId = state.me.team.id;
+    const stVi = { accepted: '', declined: '<span class="badge bad">Bị từ chối</span>', cancelled: '<span class="badge">Đã hủy</span>', expired: '<span class="badge">Hết hạn</span>' };
+    const active = c.history.some((h) => h.match && ['queued', 'running'].includes(h.match.status));
+    pane.innerHTML = `
+    ${c.open ? '' : '<div class="notice warn" style="margin-bottom:16px">Ban tổ chức đang tạm khóa thách đấu (thường trong lúc chạy vòng chính thức).</div>'}
+    ${c.incoming.length ? `<div class="card" style="margin-bottom:16px"><h2>Lời thách đấu gửi tới đội bạn</h2>
+      ${c.incoming.map((ch) => `<form class="row inc" data-id="${ch.id}" style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <span style="flex:1;min-width:200px"><b>${esc(ch.from.name)}</b> mời đấu bằng bot v${ch.fromVersion} <span class="muted small">${fmtTime(ch.created_at)}</span></span>
+        <label class="small" style="margin:0">Dùng bản</label>${versionSelect('submissionId')}
+        <button class="btn sm primary" ${c.open && valid.length ? '' : 'disabled'}>Đồng ý</button><button type="button" class="btn sm danger" data-decline="${ch.id}">Từ chối</button></form>`).join('')}
+    </div>` : ''}
+    <div class="grid g2">
+      <div class="card"><h2>Thách đấu đội khác</h2>
+        <p>Cho bot của đội bạn đấu một trận (2 ván đổi màu) với bot của đội khác. Trận chỉ chạy khi đội kia <b>đồng ý</b> và chọn phiên bản bot của họ.
+          <b>Không tính điểm giải</b>; chỉ hai đội xem lại được diễn biến.</p>
+        ${valid.length ? `<form id="cf">
+          <div class="field"><label for="ct">Đội được thách đấu</label>
+            <select id="ct" name="toTeamId" required><option value="">— Chọn đội —</option>${c.teams.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></div>
+          <div class="field"><label>Bot của đội bạn</label>${versionSelect('submissionId')}</div>
+          <button class="btn primary" ${c.open && c.sentToday < c.perDay ? '' : 'disabled'}>⚔️ Gửi lời thách đấu</button>
+          <span class="muted small">Đã gửi ${c.sentToday}/${c.perDay} hôm nay • lời mời hết hạn sau 24 giờ</span></form>`
+          : '<p>Đội chưa có bản bot hợp lệ. <a href="#/bot">Nộp bot</a> trước.</p>'}
+        ${c.outgoing.length ? `<h3 style="margin-top:16px">Đang chờ đối thủ trả lời</h3>
+          ${c.outgoing.map((ch) => `<div class="row" style="padding:6px 0"><span style="flex:1">→ <b>${esc(ch.to.name)}</b> (bot v${ch.fromVersion}) <span class="muted small">${fmtTime(ch.created_at)}</span></span>
+            <button class="btn sm" data-cancel="${ch.id}">Hủy</button></div>`).join('')}` : ''}
+      </div>
+      <div class="card"><h2>Lịch sử thách đấu</h2>
+        ${c.history.length ? `<div class="table-wrap"><table><tbody>${c.history.map((ch) => {
+          const iSent = ch.from.id === myId;
+          return `<tr><td>${iSent ? '→' : '←'} <b>${esc(iSent ? ch.to.name : ch.from.name)}</b>
+            <div class="muted small">${iSent ? 'bạn mời' : 'mời bạn'} • v${iSent ? ch.fromVersion : ch.toVersion ?? '?'} vs v${iSent ? ch.toVersion ?? '?' : ch.fromVersion}</div></td>
+            <td>${ch.status === 'accepted' ? score(ch, myId) : stVi[ch.status] || ''}</td>
+            <td class="right">${ch.match ? `<a class="btn sm" href="#/tran/${ch.match.id}">Xem</a>` : ''}</td></tr>`;
+        }).join('')}</tbody></table></div>` : '<p class="muted">Chưa có trận thách đấu nào.</p>'}
+      </div>
+    </div>`;
+    on($('#cf'), 'submit', async (e) => {
+      const d = formData(e.target);
+      if (!d.toTeamId) throw new Error('Chọn đội được thách đấu');
+      await api('/challenges', { method: 'POST', body: d });
+      toast('Đã gửi lời thách đấu');
+      draw();
+    });
+    $('form.inc').forEach((f) => on(f, 'submit', async () => {
+      await api(`/challenges/${f.dataset.id}/accept`, { method: 'POST', body: { submissionId: f.submissionId.value } });
+      toast('Đã đồng ý, trận đang được xếp hàng chạy');
+      draw();
+    }));
+    $('[data-decline]').forEach((btn) => on(btn, 'click', async () => { await api(`/challenges/${btn.dataset.decline}/decline`, { method: 'POST' }); draw(); }));
+    $('[data-cancel]').forEach((btn) => on(btn, 'click', async () => { await api(`/challenges/${btn.dataset.cancel}`, { method: 'DELETE' }); draw(); }));
+    cleanups.forEach((f) => f()); cleanups = [];
+    // Tự làm mới: chờ trận chạy xong hoặc có lời mời mới.
+    every(active ? 2000 : 10000, async () => {
+      const n = await api('/challenges');
+      if (JSON.stringify([n.incoming, n.outgoing, n.history]) !== JSON.stringify([c.incoming, c.outgoing, c.history])) draw();
+    });
+  };
+  await draw();
+}
+
 async function practicePane(pane) {
   if (!state.me.team) {
     pane.innerHTML = '<div class="card"><p>Cần có đội và một bản bot hợp lệ để chạy thử.</p><a class="btn primary" href="#/doi">Lập hoặc tham gia đội</a></div>';
@@ -621,8 +706,8 @@ route(/^\/tran\/(\d+)$/, async (root, id) => {
   };
   const log = m.myLog;
   root.innerHTML = `<div class="card">
-    <p class="muted small">${m.kind === 'practice' ? 'Chạy thử (không tính điểm)' : `${esc(PHASE_VI[m.phase] || '')} ${m.kind === 'knockout' ? `• trận ${m.game}` : m.kind === 'tiebreak' ? '• tranh suất' : `• vòng ${m.round}`}`}
-      • luật: ${esc(m.ruleset.name)} ${m.confirmed ? '• <span class="badge ok">Đã xác nhận</span>' : m.kind !== 'practice' && m.status === 'done' ? '• <span class="badge warn">Kết quả tạm</span>' : ''}</p>
+    <p class="muted small">${m.kind === 'challenge' ? 'Thách đấu giao hữu (không tính điểm)' : m.kind === 'practice' ? 'Chạy thử (không tính điểm)' : `${esc(PHASE_VI[m.phase] || '')} ${m.kind === 'knockout' ? `• trận ${m.game}` : m.kind === 'tiebreak' ? '• tranh suất' : `• vòng ${m.round}`}`}
+      • luật: ${esc(m.ruleset.name)} ${m.confirmed ? '• <span class="badge ok">Đã xác nhận</span>' : !['practice', 'challenge'].includes(m.kind) && m.status === 'done' ? '• <span class="badge warn">Kết quả tạm</span>' : ''}</p>
     <div class="scoreboard"><div class="side you"><b>${esc(left)}</b><div class="num">${wl ?? '–'}</div><div class="small muted">ván thắng</div></div>
       <div>${verdict}<div class="muted small">Hòa ${m.draws ?? '–'} ván</div></div>
       <div class="side bot"><b>${esc(right)}</b><div class="num">${wr ?? '–'}</div><div class="small muted">ván thắng</div></div></div>
