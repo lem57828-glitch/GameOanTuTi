@@ -93,8 +93,15 @@
       root.querySelector('.rp-pos').textContent = `Sau nước ${i}/${moves.length}`;
       root.querySelector('.rp-range').value = i;
       root.querySelectorAll('.rp-list li').forEach((li) => li.classList.toggle('cur', Number(li.dataset.i) === i));
-      const cur = root.querySelector('.rp-list li.cur');
-      if (cur && timer) cur.scrollIntoView({ block: 'nearest' });
+      // Chỉ cuộn bên trong khung danh sách nước để dòng đang xem luôn hiện ra; không dùng scrollIntoView
+      // vì nó cuộn cả trang và làm màn hình nhảy xuống sau mỗi nước.
+      const list = root.querySelector('.rp-list');
+      const cur = list.querySelector('li.cur');
+      if (i === 0) list.scrollTop = 0;
+      else if (cur) {
+        const lr = list.getBoundingClientRect(), cr = cur.getBoundingClientRect();
+        if (cr.top < lr.top || cr.bottom > lr.bottom) list.scrollTop += cr.top - lr.top - (list.clientHeight - cr.height) / 2;
+      }
     };
     const stop = () => { clearInterval(timer); timer = null; root.querySelector('[data-a="play"]').textContent = '▶ Chạy'; };
     root.addEventListener('click', (e) => {

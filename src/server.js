@@ -5,6 +5,17 @@ const db = require('./db');
 const { Worker } = require('./services/queue');
 const handlers = require('./handlers');
 
+// Ghi lại lỗi làm sập tiến trình (kèm thời điểm) vào data/server.log để truy vết sau.
+const fs = require('node:fs');
+function logCrash(kind, err) {
+  const line = `[${new Date().toISOString()}] ${kind}: ${err && err.stack ? err.stack : err}\n`;
+  console.error(line);
+  try { fs.mkdirSync(config.DATA_DIR, { recursive: true }); fs.appendFileSync(path.join(config.DATA_DIR, 'server.log'), line); } catch { /* bỏ qua */ }
+}
+process.on('uncaughtException', (e) => { logCrash('uncaughtException', e); process.exit(1); });
+process.on('unhandledRejection', (e) => logCrash('unhandledRejection', e));
+process.on('exit', (code) => { if (code) logCrash('exit', `tiến trình thoát với mã ${code}`); });
+
 db.open();
 const app = express();
 app.disable('x-powered-by');

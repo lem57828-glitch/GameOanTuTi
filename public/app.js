@@ -636,13 +636,13 @@ async function challengePane(pane) {
       toast('Đã gửi lời thách đấu');
       draw();
     });
-    $('form.inc').forEach((f) => on(f, 'submit', async () => {
+    $$('form.inc').forEach((f) => on(f, 'submit', async () => {
       await api(`/challenges/${f.dataset.id}/accept`, { method: 'POST', body: { submissionId: f.submissionId.value } });
       toast('Đã đồng ý, trận đang được xếp hàng chạy');
       draw();
     }));
-    $('[data-decline]').forEach((btn) => on(btn, 'click', async () => { await api(`/challenges/${btn.dataset.decline}/decline`, { method: 'POST' }); draw(); }));
-    $('[data-cancel]').forEach((btn) => on(btn, 'click', async () => { await api(`/challenges/${btn.dataset.cancel}`, { method: 'DELETE' }); draw(); }));
+    $$('[data-decline]').forEach((btn) => on(btn, 'click', async () => { await api(`/challenges/${btn.dataset.decline}/decline`, { method: 'POST' }); draw(); }));
+    $$('[data-cancel]').forEach((btn) => on(btn, 'click', async () => { await api(`/challenges/${btn.dataset.cancel}`, { method: 'DELETE' }); draw(); }));
     cleanups.forEach((f) => f()); cleanups = [];
     // Tự làm mới: chờ trận chạy xong hoặc có lời mời mới.
     every(active ? 2000 : 10000, async () => {

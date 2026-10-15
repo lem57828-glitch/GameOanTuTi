@@ -50,11 +50,13 @@ class Worker {
 
   start() {
     recoverStale();
-    this.tick = setInterval(() => this.fill(), 500);
-    this.beat = setInterval(() => {
+    // Lỗi tạm thời (ví dụ CSDL đang bận) trong tác vụ định kỳ chỉ ghi log, không làm sập cả máy chủ.
+    const safe = (name, fn) => () => { try { fn(); } catch (e) { console.error(`[worker] ${name} lỗi:`, e.message); } };
+    this.tick = setInterval(safe('nhận việc', () => this.fill()), 500);
+    this.beat = setInterval(safe('nhịp tim', () => {
       db.run(`UPDATE jobs SET heartbeat_at = ? WHERE status = 'running' AND worker = ?`, Date.now(), this.id);
       recoverStale();
-    }, 5000);
+    }), 5000);
     this.fill();
     return this;
   }
@@ -70,7 +72,10 @@ class Worker {
       const job = claim(this.id);
       if (!job) return;
       this.active++;
-      this.process(job).finally(() => { this.active--; this.fill(); });
+      this.process(job).finally(() => {
+        this.active--;
+        try { this.fill(); } catch (e) { console.error('[worker] nhận việc lỗi:', e.message); }
+      });
     }
   }
 
