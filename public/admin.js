@@ -63,7 +63,8 @@
           </div>
           ${o.rounds.length ? `<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Vòng</th><th>Trận xong</th><th>Lỗi</th><th></th></tr></thead><tbody>
             ${o.rounds.map((r) => `<tr><td>${r.round_no}</td><td>${r.done}/${r.total}</td><td>${r.errors ? `<span class="badge bad">${r.errors}</span>` : ''}</td>
-              <td class="right">${r.confirmed ? '<span class="badge ok">Đã xác nhận</span>' : `<button class="btn sm primary" data-confirm-round="${r.round_no}" ${r.done < r.total ? 'disabled' : ''}>Xác nhận</button>`}</td></tr>`).join('')}
+              <td class="right">${r.confirmed ? '<span class="badge ok">Đã xác nhận</span>' : `<button class="btn sm primary" data-confirm-round="${r.round_no}" ${r.done < r.total ? 'disabled' : ''}>Xác nhận</button>`}
+              ${swiss.status !== 'done' && !o.cut && r.round_no === o.swissRound ? `<button class="btn sm" data-rerun-round="${r.round_no}" data-confirm="Chạy lại toàn bộ vòng Swiss ${r.round_no}? Giữ nguyên cặp đấu và bản bot, thay kết quả cũ và cần xác nhận lại vòng." ${o.queue.running || r.done + r.errors < r.total ? 'disabled' : ''}>Chạy lại cả vòng</button>` : ''}</td></tr>`).join('')}
           </tbody></table></div>` : ''}
           ${o.cut ? `<p class="small" style="margin-top:12px">Top 32: ${o.cut.done ? `<span class="badge ok">đã chốt ${o.cut.qualified.length} đội</span>` : `<span class="badge warn">đang tranh suất (bước ${o.cut.step})</span>`}
             ${o.cut.history.length ? ` • ${o.cut.history.length} bước tranh suất ở ranh giới` : ''}</p>` : ''}
@@ -91,12 +92,28 @@
           <form class="setting" data-key="organizer"><label>Đơn vị tổ chức</label><div class="row"><input name="value" value="${esc(s.organizer || 'Ban tổ chức BOT ARENA')}"><button class="btn sm">Lưu</button></div></form>
         </div>
       </div>
+      <div class="card" style="margin-top:16px"><h2>Reset giải đấu</h2>
+        <p>Xóa trận thi chính thức và lịch sử chạy, bảng điểm, nhánh đấu, phiên chung kết, giải thưởng và chứng nhận. Giữ tài khoản, đội, bài nộp, trận chơi thử và thách đấu. Mở lại lập đội và nộp bài để bắt đầu từ Swiss vòng 1.</p>
+        <p class="muted small">Bản thi chung kết được đổi về bản thường hợp lệ mới nhất. Thao tác không thể hoàn tác. Cần chờ mọi tác vụ đang chạy hoàn tất.</p>
+        <button class="btn danger" id="reset-tournament" ${o.queue.running ? 'disabled' : ''}>Reset giải đấu</button>
+      </div>
       ${o.failedJobs.length ? `<div class="card" style="margin-top:16px"><h2>Tác vụ lỗi</h2><div class="table-wrap"><table><tbody>
         ${o.failedJobs.map((j) => `<tr><td>${esc(j.type)} #${j.ref_id}</td><td class="small">${esc(j.error)}</td><td>${j.type === 'match' ? `<button class="btn sm" data-rerun="${j.ref_id}">Chạy lại</button>` : ''}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
 
       act('#lock-swiss', () => post('/phases/swiss/lock'), 'Đã khóa bản Swiss');
+      on($('#reset-tournament'), 'click', async () => {
+        const confirmation = prompt('Xóa dữ liệu thi đấu để bắt đầu lại? Giữ tài khoản, đội và bot. Nhập RESET để xác nhận:');
+        if (confirmation !== 'RESET') return;
+        await post('/tournament/reset', { confirmation });
+        toast('Đã reset giải. Bạn có thể khóa bản Swiss và bắt đầu vòng 1.');
+        await render();
+      });
       act('#next-round', async () => { const r = await post('/swiss/round'); toast(`Vòng ${r.round}: ${r.pairs} trận${r.bye ? ', 1 bye' : ''}${r.rematches ? `, ${r.rematches} tái đấu không tránh được` : ''}`); });
       act('#finish', () => post('/swiss/finish'), 'Đã chốt sơ loại');
+      act('[data-rerun-round]', async (b) => {
+        const r = await post('/swiss/rerun', { round: Number(b.dataset.rerunRound) });
+        toast(`Đã đưa ${r.matches} trận vòng ${r.round} vào hàng đợi chạy lại`);
+      });
       act('[data-confirm-round]', (b) => post('/swiss/confirm', { round: Number(b.dataset.confirmRound) }), 'Đã xác nhận vòng');
       act('[data-start]', (b) => post(`/phases/${b.dataset.start}/start`), 'Đã bắt đầu');
       act('[data-toggle]', (b) => post('/settings', { key: b.dataset.toggle, value: b.dataset.v }), 'Đã lưu');

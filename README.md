@@ -73,6 +73,12 @@ Kiểm thử: `npm test` (50 ca: luật bàn cờ, ghép Swiss, tranh suất ran
 | Thành tích | Vòng cao nhất, giải, chứng nhận điện tử có mã + trang xác minh in được |
 | Hỗ trợ & quản trị | Khiếu nại, khóa vòng, ghép vòng, xác nhận vòng, chạy lại trận, rút đội, giải phụ, cấp chứng nhận, nhật ký |
 
+### Reset giải để đấu lại
+
+Trong **Quản trị → Điều hành → Reset giải đấu**, nhập `RESET` để xác nhận. Chờ mọi tác vụ đang chạy hoàn tất trước khi reset.
+
+Thao tác xóa trận thi chính thức và lịch sử chạy, bảng điểm, nhánh đấu, phiên chung kết, giải thưởng và chứng nhận. Tài khoản, đội, bài nộp, trận chơi thử, thách đấu và nhật ký được giữ. Bản thi chung kết chuyển về bản thường hợp lệ mới nhất của đội (nếu có). Mở lại lập đội và nộp bài; giữ cấu hình số vòng Swiss. Sau đó khóa bản Swiss và bắt đầu vòng 1. Dữ liệu đã xóa không thể hoàn tác.
+
 ## Giao diện bot
 
 ```python

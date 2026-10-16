@@ -401,9 +401,14 @@ admin.post('/settings', h((req) => {
   return { ok: true };
 }));
 
+admin.post('/tournament/reset', h((req) => {
+  need(req.body.confirmation === 'RESET', 'Nhập RESET để xác nhận reset giải đấu');
+  return T.resetTournament(req.user.id);
+}));
 admin.post('/phases/:key/lock', h((req) => ({ teams: T.lockPhase(req.params.key, req.user.id) })));
 admin.post('/phases/:key/start', h((req) => { T.startPhase(req.params.key, req.user.id); return { ok: true }; }));
 admin.post('/swiss/round', h((req) => T.startSwissRound(req.user.id)));
+admin.post('/swiss/rerun', h((req) => T.rerunSwissRound(Number(req.body.round), req.user.id)));
 admin.post('/swiss/confirm', h((req) => { T.confirmRound(Number(req.body.round), req.user.id); return { ok: true }; }));
 admin.post('/swiss/finish', h((req) => { T.finishSwiss(req.user.id); return { ok: true }; }));
 

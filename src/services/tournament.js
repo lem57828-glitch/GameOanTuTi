@@ -82,7 +82,66 @@ function rerunMatch(matchId, adminId) {
   db.audit(adminId, 'rerun_match', { match: matchId });
 }
 
+/** Chạy lại vòng Swiss gần nhất; không thay đổi cặp đấu, bản bot hay seed. */
+function rerunSwissRound(roundNo, adminId) {
+  if (!Number.isInteger(roundNo) || roundNo < 1) throw new UserError('Số vòng không hợp lệ');
+  return db.tx(() => {
+    const last = db.get("SELECT MAX(round_no) AS r FROM matches WHERE kind IN ('swiss','bye')").r;
+    if (!last) throw new UserError('Chưa có vòng Swiss nào');
+    if (phase('swiss').status === 'done' || db.jsonSetting('cut_state')) throw new UserError('Đã chốt sơ loại, không thể chạy lại vòng');
+    if (roundNo !== last) throw new UserError('Chỉ được chạy lại vòng Swiss gần nhất vì vòng sau đã dùng kết quả để ghép cặp');
+    const matches = db.all("SELECT id, status FROM matches WHERE kind = 'swiss' AND round_no = ?", roundNo);
+    if (!matches.length) throw new UserError('Vòng này không có trận để chạy lại');
+    const active = db.get(`SELECT COUNT(*) AS n FROM jobs WHERE type = 'match' AND status = 'running'
+      AND ref_id IN (SELECT id FROM matches WHERE kind = 'swiss' AND round_no = ?)`, roundNo).n;
+    if (active || matches.some((m) => m.status === 'running')) throw new UserError('Vòng còn trận đang chạy, hãy chờ hoàn tất');
+    for (const m of matches) {
+      db.run(`UPDATE matches SET status = 'queued', result = NULL, wins_a = NULL, wins_b = NULL, draws = NULL,
+        extra_turns_used = 0, decided_by = NULL, confirmed = 0, finished_at = NULL WHERE id = ?`, m.id);
+      db.run("UPDATE jobs SET status = 'cancelled' WHERE type = 'match' AND ref_id = ? AND status = 'queued'", m.id);
+      queue.enqueue('match', m.id, queue.PRIORITY.official);
+    }
+    db.run("UPDATE matches SET confirmed = 0 WHERE kind = 'bye' AND round_no = ?", roundNo);
+    db.audit(adminId, 'rerun_swiss_round', { round: roundNo, matches: matches.length });
+    return { round: roundNo, matches: matches.length };
+  });
+}
+
 // ---------------------------------------------------------------- khóa phiên bản
+
+/** Bắt đầu lại giải, giữ tài khoản, đội, bài nộp và các trận giao hữu. */
+function resetTournament(adminId) {
+  return db.tx(() => {
+    if (db.get("SELECT COUNT(*) AS n FROM jobs WHERE status = 'running'").n ||
+        db.get("SELECT COUNT(*) AS n FROM matches WHERE status = 'running'").n) {
+      throw new UserError('Còn tác vụ đang chạy, hãy chờ hoàn tất rồi reset giải', 409);
+    }
+    const official = "SELECT id FROM matches WHERE kind IN ('swiss','bye','tiebreak','knockout')";
+    const matches = db.get(`SELECT COUNT(*) AS n FROM matches WHERE id IN (${official})`).n;
+    db.run(`DELETE FROM jobs WHERE type = 'match' AND ref_id IN (${official})`);
+    db.run(`DELETE FROM runs WHERE match_id IN (${official})`);
+    db.run(`UPDATE tickets SET match_id = NULL WHERE match_id IN (${official})`);
+    db.run(`DELETE FROM matches WHERE id IN (${official})`);
+    db.run('DELETE FROM entries');
+    db.run('DELETE FROM series');
+    db.run('DELETE FROM final_session');
+    db.run('DELETE FROM awards');
+    db.run('DELETE FROM certificates');
+    db.run("DELETE FROM settings WHERE key IN ('cut_state','qualified')");
+    db.run("UPDATE phases SET status = 'pending', locked_at = NULL");
+    db.run("UPDATE phases SET ruleset_id = (SELECT ruleset_id FROM phases WHERE key = 'swiss'), reveal_opponent = 1 WHERE key = 'final'");
+    // Bản chung kết thuộc luật cũ vẫn được lưu, nhưng mùa mới dùng bản thi thường.
+    db.run(`UPDATE teams SET official_submission_id = (
+      SELECT s.id FROM submissions s WHERE s.team_id = teams.id AND s.phase_key = 'main' AND s.status = 'valid'
+      ORDER BY s.version DESC LIMIT 1
+    ) WHERE official_submission_id IN (SELECT id FROM submissions WHERE phase_key = 'final')`);
+    db.setSetting('current_phase', 'swiss');
+    db.setSetting('teams_open', 'true');
+    db.setSetting('submissions_open', 'true');
+    db.audit(adminId, 'reset_tournament', { matches });
+    return { ok: true, matches };
+  });
+}
 
 /** Khóa phiên bản thi của từng đội cho giai đoạn. Sau khóa, đổi bản không ảnh hưởng giai đoạn này. */
 function lockPhase(key, adminId) {
@@ -362,6 +421,8 @@ function requestPractice({ user, team, sampleBot, submissionId }) {
 }
 
 module.exports = {
+  resetTournament,
+  rerunSwissRound,
   KNOCKOUT, createMatch, executeMatch, rerunMatch, lockPhase, swissStandings, startSwissRound, confirmRound,
   finishSwiss, advanceContest, startPhase, advanceSeries, bracket, requestPractice,
 };
