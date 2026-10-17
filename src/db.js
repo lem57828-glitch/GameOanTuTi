@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS submissions (
   sha256 TEXT NOT NULL,
   size INTEGER NOT NULL,
   path TEXT NOT NULL,
+  source_code TEXT,
   phase_key TEXT NOT NULL DEFAULT 'main',
   status TEXT NOT NULL DEFAULT 'pending',
   check_log TEXT,
@@ -261,12 +262,25 @@ let db;
 
 function open(file = config.DB_FILE) {
   if (db) return db;
-  if (file !== ':memory:') fs.mkdirSync(require('node:path').dirname(file), { recursive: true });
-  db = new DatabaseSync(file);
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
-  db.exec(SCHEMA);
-  migrate();
-  seed();
+  const remote = config.DB_DRIVER === 'turso' && arguments.length === 0;
+  if (!['sqlite', 'libsql', 'turso'].includes(config.DB_DRIVER)) throw new Error('DB_DRIVER phải là sqlite, libsql hoặc turso');
+  if (remote && (!/^libsql:\/\//.test(config.TURSO_DATABASE_URL) || !config.TURSO_AUTH_TOKEN)) {
+    throw new Error('Cần TURSO_DATABASE_URL (libsql://...) và TURSO_AUTH_TOKEN');
+  }
+  if (!remote && file !== ':memory:') fs.mkdirSync(require('node:path').dirname(file), { recursive: true });
+  db = remote
+    ? new (require('libsql'))(config.TURSO_DATABASE_URL, { authToken: config.TURSO_AUTH_TOKEN })
+    : config.DB_DRIVER === 'libsql' ? new (require('libsql'))(file) : new DatabaseSync(file);
+  try {
+    if (!remote) db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
+    db.exec('PRAGMA foreign_keys = ON;');
+    db.exec(SCHEMA);
+    migrate();
+    seed();
+  } catch (err) {
+    close();
+    throw err;
+  }
   return db;
 }
 
@@ -279,9 +293,26 @@ function migrate() {
   add('human_games', 'reveal_opponent', 'INTEGER NOT NULL DEFAULT 0');
   add('human_games', 'turns', 'INTEGER NOT NULL DEFAULT 100');
   add('human_games', 'color', 'TEXT');
+  add('submissions', 'source_code', 'TEXT');
+  const botMigration = backfillBotSources();
+  if (botMigration.missing) console.warn(`[db] ${botMigration.missing} bài nộp cũ chưa có mã nguồn hợp lệ để chuyển vào database`);
   // Đổi tên bộ luật mặc định khi chuyển từ bản chọn đồng thời sang bàn cờ OTTv2.
   db.prepare(`UPDATE rulesets SET name = 'OTTv2 cổ điển', description = 'Búa ăn kéo, kéo ăn bao, bao ăn búa. Quân cùng loại không ăn nhau mà chặn đường nhau.'
     WHERE name = 'Cổ điển (búa/kéo/bao)'`).run();
+}
+
+function backfillBotSources() {
+  const { readSource } = require('./bot-source');
+  const sources = [];
+  let missing = 0;
+  for (const sub of all('SELECT * FROM submissions WHERE source_code IS NULL')) {
+    try { sources.push({ id: sub.id, code: readSource(sub) }); }
+    catch { missing++; }
+  }
+  if (sources.length) tx(() => {
+    for (const { id, code } of sources) run('UPDATE submissions SET source_code = ? WHERE id = ? AND source_code IS NULL', code, id);
+  });
+  return { migrated: sources.length, missing };
 }
 
 function seed() {
@@ -304,7 +335,11 @@ function seed() {
   for (const [k, v] of Object.entries(defaults)) run('INSERT OR IGNORE INTO settings (key, value) VALUES (?,?)', k, v);
 }
 
-const plain = (row) => (row ? { ...row } : row);
+const plain = (row) => {
+  if (!row) return row;
+  const { _metadata, ...data } = row; // libSQL adds timing metadata to query results.
+  return data;
+};
 function get(sql, ...params) { return plain(db.prepare(sql).get(...params)); }
 function all(sql, ...params) { return db.prepare(sql).all(...params).map(plain); }
 function run(sql, ...params) { return db.prepare(sql).run(...params); }
@@ -346,4 +381,4 @@ function ruleset(id) {
 
 function close() { if (db) { db.close(); db = null; } }
 
-module.exports = { open, close, get, all, run, tx, setting, setSetting, jsonSetting, audit, ruleset, CLASSIC };
+module.exports = { open, close, get, all, run, tx, setting, setSetting, jsonSetting, audit, ruleset, CLASSIC, backfillBotSources };

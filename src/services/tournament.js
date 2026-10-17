@@ -5,7 +5,7 @@ const queue = require('./queue');
 const swiss = require('./swiss');
 const { runMatch } = require('../runner/match');
 const { newSeed, rng, shuffle } = require('../rules');
-const { samplePath, UserError } = require('./submissions');
+const { samplePath, botPath, UserError } = require('./submissions');
 
 const KNOCKOUT = ['r32', 'r16', 'qf', 'sf', 'final'];
 const nextPhase = (key) => KNOCKOUT[KNOCKOUT.indexOf(key) + 1] || null;
@@ -33,7 +33,7 @@ async function executeMatch(job, workerId) {
   const runId = db.run(`INSERT INTO runs (match_id, attempt, status, worker) VALUES (?,?,?,?)`, m.id, attempt, 'running', workerId).lastInsertRowid;
   db.run(`UPDATE matches SET status = 'running' WHERE id = ?`, m.id);
 
-  const pathOf = (subId) => db.get('SELECT path FROM submissions WHERE id = ?', subId).path;
+  const pathOf = (subId) => botPath(db.get('SELECT * FROM submissions WHERE id = ?', subId));
   let res;
   try {
     res = await runMatch({
@@ -72,6 +72,7 @@ function rerunMatch(matchId, adminId) {
   const m = db.get('SELECT * FROM matches WHERE id = ?', matchId);
   if (!m) throw new UserError('Không có trận này', 404);
   if (m.kind === 'bye') throw new UserError('Không chạy lại lượt nghỉ');
+  if (m.status === 'cancelled') throw new UserError('Trận đã hủy; dùng chạy lại vòng hiện tại để điều phối lại');
   if (m.series_id && db.get(`SELECT status FROM series WHERE id = ?`, m.series_id).status === 'done') {
     throw new UserError('Cặp đấu đã kết thúc; không chạy lại để tránh làm sai nhánh');
   }
@@ -104,6 +105,65 @@ function rerunSwissRound(roundNo, adminId) {
     db.run("UPDATE matches SET confirmed = 0 WHERE kind = 'bye' AND round_no = ?", roundNo);
     db.audit(adminId, 'rerun_swiss_round', { round: roundNo, matches: matches.length });
     return { round: roundNo, matches: matches.length };
+  });
+}
+
+function currentRound() {
+  const p = db.get("SELECT * FROM phases WHERE status != 'pending' ORDER BY ord DESC LIMIT 1");
+  if (!p) return { available: false, reason: 'Chưa bắt đầu vòng đấu nào' };
+  if (p.key === 'swiss') {
+    const round = db.get("SELECT MAX(round_no) AS r FROM matches WHERE kind IN ('swiss','bye')").r;
+    if (p.status === 'done' || db.jsonSetting('cut_state')) return { available: false, reason: 'Swiss đã chốt; hãy bắt đầu vòng chính' };
+    if (!round) return { available: false, reason: 'Chưa bắt đầu vòng Swiss nào' };
+    const busy = db.get(`SELECT COUNT(*) AS n FROM matches m WHERE m.kind = 'swiss' AND m.round_no = ?
+      AND (m.status = 'running' OR EXISTS (SELECT 1 FROM jobs j WHERE j.type = 'match' AND j.ref_id = m.id AND j.status = 'running'))`, round).n;
+    return { key: p.key, round, title: `Swiss vòng ${round}`, available: !busy, reason: busy ? 'Chờ các trận đang chạy hoàn tất' : '' };
+  }
+  const matches = db.get("SELECT COUNT(*) AS n FROM matches WHERE phase_key = ? AND kind = 'knockout'", p.key).n;
+  const busy = db.get(`SELECT COUNT(*) AS n FROM matches m WHERE m.phase_key = ?
+    AND (m.status = 'running' OR EXISTS (SELECT 1 FROM jobs j WHERE j.type = 'match' AND j.ref_id = m.id AND j.status = 'running'))`, p.key).n;
+  const final = db.get("SELECT status FROM final_session WHERE id = 1");
+  const blocked = p.key === 'sf' && final && final.status !== 'draft';
+  return { key: p.key, title: p.title, available: !!matches && !busy && !blocked,
+    reason: busy ? 'Chờ các trận đang chạy hoàn tất' : blocked ? 'Phiên chung kết đã phát luật cho hai đội; không thể thay đổi bán kết' : !matches ? 'Vòng chưa có trận đấu' : '' };
+}
+
+/** Chạy lại vòng gần nhất, giữ bot đã khóa, seed và lịch sử các lần chạy. */
+function rerunCurrentRound({ key, round }, adminId) {
+  // Swiss có transaction riêng; xác minh vòng trên máy chủ, không tin dữ liệu UI cũ.
+  const current = currentRound();
+  if (!current.available) throw new UserError(current.reason, 409);
+  if (key !== current.key || (key === 'swiss' && round !== current.round)) throw new UserError('Vòng hiện tại đã thay đổi, hãy tải lại trang', 409);
+  if (key === 'swiss') return { key, ...rerunSwissRound(round, adminId) };
+  return db.tx(() => {
+    const fresh = currentRound();
+    if (!fresh.available || fresh.key !== key) throw new UserError(fresh.reason || 'Vòng hiện tại đã thay đổi', 409);
+    const p = phase(key);
+    // Khóa đã bắt đầu của vòng sau phải được giữ nguyên.
+    if (db.get("SELECT COUNT(*) AS n FROM phases WHERE ord > ? AND status != 'pending'", p.ord).n ||
+        db.get('SELECT COUNT(*) AS n FROM matches WHERE phase_key IN (SELECT key FROM phases WHERE ord > ?)', p.ord).n) {
+      throw new UserError('Vòng kế tiếp đã bắt đầu; không thể chạy lại vòng này', 409);
+    }
+    const matchIds = 'SELECT id FROM matches WHERE kind = \'knockout\' AND phase_key = ?';
+    const count = db.get(`SELECT COUNT(*) AS n FROM matches WHERE id IN (${matchIds})`, key).n;
+    db.run(`UPDATE jobs SET status = 'cancelled' WHERE type = 'match' AND status = 'queued' AND ref_id IN (${matchIds})`, key);
+    db.run(`UPDATE matches SET status = 'cancelled', result = NULL, wins_a = NULL, wins_b = NULL, draws = NULL,
+      extra_turns_used = 0, decided_by = NULL, confirmed = 0, finished_at = NULL WHERE id IN (${matchIds})`, key);
+    db.run('DELETE FROM series WHERE phase_key IN (SELECT key FROM phases WHERE ord > ?)', p.ord);
+    // Giữ mã chứng nhận để truy vết; phải cấp lại sau khi kết quả mới được chốt.
+    db.run('UPDATE certificates SET revoked = 1');
+    db.run("UPDATE phases SET status = 'running' WHERE key = ?", key);
+    db.setSetting('current_phase', key);
+    for (const s of db.all('SELECT * FROM series WHERE phase_key = ? ORDER BY slot', key)) {
+      if (s.team_a == null || s.team_b == null) {
+        db.run("UPDATE series SET status = 'done', winner = ? WHERE id = ?", s.team_a ?? s.team_b, s.id);
+      } else {
+        db.run("UPDATE series SET status = 'running', winner = NULL WHERE id = ?", s.id);
+        scheduleGame(s, 1);
+      }
+    }
+    db.audit(adminId, 'rerun_current_round', { phase: key, matches: count });
+    return { key, matches: count };
   });
 }
 
@@ -352,6 +412,12 @@ function startPhase(key, adminId) {
 
 function scheduleGame(s, gameNo) {
   const p = phase(s.phase_key);
+  const existing = db.get("SELECT id FROM matches WHERE series_id = ? AND game_no = ? AND status = 'cancelled' ORDER BY id LIMIT 1", s.id, gameNo);
+  if (existing) {
+    db.run("UPDATE matches SET status = 'queued' WHERE id = ?", existing.id);
+    queue.enqueue('match', existing.id, queue.PRIORITY.official);
+    return;
+  }
   createMatch({ kind: 'knockout', phase_key: s.phase_key, round_no: gameNo, series_id: s.id, game_no: gameNo,
     team_a: s.team_a, team_b: s.team_b, sub_a: entryOf(s.phase_key, s.team_a), sub_b: entryOf(s.phase_key, s.team_b),
     ruleset_id: p.ruleset_id, reveal: p.reveal_opponent, decisive: true });
@@ -361,7 +427,7 @@ function advanceSeries(seriesId) {
   const s = db.get('SELECT * FROM series WHERE id = ?', seriesId);
   if (s.status === 'done') return;
   const p = phase(s.phase_key);
-  const games = db.all('SELECT * FROM matches WHERE series_id = ? ORDER BY game_no', seriesId);
+  const games = db.all("SELECT * FROM matches WHERE series_id = ? AND status != 'cancelled' ORDER BY game_no", seriesId);
   if (games.some((g) => g.status !== 'done')) return;
   const wa = games.filter((g) => g.result === 'a').length;
   const wb = games.filter((g) => g.result === 'b').length;
@@ -421,6 +487,7 @@ function requestPractice({ user, team, sampleBot, submissionId }) {
 }
 
 module.exports = {
+  currentRound, rerunCurrentRound,
   resetTournament,
   rerunSwissRound,
   KNOCKOUT, createMatch, executeMatch, rerunMatch, lockPhase, swissStandings, startSwissRound, confirmRound,

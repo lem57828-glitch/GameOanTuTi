@@ -272,7 +272,7 @@ api.get('/bots', auth.requireTeam, h((req) => ({
 api.get('/bots/:id', auth.requireTeam, h((req) => {
   const s = db.get('SELECT * FROM submissions WHERE id = ? AND team_id = ?', req.params.id, req.team.id);
   need(s, 'Không có phiên bản này', 404);
-  return { ...s, path: undefined, code: fs.readFileSync(s.path, 'utf8') };
+  return { ...s, path: undefined, source_code: undefined, code: subs.readSource(s) };
 }));
 
 api.post('/bots', auth.requireTeam, h((req) => {
@@ -363,6 +363,7 @@ admin.use(auth.requireAdmin);
 api.use('/admin', admin);
 
 admin.get('/overview', h(() => ({
+  currentRound: T.currentRound(),
   queue: queue.stats(),
   teamsOpen: !teamsLocked(),
   phases: db.all('SELECT p.*, r.name AS ruleset_name FROM phases p JOIN rulesets r ON r.id = p.ruleset_id ORDER BY ord'),
@@ -374,6 +375,8 @@ admin.get('/overview', h(() => ({
   failedJobs: db.all(`SELECT * FROM jobs WHERE status = 'failed' ORDER BY id DESC LIMIT 20`),
   sandbox: config.SANDBOX,
 })));
+
+admin.post('/demo-accounts', h((req) => require('../services/demo-accounts').create(req.body, req.user.id)));
 
 admin.get('/teams', h(() => db.all(`SELECT t.id, t.name, t.withdrawn, t.created_at, u.name AS captain,
     (SELECT COUNT(*) FROM users WHERE team_id = t.id) AS members,
@@ -405,6 +408,7 @@ admin.post('/tournament/reset', h((req) => {
   need(req.body.confirmation === 'RESET', 'Nhập RESET để xác nhận reset giải đấu');
   return T.resetTournament(req.user.id);
 }));
+admin.post('/tournament/rerun-current', h((req) => T.rerunCurrentRound({ key: req.body.key, round: Number(req.body.round) }, req.user.id)));
 admin.post('/phases/:key/lock', h((req) => ({ teams: T.lockPhase(req.params.key, req.user.id) })));
 admin.post('/phases/:key/start', h((req) => { T.startPhase(req.params.key, req.user.id); return { ok: true }; }));
 admin.post('/swiss/round', h((req) => T.startSwissRound(req.user.id)));

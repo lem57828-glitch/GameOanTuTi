@@ -34,7 +34,12 @@ const movesOfA = (r, i = 0) => r.games[i].moves.filter((m) => m.side === (r.game
 
 db.open();
 const worker = new Worker(handlers, 4).start();
-test.after(() => { worker.stop(); db.close(); fs.rmSync(TMP, { recursive: true, force: true }); });
+test.after(async () => {
+  worker.stop();
+  db.close();
+  // libSQL releases its native file handles asynchronously on Windows.
+  await fs.promises.rm(TMP, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+});
 
 // ------------------------------------------------------------ bộ chạy bot
 
@@ -481,6 +486,74 @@ test('thách đấu: cần đội kia đồng ý, chạy 2 ván, không tính đ
   }
 });
 
+test('chạy lại vòng hiện tại: giữ vòng trước, bản bot, lịch sử và dựng lại nhánh sau', async () => {
+  T.confirmRound(2, 1);
+  assert.equal(T.currentRound().key, 'swiss');
+  assert.throws(() => T.rerunCurrentRound({ key: 'swiss', round: 1 }, 1), /thay đổi/);
+  T.rerunCurrentRound({ key: 'swiss', round: 2 }, 1);
+  await worker.drain();
+  T.confirmRound(2, 1);
+  T.startSwissRound(1);
+  await worker.drain();
+  T.confirmRound(3, 1);
+  T.finishSwiss(1);
+  await worker.drain();
+  assert.equal(T.currentRound().available, false);
+  for (const key of ['r32', 'r16', 'qf', 'sf']) {
+    T.startPhase(key, 1);
+    await worker.drain();
+  }
+  const before = db.all("SELECT * FROM matches WHERE phase_key IN ('swiss','r32','r16','qf') ORDER BY id");
+  const locked = db.all("SELECT * FROM entries WHERE phase_key = 'sf'");
+  const oldMatches = db.all("SELECT id,seed,sub_a,sub_b FROM matches WHERE phase_key = 'sf' ORDER BY id");
+  const counts = oldMatches.map((m) => db.get('SELECT COUNT(*) AS n FROM runs WHERE match_id = ?', m.id).n);
+  assert.equal(T.currentRound().key, 'sf');
+  assert.equal(T.currentRound().available, true);
+  assert.throws(() => T.rerunCurrentRound({ key: 'qf' }, 1), /thay đổi/);
+  const first = oldMatches[0].id;
+  db.run("UPDATE matches SET status = 'running' WHERE id = ?", first);
+  assert.throws(() => T.rerunCurrentRound({ key: 'sf' }, 1), /đang chạy/);
+  db.run("UPDATE matches SET status = 'done' WHERE id = ?", first);
+  T.rerunCurrentRound({ key: 'sf' }, 1);
+  assert.equal(db.get("SELECT status FROM phases WHERE key = 'sf'").status, 'running');
+  assert.equal(db.get("SELECT COUNT(*) AS n FROM series WHERE phase_key = 'final'").n, 0);
+  await worker.drain();
+  assert.equal(db.get("SELECT status FROM phases WHERE key = 'sf'").status, 'done');
+  assert.equal(db.get("SELECT COUNT(*) AS n FROM series WHERE phase_key = 'final'").n, 1);
+  assert.deepEqual(db.all("SELECT * FROM matches WHERE phase_key IN ('swiss','r32','r16','qf') ORDER BY id"), before);
+  assert.deepEqual(db.all("SELECT * FROM entries WHERE phase_key = 'sf'"), locked);
+  assert.deepEqual(db.all("SELECT id,seed,sub_a,sub_b FROM matches WHERE phase_key = 'sf' ORDER BY id"), oldMatches);
+  oldMatches.forEach((m, i) => assert.equal(db.get('SELECT COUNT(*) AS n FROM runs WHERE match_id = ?', m.id).n, counts[i] + 1));
+  // Không đổi hai đội khi phiên chung kết đã phát luật.
+  const rs = db.get("SELECT ruleset_id FROM phases WHERE key = 'final'").ruleset_id;
+  db.run("INSERT INTO final_session (id,ruleset_id,duration_min,status) VALUES (1,?,15,'running')", rs);
+  assert.equal(T.currentRound().available, false);
+  assert.throws(() => T.rerunCurrentRound({ key: 'sf' }, 1), /chung kết/);
+  db.run("UPDATE final_session SET status = 'ended' WHERE id = 1");
+  T.startPhase('final', 1);
+  await worker.drain();
+  assert.throws(() => T.rerunCurrentRound({ key: 'sf' }, 1), /thay đổi/);
+  const finalIds = db.all("SELECT id FROM matches WHERE phase_key = 'final' ORDER BY game_no");
+  const finalSeeds = db.all("SELECT id,seed,sub_a,sub_b FROM matches WHERE phase_key = 'final' ORDER BY game_no");
+  // Buộc trạng thái cũ đủ ba trận để kiểm tra best-of dừng sớm sau hai trận khi chạy lại.
+  const series = db.get("SELECT * FROM series WHERE phase_key = 'final'");
+  if (finalIds.length === 2) {
+    const m = db.get('SELECT * FROM matches WHERE id = ?', finalIds[0].id);
+    T.createMatch({ kind: 'knockout', phase_key: 'final', series_id: series.id, game_no: 3, round_no: 3,
+      team_a: m.team_a, team_b: m.team_b, sub_a: m.sub_a, sub_b: m.sub_b, ruleset_id: rs, decisive: true });
+    await worker.drain();
+  }
+  T.rerunCurrentRound({ key: 'final' }, 1);
+  await worker.drain();
+  assert.equal(db.get("SELECT status FROM phases WHERE key = 'final'").status, 'done');
+  assert.deepEqual(db.all("SELECT id,seed,sub_a,sub_b FROM matches WHERE phase_key = 'final' ORDER BY game_no").slice(0, finalSeeds.length), finalSeeds);
+  const played = db.all("SELECT * FROM matches WHERE phase_key = 'final' AND status = 'done' ORDER BY game_no");
+  assert.ok(played.length >= 2 && played.length <= 3);
+  if (played[0].result === played[1].result) assert.equal(played.length, 2, 'best-of dừng ngay khi đủ hai trận thắng');
+  assert.equal(db.get("SELECT COUNT(*) AS n FROM jobs WHERE status IN ('queued','running')").n, 0);
+  db.run('DELETE FROM final_session');
+});
+
 test('reset giải: chỉ admin được xác nhận, giữ đội và bot, xóa kết quả và bắt đầu lại Swiss', async () => {
   await worker.drain();
   const express = require('express');
@@ -501,6 +574,11 @@ test('reset giải: chỉ admin được xác nhận, giữ đội và bot, xóa
   try {
     const student = await login('u2@t.local');
     const admin = await login('reset-admin@t.local');
+    const rerun = (cookie, key) => fetch(`${base}/admin/tournament/rerun-current`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify({ key }),
+    });
+    assert.equal((await rerun(student, 'final')).status, 403);
+    assert.equal((await rerun(admin, 'sf')).status, 409, 'từ chối yêu cầu từ trang đã cũ');
     assert.equal((await reset(student, 'RESET')).status, 403);
     assert.equal((await reset(admin, 'wrong')).status, 400);
     const match = db.get("SELECT id FROM matches WHERE kind = 'swiss' LIMIT 1");
@@ -542,6 +620,77 @@ test('reset giải: chỉ admin được xác nhận, giữ đội và bot, xóa
     assert.equal(T.startSwissRound(adminId).round, 1);
     await worker.drain();
     T.confirmRound(1, adminId);
+  } finally {
+    server.close();
+  }
+});
+
+test('admin tạo tài khoản mẫu: phân quyền, đội và bot hợp lệ, không trùng và tuân thủ khóa Swiss', async () => {
+  const demo = require('../src/services/demo-accounts');
+  const adminId = db.get("SELECT id FROM users WHERE email = 'reset-admin@t.local'").id;
+  const before = db.get('SELECT COUNT(*) AS n FROM users').n;
+  const request = { mode: 'teams', count: 2, members: 2, password: 'demo-password-123', withBots: true };
+  assert.throws(() => demo.create(request, adminId), /khóa lập đội/);
+  assert.equal(db.get('SELECT COUNT(*) AS n FROM users').n, before);
+  T.resetTournament(adminId);
+  const express = require('express');
+  const server = express().use('/api', require('../src/routes/api')).listen(0);
+  const base = `http://127.0.0.1:${server.address().port}/api`;
+  const login = async (email) => (await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: 'matkhau123' }) })).headers.get('set-cookie').split(';')[0];
+  const create = (cookie, body) => fetch(`${base}/admin/demo-accounts`, { method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(cookie ? { cookie } : {}) }, body: JSON.stringify(body) });
+  try {
+    const admin = await login('reset-admin@t.local');
+    const student = await login('u2@t.local');
+    assert.equal((await create(null, request)).status, 403);
+    assert.equal((await create(student, request)).status, 403);
+    for (const invalid of [{ count: 0 }, { count: 101 }, { count: 1.5 }, { members: 4 }, { password: 'short' }, { mode: 'admin' }, { withBots: 'true' }]) {
+      assert.equal((await create(admin, { ...request, ...invalid })).status, 400);
+    }
+    assert.equal(db.get('SELECT COUNT(*) AS n FROM users').n, before);
+    db.setSetting('submissions_open', 'false');
+    assert.equal((await create(admin, request)).status, 409);
+    db.setSetting('submissions_open', 'true');
+    const res = await create(admin, request);
+    assert.equal(res.status, 200);
+    const result = await res.json();
+    assert.equal(result.users, 4);
+    assert.equal(result.teams, 2);
+    assert.equal(result.bots, 2);
+    assert.equal(result.accounts.filter((a) => a.captain).length, 2);
+    for (const a of result.accounts) {
+      const user = db.get('SELECT * FROM users WHERE id = ?', a.id);
+      assert.equal(user.role, 'student');
+      assert.ok(auth.checkPassword(request.password, user.password_hash));
+      const team = db.get('SELECT * FROM teams WHERE id = ?', user.team_id);
+      assert.equal(team.name, a.teamName);
+      if (a.captain) assert.equal(team.captain_id, a.id);
+    }
+    await worker.drain();
+    for (const a of result.accounts.filter((a) => a.captain)) {
+      const user = db.get('SELECT * FROM users WHERE id = ?', a.id);
+      const team = db.get('SELECT * FROM teams WHERE id = ?', user.team_id);
+      const bot = db.get('SELECT status,source_code FROM submissions WHERE id = ?', team.official_submission_id);
+      assert.equal(bot.status, 'valid');
+      assert.match(bot.source_code, /def make_move/);
+    }
+    const second = await (await create(admin, { ...request, withBots: false })).json();
+    assert.equal(second.bots, 0);
+    assert.notEqual(second.batch, result.batch);
+    assert.equal(new Set([...second.accounts, ...result.accounts].map((a) => a.email)).size, 8);
+    assert.equal(db.get("SELECT status FROM phases WHERE key = 'swiss'").status, 'pending');
+    assert.equal(db.get("SELECT COUNT(*) AS n FROM matches WHERE kind = 'swiss'").n, 0);
+    db.setSetting('teams_open', 'false');
+    assert.equal((await create(admin, request)).status, 409);
+    const standalone = await (await create(admin, { ...request, mode: 'accounts', count: 3 })).json();
+    assert.equal(standalone.users, 3);
+    assert.equal(standalone.teams, 0);
+    assert.equal(standalone.bots, 0);
+    for (const a of standalone.accounts) assert.equal(db.get('SELECT team_id FROM users WHERE id = ?', a.id).team_id, null);
+    const logs = db.all("SELECT detail FROM audit WHERE action = 'create_demo_accounts'");
+    assert.equal(logs.length, 3);
+    assert.ok(logs.every((row) => !row.detail.includes(request.password)));
   } finally {
     server.close();
   }

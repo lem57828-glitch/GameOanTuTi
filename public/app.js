@@ -12,6 +12,7 @@ const PHASE_VI = { swiss: 'Sơ loại Swiss', r32: 'Vòng 32', r16: 'Vòng 16', 
 const STATUS_VI = {
   pending: ['Chưa bắt đầu', ''], locked: ['Đã khóa bản', 'warn'], running: ['Đang diễn ra', 'info'], done: ['Đã xong', 'ok'],
   queued: ['Đang chờ', 'warn'], valid: ['Hợp lệ', 'ok'], invalid: ['Không hợp lệ', 'bad'], error: ['Lỗi', 'bad'],
+  cancelled: ['Đã hủy', ''],
   open: ['Đang mở', 'warn'], answered: ['Đã trả lời', 'info'], closed: ['Đã đóng', 'ok'], draft: ['Bản nháp', ''], ended: ['Hết giờ', 'ok'],
 };
 const badge = (s) => { const [t, c] = STATUS_VI[s] || [s, '']; return `<span class="badge ${c}">${esc(t)}</span>`; };

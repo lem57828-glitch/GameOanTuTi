@@ -35,6 +35,8 @@ Engine luật: [src/game/board.js](src/game/board.js) (hàm thuần, có kiểm 
 
 ## Chạy nhanh
 
+Deploy Railway + Turso và chuyển dữ liệu local: xem [DEPLOY.md](DEPLOY.md).
+
 Cần **Node.js ≥ 22.13** (dùng `node:sqlite` có sẵn, không cần cài CSDL) và **Python 3.11+**.
 
 ```bash
@@ -74,6 +76,10 @@ Kiểm thử: `npm test` (50 ca: luật bàn cờ, ghép Swiss, tranh suất ran
 | Hỗ trợ & quản trị | Khiếu nại, khóa vòng, ghép vòng, xác nhận vòng, chạy lại trận, rút đội, giải phụ, cấp chứng nhận, nhật ký |
 
 ### Reset giải để đấu lại
+
+Admin có thể vào **Quản trị → Tài khoản mẫu** để tạo thí sinh giả mà không reset dữ liệu. Chọn chỉ tài khoản hoặc tài khoản kèm đội (1–3 thành viên/đội), tùy chọn nộp bot mẫu, đặt mật khẩu chung và tải danh sách đăng nhập CSV. Mỗi lần có mã đợt riêng để tránh trùng dữ liệu demo cũ. Đội chỉ được tạo trước khi khóa Swiss; bot được worker kiểm thử như bài nộp thường. Tính năng không tạo admin và không tự bắt đầu giải.
+
+Để chỉ chạy lại vòng gần nhất, dùng **Quản trị → Điều hành → Chạy lại vòng hiện tại**. Hỗ trợ Swiss và vòng loại trực tiếp; giữ cặp đấu, bot đã khóa, seed và lịch sử chạy. Swiss cần xác nhận lại kết quả. Vòng loại trực tiếp dựng lại nhánh kế tiếp theo kết quả mới; chứng nhận cũ bị thu hồi và cần cấp lại. Chờ trận đang chạy hoàn tất; không chạy lại vòng trước khi vòng sau đã bắt đầu hoặc khi phiên chung kết đã phát luật cho hai đội bán kết thắng.
 
 Trong **Quản trị → Điều hành → Reset giải đấu**, nhập `RESET` để xác nhận. Chờ mọi tác vụ đang chạy hoàn tất trước khi reset.
 
@@ -116,6 +122,8 @@ def make_move(state):
 - **Thưởng:** tự tính và cộng dồn theo đội: Top 32 (200k), bán kết (1,5tr), nhì (3tr), nhất (5tr), 2 giải phụ (800k) do BTC trao. Tổng 19.000.000đ.
 
 ## Kiến trúc
+
+Database lưu tài khoản (`users`), nhóm/đội (`teams`), phiên bản và mã nguồn bot (`submissions.source_code`), kết quả trận (`matches`), lịch sử các lần chạy, nước đi và log (`runs`). Mật khẩu được băm scrypt. Bot mới được lưu trực tiếp vào database; worker tạo file Python trong `data/bots/` khi cần chạy và kiểm tra SHA-256. File bị mất có thể tạo lại từ database. Khi nâng cấp, hệ thống nạp mã bot cũ từ file vào database; các bài thiếu file được báo trong log và cần khôi phục riêng.
 
 ```
 Trình duyệt ── public/ (HTML/CSS/JS thuần, không cần build)

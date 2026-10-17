@@ -4,15 +4,21 @@
   "description": "BOT ARENA - nền tảng cuộc thi bot oẳn tù tì cho sinh viên năm nhất",
   "private": true,
   "type": "commonjs",
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "start": "node src/server.js",
     "worker": "node src/worker.js",
     "demo": "node scripts/demo.js",
     "create-admin": "node scripts/create-admin.js",
+    "export-data": "node scripts/export-data.js",
+    "import-data": "node scripts/import-data.js",
+    "upload-snapshot": "node scripts/upload-snapshot.js",
     "test": "node --test"
   },
   "dependencies": {
-    "express": "4.21.2"
+    "express": "4.21.2",
+    "libsql": "0.5.29"
   }
 }

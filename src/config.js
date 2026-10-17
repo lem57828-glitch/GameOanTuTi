@@ -11,6 +11,10 @@ module.exports = {
   ROOT,
   DATA_DIR,
   DB_FILE: path.join(DATA_DIR, 'arena.db'),
+  DB_DRIVER: env('DB_DRIVER', 'sqlite'), // sqlite | libsql (local testing) | turso
+  TURSO_DATABASE_URL: env('TURSO_DATABASE_URL', ''),
+  TURSO_AUTH_TOKEN: env('TURSO_AUTH_TOKEN', ''),
+  TRUST_PROXY: env('TRUST_PROXY', 'loopback'),
   BOT_DIR: path.join(DATA_DIR, 'bots'),
   PORT: num('PORT', 3000),
   SECRET: env('APP_SECRET', 'dev-secret-change-me'),

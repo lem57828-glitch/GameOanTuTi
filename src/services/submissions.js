@@ -1,5 +1,4 @@
 // Nộp bài: kiểm tra định dạng → lưu kèm mã băm → kiểm thử cách ly trong hàng đợi → hợp lệ/không hợp lệ.
-const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const db = require('../db');
@@ -16,6 +15,8 @@ const SAMPLE_BOTS = {
   smart_bot: 'Nhìn trước một nước',
 };
 const samplePath = (name) => path.join(SAMPLE_DIR, `${name}.py`);
+// Bài cũ có đường dẫn Windows tuyệt đối; định vị lại sau khi chuyển sang Linux.
+const { materialize: botPath, readSource } = require('../bot-source');
 
 let envVersion;
 function environmentVersion() {
@@ -67,11 +68,9 @@ function submit({ user, team, filename, code }) {
   return db.tx(() => {
     const version = (db.get('SELECT MAX(version) AS v FROM submissions WHERE team_id = ?', team.id).v || 0) + 1;
     const dir = path.join(config.BOT_DIR, `team_${team.id}`, `v${version}`);
-    fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, 'bot.py');
-    fs.writeFileSync(file, code, 'utf8');
-    const id = db.run(`INSERT INTO submissions (team_id, user_id, version, filename, sha256, size, path, phase_key, env_version)
-      VALUES (?,?,?,?,?,?,?,?,?)`, team.id, user.id, version, path.basename(filename), sha, size, file, phaseKey, environmentVersion()).lastInsertRowid;
+    const id = db.run(`INSERT INTO submissions (team_id, user_id, version, filename, sha256, size, path, source_code, phase_key, env_version)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`, team.id, user.id, version, path.basename(filename), sha, size, file, code, phaseKey, environmentVersion()).lastInsertRowid;
     queue.enqueue('validate', id, queue.PRIORITY.validate);
     db.audit(user.id, 'submit', { team: team.id, submission: id, version, sha256: sha, phase: phaseKey });
     return Number(id);
@@ -89,7 +88,7 @@ async function validate(job) {
   if (!sub || sub.status !== 'pending') return;
   const { ruleset } = rulesFor(sub.phase_key);
   const res = await runMatch({
-    botA: sub.path, botB: samplePath('random_bot'), ruleset, games: 2, extraGames: 0,
+    botA: botPath(sub), botB: samplePath('random_bot'), ruleset, games: 2, extraGames: 0,
     maxPlies: config.match.validationPlies, decisive: false, seed: newSeed(),
   });
   const errors = [];
@@ -115,4 +114,4 @@ async function validate(job) {
   });
 }
 
-module.exports = { submit, validate, checkFormat, SAMPLE_BOTS, samplePath, UserError, environmentVersion };
+module.exports = { submit, validate, checkFormat, SAMPLE_BOTS, samplePath, botPath, readSource, UserError, environmentVersion };

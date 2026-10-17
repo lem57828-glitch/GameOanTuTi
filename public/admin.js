@@ -15,7 +15,7 @@
       root.innerHTML = '<div class="card"><h2>Chỉ dành cho quản trị viên</h2></div>';
       return;
     }
-    const names = { ops: 'Điều hành', matches: 'Trận đấu', teams: 'Đội', final: 'Chung kết', awards: 'Thưởng & chứng nhận', support: 'Thông báo & hỗ trợ', audit: 'Nhật ký' };
+    const names = { ops: 'Điều hành', matches: 'Trận đấu', teams: 'Đội', demo: 'Tài khoản mẫu', final: 'Chung kết', awards: 'Thưởng & chứng nhận', support: 'Thông báo & hỗ trợ', audit: 'Nhật ký' };
     const validTab = (t) => (t && names[t] ? t : null);
     const show = async (tab) => {
       window.Arena.cleanups.forEach((f) => f()); window.Arena.cleanups = [];
@@ -29,6 +29,58 @@
   });
 
   const PANES = {
+    async demo(pane) {
+      pane.innerHTML = `<div class="card"><h2>Tạo tài khoản thí sinh mẫu</h2>
+        <p>Tạo thêm tài khoản để diễn tập. Bạn có thể tạo kèm đội và nộp bot mẫu để chuẩn bị thi đấu.</p>
+        <form id="demo-accounts-form">
+          <div class="grid g3">
+            <div class="field"><label>Kiểu dữ liệu<select name="mode"><option value="teams">Tài khoản kèm đội</option><option value="accounts">Chỉ tài khoản</option></select></label></div>
+            <div class="field"><label><span id="demo-count-label">Số đội</span><input name="count" type="number" min="1" max="100" value="10" required></label></div>
+            <div class="field" id="demo-members"><label>Thành viên mỗi đội<select name="members"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label></div>
+          </div>
+          <div class="field"><label>Mật khẩu chung cho tài khoản mẫu<input name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required></label></div>
+          <label class="checkbox" id="demo-bots"><input name="withBots" type="checkbox" checked> Nộp bot mẫu cho mỗi đội (luân phiên 4 chiến thuật, kiểm thử qua worker)</label>
+          <p class="muted small">Tối đa 100 đội/lần, mỗi đội 1–3 tài khoản. Chỉ tạo đội trước khi khóa Swiss và khi đang mở lập đội. Chỉ tạo tài khoản vẫn dùng được khi giải đã bắt đầu.</p>
+          <button class="btn primary" type="submit">Tạo tài khoản mẫu</button>
+        </form>
+      </div><div id="demo-accounts-result"></div>`;
+      const form = $('#demo-accounts-form');
+      on(form.elements.mode, 'change', () => {
+        const teams = form.elements.mode.value === 'teams';
+        $('#demo-count-label').textContent = teams ? 'Số đội' : 'Số tài khoản';
+        $('#demo-members').hidden = !teams;
+        $('#demo-bots').hidden = !teams;
+      });
+      on(form, 'submit', async () => {
+        const data = { mode: form.elements.mode.value, count: Number(form.elements.count.value), members: Number(form.elements.members.value),
+          password: form.elements.password.value, withBots: form.elements.withBots.checked };
+        const amount = data.count * (data.mode === 'teams' ? data.members : 1);
+        if (!confirm(`Tạo ${amount} tài khoản mẫu${data.mode === 'teams' ? ` và ${data.count} đội` : ''}?`)) return;
+        const result = await post('/demo-accounts', data);
+        const output = $('#demo-accounts-result');
+        if (!output) return;
+        output.innerHTML = `<div class="card" style="margin-top:16px"><h2>Đã tạo ${result.users} tài khoản, ${result.teams} đội</h2>
+          <p>Mật khẩu chung: <code>${esc(data.password)}</code>. ${result.bots ? `${result.bots} bot đang chờ worker kiểm thử; bản hợp lệ đầu tiên tự thành bản thi.` : ''}</p>
+          <button class="btn sm" id="download-demo-accounts">Tải danh sách CSV</button>
+          <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Email đăng nhập</th><th>Tên</th><th>Đội</th><th>Vai trò</th></tr></thead><tbody>
+          ${result.accounts.map((a) => `<tr><td>${esc(a.email)}</td><td>${esc(a.name)}</td><td>${esc(a.teamName || 'Chưa có đội')}</td><td>${a.captain ? 'Đội trưởng' : 'Thí sinh'}</td></tr>`).join('')}
+          </tbody></table></div><p class="muted small">Lưu danh sách trước khi rời trang. File CSV có mật khẩu, chỉ dùng để thử nghiệm.</p></div>`;
+        form.elements.password.value = '';
+        on($('#download-demo-accounts'), 'click', () => {
+          const cell = (v) => {
+            let text = String(v ?? '');
+            if (/^[=+@\-\t\r\n]/.test(text)) text = `'${text}`;
+            return `"${text.replaceAll('"', '""')}"`;
+          };
+          const rows = [['Email', 'Mật khẩu', 'Tên', 'Đội', 'Vai trò'], ...result.accounts.map((a) => [a.email, data.password, a.name, a.teamName, a.captain ? 'Đội trưởng' : 'Thí sinh'])];
+          const url = URL.createObjectURL(new Blob(['\uFEFF' + rows.map((r) => r.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+          const link = document.createElement('a');
+          link.href = url; link.download = `tai-khoan-mau-${result.batch}.csv`; link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        });
+        toast('Đã tạo tài khoản mẫu');
+      });
+    },
     async ops(pane) {
       const o = await api('/admin/overview');
       const s = o.settings;
@@ -38,6 +90,8 @@
       const lastRound = o.rounds[o.rounds.length - 1];
       const canNext = swiss.status !== 'pending' && swiss.status !== 'done' && o.swissRound < total && (!lastRound || lastRound.confirmed);
       const canFinish = swiss.status === 'running' && o.swissRound >= total && o.rounds.every((r) => r.confirmed);
+      const canRerunSwiss = swiss.status === 'running' && !o.cut && lastRound && lastRound.done + lastRound.errors === lastRound.total;
+      const current = o.currentRound || { available: false, reason: 'Tải lại backend để cập nhật chức năng chạy lại vòng' };
       const ko = ['r32', 'r16', 'qf', 'sf'];
       const ready = (k) => {
         const i = ['swiss', ...ko, 'final'].indexOf(k);
@@ -52,6 +106,12 @@
         <div class="card"><div class="muted small">Chạy thử</div><b style="font-size:1.6rem">${o.queue.queued.practice}</b></div>
         <div class="card"><div class="muted small">Đang chạy</div><b style="font-size:1.6rem">${o.queue.running}</b></div>
       </div>
+      <div class="card" style="margin-top:16px">
+        <h2>Chạy lại vòng hiện tại${current.title ? ` — ${esc(current.title)}` : ''}</h2>
+        <p>Chạy lại các trận trong vòng này với cặp đấu và bot đã khóa. Giữ lịch sử chạy và kết quả các vòng trước. Nhánh kế tiếp được cập nhật theo kết quả mới; chứng nhận đã cấp cần cấp lại.</p>
+        ${current.reason ? `<p class="muted small">${esc(current.reason)}</p>` : ''}
+        <button class="btn" id="rerun-current-round" ${current.available ? '' : 'disabled'} data-confirm="Chạy lại ${esc(current.title || 'vòng hiện tại')}? Kết quả vòng này sẽ được tính lại, giữ nguyên kết quả các vòng trước.">Chạy lại vòng hiện tại</button>
+      </div>
       <div class="grid g2" style="margin-top:16px">
         <div class="card">
           <h2>Sơ loại Swiss</h2>
@@ -59,12 +119,13 @@
           <div class="row">
             ${swiss.status === 'pending' ? '<button class="btn primary" id="lock-swiss" data-confirm="Khóa bản thi của mọi đội cho toàn bộ sơ loại?">1. Khóa bản Swiss</button>' : ''}
             <button class="btn primary" id="next-round" ${canNext ? '' : 'disabled'}>Bắt đầu vòng ${o.swissRound + 1}</button>
+            <button class="btn" data-rerun-round="${o.swissRound}" ${canRerunSwiss ? '' : 'disabled'} data-confirm="Chạy lại toàn bộ vòng Swiss ${o.swissRound}? Giữ cặp đấu và bot đã khóa. Kết quả được tính lại, cần xác nhận lại vòng.">Chạy lại vòng Swiss hiện tại${o.swissRound ? ` (vòng ${o.swissRound})` : ''}</button>
             <button class="btn" id="finish" ${canFinish ? '' : 'disabled'} data-confirm="Chốt sơ loại và xác định Top 32?">Chốt sơ loại → Top 32</button>
           </div>
           ${o.rounds.length ? `<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Vòng</th><th>Trận xong</th><th>Lỗi</th><th></th></tr></thead><tbody>
             ${o.rounds.map((r) => `<tr><td>${r.round_no}</td><td>${r.done}/${r.total}</td><td>${r.errors ? `<span class="badge bad">${r.errors}</span>` : ''}</td>
               <td class="right">${r.confirmed ? '<span class="badge ok">Đã xác nhận</span>' : `<button class="btn sm primary" data-confirm-round="${r.round_no}" ${r.done < r.total ? 'disabled' : ''}>Xác nhận</button>`}
-              ${swiss.status !== 'done' && !o.cut && r.round_no === o.swissRound ? `<button class="btn sm" data-rerun-round="${r.round_no}" data-confirm="Chạy lại toàn bộ vòng Swiss ${r.round_no}? Giữ nguyên cặp đấu và bản bot, thay kết quả cũ và cần xác nhận lại vòng." ${o.queue.running || r.done + r.errors < r.total ? 'disabled' : ''}>Chạy lại cả vòng</button>` : ''}</td></tr>`).join('')}
+              ${swiss.status !== 'done' && !o.cut && r.round_no === o.swissRound ? `<button class="btn sm" data-rerun-round="${r.round_no}" data-confirm="Chạy lại toàn bộ vòng Swiss ${r.round_no}? Giữ nguyên cặp đấu và bản bot, thay kết quả cũ và cần xác nhận lại vòng." ${canRerunSwiss ? '' : 'disabled'}>Chạy lại cả vòng</button>` : ''}</td></tr>`).join('')}
           </tbody></table></div>` : ''}
           ${o.cut ? `<p class="small" style="margin-top:12px">Top 32: ${o.cut.done ? `<span class="badge ok">đã chốt ${o.cut.qualified.length} đội</span>` : `<span class="badge warn">đang tranh suất (bước ${o.cut.step})</span>`}
             ${o.cut.history.length ? ` • ${o.cut.history.length} bước tranh suất ở ranh giới` : ''}</p>` : ''}
@@ -101,6 +162,10 @@
         ${o.failedJobs.map((j) => `<tr><td>${esc(j.type)} #${j.ref_id}</td><td class="small">${esc(j.error)}</td><td>${j.type === 'match' ? `<button class="btn sm" data-rerun="${j.ref_id}">Chạy lại</button>` : ''}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
 
       act('#lock-swiss', () => post('/phases/swiss/lock'), 'Đã khóa bản Swiss');
+      act('#rerun-current-round', async () => {
+        await post('/tournament/rerun-current', { key: current.key, round: current.round });
+        toast(`Đã đưa ${current.title} vào hàng đợi chạy lại`);
+      });
       on($('#reset-tournament'), 'click', async () => {
         const confirmation = prompt('Xóa dữ liệu thi đấu để bắt đầu lại? Giữ tài khoản, đội và bot. Nhập RESET để xác nhận:');
         if (confirmation !== 'RESET') return;
@@ -121,7 +186,7 @@
       $$('form.setting').forEach((f) => on(f, 'submit', async () => { await post('/settings', { key: f.dataset.key, value: f.value.value }); toast('Đã lưu'); }));
       every(4000, async () => {
         const n = await api('/admin/overview');
-        if (JSON.stringify(n.rounds) !== JSON.stringify(o.rounds) || JSON.stringify(n.queue) !== JSON.stringify(o.queue) || JSON.stringify(n.cut) !== JSON.stringify(o.cut) || n.teamsOpen !== o.teamsOpen) PANES.ops(pane);
+        if (JSON.stringify(n.currentRound) !== JSON.stringify(o.currentRound) || JSON.stringify(n.rounds) !== JSON.stringify(o.rounds) || JSON.stringify(n.queue) !== JSON.stringify(o.queue) || JSON.stringify(n.cut) !== JSON.stringify(o.cut) || n.teamsOpen !== o.teamsOpen) PANES.ops(pane);
       });
     },
 
