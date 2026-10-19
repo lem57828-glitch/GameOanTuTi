@@ -1,20 +1,16 @@
 {
   "name": "bot-arena",
-  "version": "1.0.0",
-  "description": "BOT ARENA - nền tảng cuộc thi bot oẳn tù tì cho sinh viên năm nhất",
+  "version": "2.0.0-init",
+  "description": "BOT ARENA - khung xây lại hệ thống thi bot cờ búa/kéo/bao, chia 4 module cho 4 thành viên",
   "private": true,
   "type": "commonjs",
   "engines": {
     "node": ">=22.13"
   },
   "scripts": {
-    "start": "node src/server.js",
-    "worker": "node src/worker.js",
-    "demo": "node scripts/demo.js",
-    "create-admin": "node scripts/create-admin.js",
-    "export-data": "node scripts/export-data.js",
-    "import-data": "node scripts/import-data.js",
-    "upload-snapshot": "node scripts/upload-snapshot.js",
+    "start": "node server/index.js",
+    "worker": "node worker/index.js",
+    "seed": "node scripts/seed-mock.js",
     "test": "node --test"
   },
   "dependencies": {
