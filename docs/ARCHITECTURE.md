@@ -1,61 +1,33 @@
-# Kiến trúc và quy ước làm việc
+# Kiến trúc M0
 
 ## Cấu trúc
-```
-server/
-  index.js            khởi động web
-  app.js              ghép core + 4 module (không chứa nghiệp vụ)
-  core/               NỀN DÙNG CHUNG — sửa qua review của cả nhóm
-    config.js         cấu hình (đọc biến môi trường một chỗ)
-    db.js             kết nối sqlite/libsql/turso, migration theo module, get/all/run/tx
-    errors.js         mã lỗi chung, AppError, need(), todo()
-    http.js           h() bọc handler, errorHandler, str()/int()
-    auth.js           cookie phiên, loadUser, requireAuth, requireRole
-    events.js         bus sự kiện + event_log (danh sách loại sự kiện là hợp đồng chung)
-    audit.js          nhật ký hành động BTC/trọng tài
-    contracts.js      hợp đồng dữ liệu giữa module + hàm kiểm tra
-    module.js         defineModule(): bảng API → router, route chưa làm trả 501
-    migrations/       bảng chung: users, audit_log, event_log, settings
-  modules/<tên>/      MỖI NGƯỜI MỘT MODULE
-    index.js          bảng API của module
-    service.js        nghiệp vụ; phần đầu là hàm cho module khác dùng
-    migrations/       lược đồ của module (NNN_ten.sql)
-    README.md         việc cần làm, hợp đồng, quyết định liên quan
-worker/index.js       khởi động worker chạy bot (TV2)
-web/
-  core.js             lõi giao diện: router, api(), menu theo vai trò, đăng nhập giả lập, bảng tiến độ
-  modules/<tên>.js    trang của từng module
-scripts/seed-mock.js  dữ liệu mẫu
-test/                 helpers.js, core/ (kiểm thử lõi + hợp đồng), modules/ (mỗi module một tệp)
-```
-Công nghệ hiện tại: Node.js + Express, SQLite (`node:sqlite`) hoặc libSQL/Turso qua `DB_DRIVER`, giao diện HTML/JS thuần không cần build. Đây là đề xuất để chốt ở M0 (đặc tả mục 8); đổi thì đổi cả nhóm.
 
-## Quy ước
-1. **Chỉ sửa thư mục của module mình** (`server/modules/<tên>/`, `web/modules/<tên>.js`, `test/modules/<tên>.test.js`). Sửa `core/`, `docs/CONTRACTS.md` hay module khác thì mở PR và nhờ người liên quan duyệt.
-2. **Không đọc/ghi thẳng bảng của module khác.** Dùng hàm ở phần 1 của `service.js` module đó hoặc sự kiện. Cần thêm hàm thì đề nghị chủ module.
-3. **Lỗi:** luôn ném `AppError(code, message)` hoặc `need(...)` với mã trong `core/errors.js`. Không trả chuỗi lỗi tự chế.
-4. **Thời gian:** mọi mốc khóa/đồng hồ dùng giờ máy chủ (ISO UTC trong CSDL, hiển thị giờ Việt Nam). Không tin đồng hồ trình duyệt.
-5. **Quyền** kiểm tra ở máy chủ. Không gửi dữ liệu bí mật (mã nguồn, lựa chọn kín, token, log riêng) xuống trình duyệt rồi ẩn bằng giao diện.
-6. **Thao tác của BTC/trọng tài** ghi `audit(actorId, action, { target, reason, data })`.
+| Thành phần           | Trách nhiệm                                                               |
+| -------------------- | ------------------------------------------------------------------------- |
+| apps/web             | React/TypeScript/Vite, TanStack Query, Router, Tailwind, Socket.IO client |
+| apps/api             | NestJS modular monolith: Controller → Service → Repository                |
+| apps/worker          | Node/TypeScript, consumer BullMQ, GameProcessor và GameRunner             |
+| packages/contracts   | Zod schema dùng chung cho HTTP/socket/queue                               |
+| packages/game-engine | Logic demo thuần: bàn cờ, nước đi, kết thúc, mô phỏng theo seed, replay   |
+| packages/ui          | Token navy/cam/bạc, component Radix, trạng thái loading/empty/error       |
+| infra                | PostgreSQL 16.6, Redis 7.4.2 trong Compose                                |
 
-## Thêm một API
-Trong `server/modules/<tên>/index.js`, gắn `handler` cho route có sẵn (hoặc thêm route mới):
-```js
-{ method: 'post', path: '/teams', auth: 'user', desc: 'Tạo đội', handler: (req) => s.createTeam(req.user, req.body) },
-```
-`auth`: `public` | `user` | `referee` (trọng tài hoặc admin) | `admin`. Handler trả về giá trị JSON (hoặc Promise). Bảng tiến độ tự cập nhật.
+Bốn module ở cả API/web: accounts-teams, bots-runner, tournaments, rooms-matches. Module khác gọi service công khai, không import repository. Worker dùng Prisma trực tiếp trong tiến trình riêng; không khởi động Nest/API.
 
-## Thêm migration
-Tạo tệp mới `server/modules/<tên>/migrations/002_mo_ta.sql`. **Không sửa tệp đã chạy** (đã nằm trong bảng `_migrations` trên máy người khác). Cập nhật `scripts/seed-mock.js` nếu đổi bảng mà dữ liệu mẫu dùng.
+## Luồng mô phỏng
 
-## Thêm sự kiện
-Thêm vào `TYPES` trong `server/core/events.js` + mô tả payload trong `docs/CONTRACTS.md` (qua review). Phát: `events.emit(type, payload, { actorId })`; nghe: `events.on(type, fn)` trong `init()` của module.
+1. API đọc phiên từ cookie ký HMAC, lấy lại role/team từ DB, kiểm tra role BTC và demo mode.
+2. POST demo/games kiểm tra requestKey. Một transaction ghi Match, Game, coin/seed, lựa chọn đã khóa, game.created, GameJob, OutboxEvent và audit.
+3. Outbox dispatcher đưa job lên BullMQ với jobId bằng GameJob.id. Redis lỗi thì sự kiện vẫn pending và được phát lại với backoff.
+4. Worker giữ lease DB, tạo RunAttempt, chạy bot mô phỏng theo seed/lựa chọn đã lưu. Mỗi nước và kết quả được commit trước khi publish tín hiệu Redis.
+5. API nhận tín hiệu, đọc event bền vững và phát Socket.IO. Client lấy snapshot khi vào/reconnect, bỏ event cũ/trùng, resync khi thiếu seq/đổi stream. Poll snapshot 5 giây bù cả tín hiệu cuối bị mất.
 
-## Thêm trang
-Trong `web/modules/<tên>.js`: `Arena.page({ path: '/doi', nav: 'Đội', roles: ['student'], title, owner, render(root, params, ctx) { ... } })`.
-Gọi API bằng `Arena.api('/teams/mine')`; dọn interval khi rời trang bằng `ctx.cleanup(fn)`.
+PostgreSQL là nguồn dữ liệu chuẩn; Redis là hàng đợi và tín hiệu. Snapshot đọc bằng transaction RepeatableRead để bàn cờ, seq và kết quả cùng một thời điểm. Một ván có tối đa một GameResult. Lease được kiểm tra theo worker, attempt và hạn; cùng worker cũng không nhận đồng thời hai bản giao của một job. Retry phát lại cùng seed, đối chiếu nước đã lưu, không ghi trùng.
 
-## Quy trình git đề xuất
-- Nhánh chính `main` (sau khi nhóm duyệt khung này). Mỗi người làm trên nhánh `tv1/...`, `tv2/...`; mở PR, review chéo TV1→TV2→TV3→TV4→TV1 (mục 9.6).
-- Mỗi PR chạy `npm test` sạch. Thay `test.todo` bằng test thật khi làm xong chức năng tương ứng.
-- Không commit `data/`, `.env`, token.
+Outbox pending được phát lại khi API chạy; trang BTC có số pending/phát lại, hàng đợi và heartbeat worker. Bộ quét đưa lại job dispatched/running bị kẹt nếu lease hết và hàng đợi không còn giữ job hợp lệ. Không tự tạo seed hay reset khi khởi động.
+
+## Biên bảo mật và phạm vi
+
+Cookie HttpOnly/SameSite=Lax; production cần Secure/HTTPS. HTTP mutation kiểm tra Origin cấu hình; browser và API dùng chung origin qua Vite proxy khi dev. Runtime validation ở HTTP, socket nhận vào, queue và snapshot/event phía client. Public DTO không có source bot hoặc báo cáo riêng tư. Guard server quyết định quyền; ẩn nút chỉ giúp giao diện.
+
+Chỉ có runner mô phỏng tin cậy. Chưa có cô lập CPU/RAM/network cho mã người dùng; không nhận/chạy bot thí sinh. Chưa hỗ trợ triển khai web production, session thật, mở rộng nhiều worker/API hoàn chỉnh hoặc vận hành giải thật. Những phần này cần milestone sau, không suy ra từ demo hoạt động.

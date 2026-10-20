@@ -1,38 +1,51 @@
-# BOT ARENA — khung xây lại (init)
+# Bot Arena — Foundation M0
 
-Bộ khung để 4 thành viên xây lại hệ thống thi bot cờ búa/kéo/bao theo
-`docs/DAC_TA_TONG_HOP_VA_PHAN_CONG_4_NGUOI` (phạm vi: đăng ký → sơ loại → Top 32 → loại trực tiếp → Top 4).
+Bộ khung mới trên nhánh `foundation/fresh-start`, theo [đặc tả M0](docs/Dac_ta_dung_nen_Bot_Arena_M0.docx). Giao diện tiếng Việt, API phân module, PostgreSQL, Redis/BullMQ và worker riêng. Luồng demo chạy thật qua hàng đợi; bot và luật dùng để mô phỏng, chưa dùng tổ chức thi chính thức.
 
-Khung chỉ dựng **phần nền dùng chung (mốc M0)** và **chỗ trống cho từng người**. Nghiệp vụ của mỗi module vẫn là việc của người phụ trách:
-mọi API chưa làm trả `501 Chưa làm (TVx)`, mọi trang giao diện là trang giữ chỗ ghi việc cần làm.
+## Chạy trên máy mới
 
-| Module | Người | Thư mục | Phạm vi |
-|---|---|---|---|
-| `accounts-teams` | TV1 | `server/modules/accounts-teams/` | Tài khoản, hồ sơ, đội 2–4 người, thông báo, chat, trang chủ/hướng dẫn |
-| `bots-runner` | TV2 | `server/modules/bots-runner/` | GitHub/phiên bản bot, engine luật cờ, sandbox + worker, đấu thử |
-| `tournaments` | TV3 | `server/modules/tournaments/` | Cấu hình giải, sơ loại chia mức + Swiss, Top 32, cây 32→4, kết quả, khiếu nại |
-| `rooms-matches` | TV4 | `server/modules/rooms-matches/` | Phòng đấu, trận 5+2 hiệp, chọn kín, tung xu, phòng trực tiếp, replay, khán giả |
+Cần Node **24.20.0**, pnpm **9.15.4**, Docker Compose. Không ghi đè `.env` nếu đã có. PostgreSQL mặc định cổng 5432; đổi `POSTGRES_PORT` và cổng trong `DATABASE_URL` nếu máy đã dùng cổng này (máy hiện tại dùng 55433).
 
-Mỗi module có `README.md` riêng: việc cần làm (theo điểm phân công), hợp đồng cung cấp/sử dụng, quyết định cần chốt.
-
-## Chạy
-Cần Node.js ≥ 22.13 (Python 3.11 cần khi TV2 làm worker).
-```bash
-npm install
-npm run seed        # tạo dữ liệu mẫu (thêm --reset để tạo lại)
-npm start           # http://localhost:3000
-npm test            # kiểm thử lõi + danh sách todo của từng module
-npm run worker      # worker chạy bot (TV2 hiện thực)
+```sh
+corepack enable
+corepack pnpm --version
+pnpm install --frozen-lockfile
+# Chỉ khi chưa có .env: sao chép .env.example thành .env
+docker compose -f infra/compose.yaml up -d
+pnpm db:generate
+pnpm db:migrate
+pnpm db:seed
+pnpm dev
 ```
-Trang chủ hiện **bảng tiến độ**: tự đọc bảng API của 4 module, cho biết API nào đã làm.
 
-**Đăng nhập giả lập** (`#/dev`, chỉ khi phát triển, tự tắt khi `NODE_ENV=production`): chọn một tài khoản mẫu để làm việc khi chức năng đăng nhập của TV1 chưa xong. Tài khoản mẫu: `btc` (admin), `trongtai` (referee), `sv1a`…`sv4b` (4 đội, đội trưởng là `svNa`), `svle` (chưa có đội).
+Mở terminal thứ hai tại gốc repo:
 
-## Tài liệu
-- `docs/ARCHITECTURE.md` — cấu trúc thư mục, quy ước, cách thêm API/migration/sự kiện/trang, quy trình git.
-- `docs/CONTRACTS.md` — hợp đồng giữa các module (mục 9.5 đặc tả): dữ liệu, hàm, sự kiện.
-- `docs/DECISIONS.md` — các quyết định Q01–Q12 cần chốt ở M0.
+```sh
+pnpm dev:worker
+```
 
-## Bản cũ
-Hệ thống trước khi xây lại được gắn tag `legacy-v1` (gồm cả cấu hình Railway/Turso). Chỉ dùng để tham khảo, ví dụ
-`git show legacy-v1:src/game/board.js`; đặc tả yêu cầu xây lại, không chép nguyên.
+Web: <http://localhost:5173>. API: <http://localhost:3100/api/v1/health>. OpenAPI JSON: <http://localhost:3100/api/v1/openapi.json>. Nếu chưa build thư viện dùng chung, chạy `pnpm build` trước khi chạy riêng worker. `pnpm dev` và `pnpm db:seed` tự build thư viện cần thiết.
+
+Trong Đăng nhập mẫu, chọn **BTC Demo** → Khu vực BTC → Tạo ván mô phỏng → Vào phòng đấu. Sinh viên chỉ xem đội/bot của mình; trọng tài xem tình trạng dịch vụ/job; khán giả xem phòng không cần đăng nhập. Tải lại hay reconnect không tạo ván hoặc tung lại xu. Cùng `requestKey` trả lại cùng ván; mã mới tạo ván mới khi phòng rảnh.
+
+Seed chạy lại an toàn, không xóa ván mới hay tạo tài khoản trùng. `pnpm db:reset -- --yes` xóa toàn bộ database được cấu hình; **không cần chạy để sử dụng hoặc cập nhật bộ khung**. Dữ liệu SQLite cũ trong `data/` và bản chụp `deploy-snapshot/` được giữ nguyên, không tự chuyển vào PostgreSQL.
+
+## Kiểm tra
+
+```sh
+pnpm check
+pnpm test:integration
+pnpm exec playwright install chromium
+pnpm test:e2e
+```
+
+Integration cần database đã migrate/seed và Redis. E2E tự mở API, worker, web; dừng bản dev đang chiếm 3100/5173 trước khi chạy. E2E tạo một ván demo để xem lại. CI thực hiện các bước tương tự với PostgreSQL/Redis riêng. Kết quả đã chạy và giới hạn: [VERIFICATION](docs/VERIFICATION.md).
+
+## Bàn giao
+
+- [Kiến trúc và luồng dữ liệu](docs/ARCHITECTURE.md)
+- [Hợp đồng API/socket/queue](docs/CONTRACTS.md)
+- [Quyết định và vấn đề còn chờ chốt](docs/DECISIONS.md)
+- [Phân công và cách làm việc nhóm](docs/TEAM.md)
+
+Đăng nhập thật, thao tác đội, nộp bot/sandbox, Swiss, cây đấu chính thức, khiếu nại và lựa chọn kín còn là placeholder 501 có người phụ trách. Bán kết/chung kết offline nằm ngoài M0. Production từ chối bật demo; worker M0 chỉ chạy demo ở development/test. Chưa có cấu hình triển khai thi thật.

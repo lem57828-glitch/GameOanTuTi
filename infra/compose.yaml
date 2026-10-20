@@ -1,0 +1,30 @@
+# Dịch vụ nền cho phát triển: docker compose -f infra/compose.yaml up -d
+# Phiên bản ảnh được ghim, không dùng nhãn latest.
+name: bot-arena
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_USER: arena
+      POSTGRES_PASSWORD: arena_dev_password
+      POSTGRES_DB: arena
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U arena -d arena']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7.4.2-alpine
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  pgdata:

@@ -1,0 +1,265 @@
+// Schema ban đầu của Bot Arena (đặc tả M0 mục 13). Mỗi nhóm bảng có chủ sở hữu; module khác
+// không ghi trực tiếp bảng của nhóm khác mà đi qua service công khai của module đó.
+// Đổi schema: tạo migration mới (pnpm --filter @arena/api db:migrate:dev --name ...), không sửa migration đã áp dụng.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================ TV1 — accounts-teams
+
+enum Role {
+  student
+  referee
+  admin
+}
+
+model Account {
+  id           String       @id @default(cuid())
+  username     String       @unique
+  email        String       @unique
+  displayName  String
+  role         Role         @default(student)
+  status       String       @default("active") // active | disabled
+  // Đăng nhập thật (TV1, sau M0). Tài khoản mẫu không có mật khẩu.
+  passwordHash String?
+  isDemo       Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  memberships  Membership[]
+}
+
+model Team {
+  id           String       @id @default(cuid())
+  tournamentId String
+  name         String
+  nameKey      String // tên đã chuẩn hóa để chống trùng trong giải
+  captainId    String
+  status       String       @default("draft") // draft | approved | locked | withdrawn
+  isDemo       Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  tournament   Tournament   @relation(fields: [tournamentId], references: [id])
+  members      Membership[]
+  botVersions  BotVersion[]
+
+  @@unique([tournamentId, nameKey])
+}
+
+model Membership {
+  teamId       String
+  accountId    String
+  tournamentId String // lặp lại để ràng buộc: một tài khoản chỉ thuộc một đội trong một giải
+  joinedAt     DateTime @default(now())
+  team         Team     @relation(fields: [teamId], references: [id])
+  account      Account  @relation(fields: [accountId], references: [id])
+
+  @@id([teamId, accountId])
+  @@unique([accountId, tournamentId])
+}
+
+// ============================================================ TV2 — bots-runner
+
+model BotVersion {
+  id         String   @id @default(cuid())
+  teamId     String
+  version    Int
+  label      String
+  sourceHash String // sha256 nội dung mã đã lưu; phiên bản bất biến
+  rulesetId  String
+  status     String   @default("pending") // pending | valid | invalid
+  isDemo     Boolean  @default(false)
+  // Bot mô phỏng tin cậy của hệ thống (M0). Bot sinh viên thật: chưa nhận ở M0.
+  demoPolicy String?
+  createdAt  DateTime @default(now())
+  team       Team     @relation(fields: [teamId], references: [id])
+
+  @@unique([teamId, version])
+}
+
+/// Một job logic cho mỗi requestKey. RunAttempt là từng lần thực thi (retry).
+model GameJob {
+  id         String       @id @default(cuid())
+  requestKey String       @unique
+  gameId     String       @unique
+  roomId     String
+  payload    Json // GameRequest đã kiểm tra
+  status     String       @default("queued") // queued | dispatched | running | succeeded | failed
+  attempts   Int          @default(0)
+  leaseOwner String?
+  leaseUntil DateTime?
+  lastError  String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  runs       RunAttempt[]
+}
+
+model RunAttempt {
+  id         String    @id @default(cuid())
+  jobId      String
+  attemptNo  Int
+  workerId   String
+  status     String    @default("running") // running | succeeded | failed | superseded
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  error      String?
+  job        GameJob   @relation(fields: [jobId], references: [id])
+
+  @@unique([jobId, attemptNo])
+}
+
+// ============================================================ TV3 — tournaments
+// Pairing, Standing, Appeal: thiết kế trong apps/api/src/modules/tournaments/README.md, chưa tạo bảng ở M0
+// để không có cột/endpoint trông như đã hoàn chỉnh.
+
+model Tournament {
+  id        String   @id @default(cuid())
+  name      String
+  status    String   @default("draft") // draft | registration | running | finished
+  isDemo    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  stages    Stage[]
+  teams     Team[]
+}
+
+model Stage {
+  id           String     @id @default(cuid())
+  tournamentId String
+  ord          Int
+  kind         String // qualifier | knockout
+  name         String
+  status       String     @default("planned")
+  tournament   Tournament @relation(fields: [tournamentId], references: [id])
+
+  @@unique([tournamentId, ord])
+}
+
+// ============================================================ TV4 — rooms-matches
+
+model Room {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  title         String
+  isDemo        Boolean  @default(false)
+  status        String   @default("idle") // idle | waiting | running | finished | failed
+  teamAId       String
+  teamBId       String
+  currentGameId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  matches       Match[]
+}
+
+model Match {
+  id        String   @id @default(cuid())
+  roomId    String
+  pairId    String? // PairAssignment của TV3 (chưa có ở M0)
+  status    String   @default("open")
+  createdAt DateTime @default(now())
+  room      Room     @relation(fields: [roomId], references: [id])
+  games     Game[]
+}
+
+model Game {
+  id         String       @id @default(cuid())
+  matchId    String
+  roomId     String
+  no         Int
+  rulesetId  String
+  seed       Int
+  maxPlies   Int
+  status     String       @default("queued") // queued | running | finished | failed
+  // Do máy chủ quyết định một lần, lưu trước khi chạy; tải lại chỉ đọc lại giá trị đã lưu.
+  coinResult Json?
+  blueTeamId String?
+  pinkTeamId String?
+  lastSeq    Int          @default(0) // seq cuối của stream sự kiện của ván
+  createdAt  DateTime     @default(now())
+  finishedAt DateTime?
+  match      Match        @relation(fields: [matchId], references: [id])
+  choices    GameChoice[]
+  result     GameResult?
+  events     GameEvent[]
+
+  @@unique([matchId, no])
+}
+
+/// Lựa chọn đã khóa của mỗi bên trước khi chạy; retry dùng lại đúng lựa chọn này.
+model GameChoice {
+  gameId       String
+  side         String // blue | pink
+  teamId       String
+  botVersionId String
+  extraType    String?
+  lockedAt     DateTime @default(now())
+  game         Game     @relation(fields: [gameId], references: [id])
+
+  @@id([gameId, side])
+}
+
+/// Kết quả có hiệu lực: tối đa MỘT bản ghi cho mỗi ván.
+model GameResult {
+  id            String   @id @default(cuid())
+  gameId        String   @unique
+  attemptId     String
+  requestKey    String
+  winner        String? // blue | pink | null = hòa
+  winnerTeamId  String?
+  reason        String
+  plies         Int
+  piecesBlue    Int
+  piecesPink    Int
+  rulesetId     String
+  resultVersion Int      @default(1)
+  createdAt     DateTime @default(now())
+  game          Game     @relation(fields: [gameId], references: [id])
+}
+
+/// Sự kiện có thứ tự của một ván (stream "game:<gameId>"). Nước đi là duy nhất theo (gameId, ply)
+/// nên một lần chạy lại theo cùng seed không ghi trùng.
+model GameEvent {
+  id         String   @id @default(cuid())
+  gameId     String
+  streamId   String
+  seq        Int
+  type       String
+  ply        Int?
+  payload    Json
+  occurredAt DateTime @default(now())
+  game       Game     @relation(fields: [gameId], references: [id])
+
+  @@unique([streamId, seq])
+  @@unique([gameId, type, ply])
+}
+
+// ============================================================ Dùng chung
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  target    String?
+  reason    String?
+  data      Json?
+  requestId String?
+  createdAt DateTime @default(now())
+}
+
+/// Sự kiện chờ phát sang hàng đợi/tiến trình khác; ghi cùng transaction với thay đổi dữ liệu.
+model OutboxEvent {
+  id           String    @id @default(cuid())
+  type         String
+  aggregateId  String
+  payload      Json
+  status       String    @default("pending") // pending | dispatched
+  attempts     Int       @default(0)
+  availableAt  DateTime  @default(now())
+  lastError    String?
+  createdAt    DateTime  @default(now())
+  dispatchedAt DateTime?
+
+  @@index([status, availableAt])
+}
