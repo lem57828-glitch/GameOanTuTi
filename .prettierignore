@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+pnpm-lock.yaml
+docs/*.docx
+docs/sources
+docs/DAC_TA_*.md
+docs/THE_LE_*.md
+.tools
+data
+deploy-snapshot
+apps/api/prisma/migrations
+playwright-report
+test-results

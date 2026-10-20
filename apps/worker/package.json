@@ -1,0 +1,31 @@
+{
+  "name": "@arena/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "dev": "tsx watch --env-file=../../.env src/main.ts",
+    "start": "node --env-file-if-exists=../../.env dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "db:generate": "prisma generate --schema ../api/prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@arena/contracts": "workspace:*",
+    "@arena/game-engine": "workspace:*",
+    "@prisma/client": "6.4.1",
+    "bullmq": "5.41.7",
+    "ioredis": "5.5.0",
+    "zod": "3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.5",
+    "prisma": "6.4.1",
+    "tsx": "4.19.3",
+    "typescript": "5.8.2",
+    "vitest": "3.0.6"
+  }
+}

@@ -1,24 +1,36 @@
 {
   "name": "bot-arena",
-  "version": "1.0.0",
-  "description": "BOT ARENA - nền tảng cuộc thi bot oẳn tù tì cho sinh viên năm nhất",
   "private": true,
-  "type": "commonjs",
+  "version": "0.1.0",
+  "description": "Bot Arena — website thi bot cờ búa kéo bao (nền M0)",
+  "packageManager": "pnpm@9.15.4",
   "engines": {
-    "node": ">=22.13"
+    "node": ">=24.0.0 <25"
   },
   "scripts": {
-    "start": "node src/server.js",
-    "worker": "node src/worker.js",
-    "demo": "node scripts/demo.js",
-    "create-admin": "node scripts/create-admin.js",
-    "export-data": "node scripts/export-data.js",
-    "import-data": "node scripts/import-data.js",
-    "upload-snapshot": "node scripts/upload-snapshot.js",
-    "test": "node --test"
+    "dev": "pnpm --filter @arena/game-engine... build && pnpm --parallel --filter @arena/api --filter @arena/web dev",
+    "dev:worker": "pnpm --filter @arena/worker dev",
+    "build": "pnpm -r build",
+    "db:generate": "pnpm --filter @arena/api db:generate",
+    "db:migrate": "pnpm --filter @arena/api db:migrate",
+    "db:seed": "pnpm --filter @arena/game-engine... build && pnpm --filter @arena/api db:seed",
+    "db:reset": "pnpm --filter @arena/api db:reset",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:integration": "pnpm --filter @arena/api test:integration",
+    "check": "pnpm format:check && pnpm lint && pnpm build && pnpm typecheck && pnpm test",
+    "test:e2e": "playwright test --config tests/e2e/playwright.config.ts"
   },
-  "dependencies": {
-    "express": "4.21.2",
-    "libsql": "0.5.29"
+  "devDependencies": {
+    "@eslint/js": "9.19.0",
+    "@playwright/test": "1.50.1",
+    "eslint": "9.19.0",
+    "globals": "15.14.0",
+    "prettier": "3.4.2",
+    "typescript": "5.8.2",
+    "typescript-eslint": "8.26.1"
   }
 }

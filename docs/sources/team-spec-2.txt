@@ -1,0 +1,78 @@
+0. Đăng ký và Đăng nhập
+* Tên đăng nhập (không trùng lặp), email (chỉ nhận email đuôi @vnu.edu và đầu là 26), mật khẩu. 
+* Xác minh email khi đăng ký/đăng nhập.
+* Phân biệt tài khoản người chơi (sinh viên), Admin (Ban tổ chức/Trọng tài) và khách.
+1. Quản lý Tài khoản
+* Thông tin cá nhân (Profile): Avatar, tên, email, ID, mã sinh viên (MSV) và Lớp/Khoa (bắt buộc phải hoàn thành trước khi lập đội).
+* Lịch sử thi đấu & Thành tích: Bảng thống kê tổng số trận đã thi đấu, tỉ lệ thắng/thua, lịch sử giải thắng, huy hiệu điện tử.
+* Quản lý Đội:
+   * Tạo đội mới, tham gia đội, mời thành viên qua email/ID.
+   * Tên đội 
+   * Chọn bot 
+   * Phân quyền trong đội (chủ đội, thành viên).
+   * Rời đội.
+   * Link GitHub (nơi lưu trữ mã nguồn bot của đội).
+   * Chat cho nhóm (trao đổi chiến thuật code).
+   * Khóa đội hình: Tự động không cho phép thêm/bớt/thay đổi thành viên sau khi hạn đăng ký giải đấu kết thúc.
+   * Mã mời đội (Team Invite Code / Link): Tạo link hoặc QR code nhanh để chủ đội gửi trực tiếp cho thành viên tham gia.
+   * Mục xem code đã nhận được từ GitHub (hiển thị version code mới nhất hoặc lịch sử commit mà hệ thống đã pull về để chấm).
+2. Quản lý Giải đấu
+* Tạo và cấu hình giải đấu:
+   * Đặt tên giải, logo, banner, mô tả, luật thi đấu, tổng giải thưởng.
+   * Cấu hình hình thức thi đấu: 1v1.
+   * Cấu hình thể thức: Swiss, vòng chọn 32 đội, vòng chung kết.
+   * Cấu hình số lượng đội tối đa, thời gian đăng ký, thời gian diễn ra.
+   * Cấu hình Tiêu chí Phụ: Quy định cách tính điểm phụ khi hòa (hiệu số, đối đầu, chỉ số trung bình cho thể thức Swiss).
+   * Upload / Quản lý Tài liệu Giải đấu: Cho phép BTC đính kèm file PDF/Docs chứa Luật thi đấu, Đặc tả bàn cờ Kéo - Búa - Bao và yêu cầu kỹ thuật.
+   * Fanpage thông báo cho các sinh viên
+* Duyệt đăng ký:
+   * Duyệt hồ sơ các đội đăng ký (tự động hoặc thủ công).
+   * Tính năng check-in trước giờ thi đấu (có thể).
+* Phân nhánh và xếp lịch tự động:
+   * Tự động sắp xếp lịch thi đấu, phân phòng/trận đấu.
+   * Tùy chọn cho Trọng tài/BTC sửa đổi nhánh đấu hoặc lịch đấu trong trường hợp phát sinh sự cố bất ngờ.
+* Tình hình từng đội (Dành cho Admin/BTC kiểm duyệt):
+   * Xem thông tin code của từng đội nhóm (có quyền xóa/disable bot nếu phát hiện code độc hại tấn công máy chủ hoặc cố ý gian lận logic).
+   * Xem thông tin profile từng nhóm có hợp lệ hay không (check MSV, thành viên thuộc VNU).
+* Sandbox cô lập môi trường (Isolated Environment):Chạy code của sinh viên bên trong Docker Container hoặc một môi trường Sandbox cách ly để chặn code độc hại (như xóa file server, đọc file của đội khác, truy cập mạng trái phép).
+* Kiểm tra trùng lặp mã nguồn (Plagiarism Check / MOSS): tích hợp công cụ so khớp code tự động giữa các đội tham gia để phát hiện hành vi copy/clone code của nhau.
+* Xử lý sự cố kỹ thuật (Crash Fallback): Nếu Bot bị đơ/văng lỗi (Exception / Runtime Error) trong lúc thi đấu, hệ thống sẽ tự động ghi nhận log lỗi, gửi riêng cho đội đó biết và tự động cho Bot thực hiện nước đi mặc định (Default Move) hoặc xử thua.
+* Phiên bản Bot chính thức (Active Bot Deployment): Cho phép mỗi đội chọn rõ 1 Commit/Phiên bản code trên GitHub làm "Bot thi đấu chính thức" trước giờ thi đấu. Tránh trường hợp đội vừa thi đấu vừa commit nhầm code lỗi lên GitHub.
+3. Luồng Trận đấu và Cập nhật Kết quả
+* Phòng chờ trận đấu (Match Lobby):
+   * Khung chat riêng cho 2 đội thi đấu.
+   * Nơi hiển thị thông tin phòng đấu hoặc trạng thái trận đấu tự động giữa 2 con bot.
+   * Thông tin 2 nhóm.
+   * Hệ thống giới thiệu luật chơi
+   * Đồng hồ đếm ngược thời gian trận đấu (thời gian bot suy nghĩ/thực hiện nước đi cho mỗi lượt).
+   * log trận đấu
+* Báo cáo kết quả: Mọi người có thể thấy kết quả trận đấu diễn ra (replay trận đấu trên bàn cờ hoặc log nước đi của 2 bot).
+* Trọng tài và Khiếu nại (Admin, Dispute System):
+   * Gọi trọng tài khi có tranh chấp, lỗi server, bot bị treo (timeout) hoặc mất kết nối.
+   * Trọng tài vào xem chat, log trận đấu, bằng chứng và xử thắng/thua hoặc cho đấu lại.
+   * Nhật ký hành động của trọng tài (Audit Log) để đảm bảo tính minh bạch, tránh trọng tài gian lận/xử ép.
+4. Giao diện Cổ vũ và Xem giải đấu (Viewer, Spectator Experience)
+* Bảng nhánh đấu: Giao diện trực quan xem sơ đồ cây kết quả real-time, click vào từng trận để xem chi tiết (xem lại trận đấu/replay con bot đánh Kéo - Búa - Bao trên bàn cờ).
+* Bảng xếp hạng (Leaderboard): Bảng điểm vòng bảng, danh sách đội ghi nhiều điểm nhất.
+* Livestream Integration: Nhúng luồng phát trực tiếp từ YouTube, Facebook vào trang giải đấu (có thể kết hợp caster bình luận các trận đấu bot).
+* Dự đoán: Cho phép khán giả dự đoán đội thắng bằng cách bỏ phiếu (có thể).
+* Bộ lọc Trận đấu: Cho phép khán giả lọc xem theo Vòng đấu, Trận đang diễn ra (Live), Trận sắp tới hoặc Trận đã kết thúc.
+* Tìm kiếm Trận đấu / Đội: Khán giả gõ tên Đội hoặc Sinh viên để nhảy nhanh đến trận đấu của họ trên sơ đồ cây.
+5. Hệ thống giải thưởng và thanh toán
+* Tích hợp cổng thanh toán: Lệ phí tham gia giải đấu (nếu có).
+* Tự động chia giải thưởng: Phân chia tiền thưởng tự động về ví của tuyển thủ/chủ đội dựa trên bảng xếp hạng cuối cùng.
+* Xác nhận rút/nhận tiền: Yêu cầu xác nhận thông tin tài khoản ngân hàng chính chủ của SV trước khi chuyển thưởng.
+6. Thông báo và Tương tác
+* Hệ thống Thông báo: Thông báo đẩy (Web Push) hoặc email bot thông báo khi: có lịch thi đấu mới, đến giờ check-in, có kết quả trận đấu, trọng tài phản hồi…
+* Diễn đàn / Tin tức giải đấu: Đăng tin bài truyền thông, phỏng vấn đội, highlight trận đấu code.
+* Trung tâm thông báo trên web: Biểu tượng quả chuông ở góc màn hình hiển thị danh sách thông báo chưa đọc.
+7. Sandbox Test Bot (Khu vực Test & Đấu thử)
+* Test nội bộ đội: Cho phép các thành viên trong đội chạy thử nghiệm và cho 2 phiên bản bot khác nhau của cùng 1 đội tự đánh với nhau trên bàn cờ Kéo - Búa - Bao để tối ưu chiến thuật (AI/Heuristic).
+* Đấu thử với Bot mẫu: Cung cấp sẵn một vài Bot cơ sở (Baseline Bots) do ban tổ chức cung cấp (ví dụ: Bot ngẫu nhiên, Bot chiến thuật thông minh cơ bản…) để sinh viên bấm nút "Thách đấu" kiểm tra xem code của mình đang đứng ở mức nào trước khi bước vào giải đấu chính thức.
+      8.Hệ thống Chấm Chạy Code Server 
+* Giới hạn Tài nguyên (Resource Limit & Timeout):
+   * Quy định thời gian tối đa cho 1 nước đi của Bot (vd: 1000ms). Nếu bot phản hồi chậm quá thời gian,  Xử thua nước đó hoặc xử thua cả trận (Timeout).
+   * Giới hạn dung lượng bộ nhớ (RAM/CPU) mà Bot được phép sử dụng khi chạy trên server.
+   * Định dạng Log & Replay (Trình phát lại trận đấu):
+   * Hệ thống tự động lưu file log (mã JSON/Text) ghi lại toàn bộ các bước di chuyển Kéo - Búa - Bao của 2 bot trên bàn cờ.
+   * Trình Replay 2D/Canvas: Cho phép xem lại (Play/Pause/Tua nhanh) bất kỳ trận đấu nào đã diễn ra dưới dạng đồ họa trực quan.
