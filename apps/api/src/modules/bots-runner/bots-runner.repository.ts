@@ -61,4 +61,28 @@ export class BotsRunnerRepository {
   touch(id: string) {
     return this.prisma.gameJob.update({ where: { id }, data: { updatedAt: new Date() } });
   }
+
+  createDemoBots(
+    rows: Array<{
+      id: string;
+      teamId: string;
+      label: string;
+      sourceHash: string;
+      rulesetId: string;
+      demoPolicy: string;
+    }>,
+  ) {
+    return this.prisma.botVersion.createMany({
+      data: rows.map((r) => ({ ...r, version: 1, status: 'valid', isDemo: true })),
+      skipDuplicates: true,
+    });
+  }
+
+  demoPolicies(teamIds: string[]) {
+    return this.prisma.botVersion.findMany({
+      where: { teamId: { in: teamIds }, status: 'valid', demoPolicy: { not: null } },
+      orderBy: { version: 'desc' },
+      select: { teamId: true, demoPolicy: true },
+    });
+  }
 }

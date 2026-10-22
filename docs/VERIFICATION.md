@@ -37,4 +37,22 @@ E2E kiểm tra các trang công khai không tràn ngang; sinh viên bị chặn 
 - Khi chủ động ngắt mạng trong E2E, Vite có thể ghi ws proxy ECONNABORTED; client vẫn kết nối lại và đồng bộ thành công.
 - E2E để lại ván mô phỏng trong phòng demo để xem lại; integration chỉ dọn fixture riêng. Dữ liệu SQLite cũ không tự nhập vào PostgreSQL mới.
 
+## Cập nhật 22/10/2026 — TV3 điều hành thi đấu (nhánh `feat/tournaments`)
+
+| Lệnh / nhóm kiểm tra  | Kết quả                                                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| prisma migrate dev    | Qua; thêm migration `tournament_competition`, không sửa migration cũ                                                     |
+| pnpm check            | Qua; API thêm 10 unit test (Swiss, bye, tránh tái đấu, cắt suất/tranh suất, hạt giống, tính điểm 5+2 hiệp và bốc thăm)   |
+| pnpm test:integration | 10/10 qua; thêm `competition.test.ts`                                                                                    |
+| pnpm test:e2e         | 4/4 qua (thêm kiểm tra trang Giải đấu và tab Điều hành/Khiếu nại; cập nhật hai test cũ theo các tab mới của Khu vực BTC) |
+
+`competition.test.ts` kiểm tra:
+
+- Phân quyền: khách xem, sinh viên/trọng tài không lập kế hoạch.
+- Toàn luồng 38 đội: 3 vòng Swiss, mỗi vòng 19 cặp và 0 tái đấu. Thao tác trùng bị từ chối; xác nhận chỉ sau khi đủ kết quả.
+- Chốt mức có tranh suất, ra đủ 32 suất. Hạt giống 1 gặp 32. Vòng 32/16/tứ kết, mỗi cặp 5 hoặc 7 hiệp. Có Top 4.
+- Khiếu nại mở chặn xác nhận. Quyết định "chấp nhận + thi lại" đặt lại kết quả; nhập lại thì `resultVersion` tăng lên 2. Không sửa được kết quả đã chốt. Có audit.
+
+Giới hạn: kết quả đến từ mô phỏng/nhập tay vì TV4 chưa nối phòng đấu. Chưa kiểm thử quy mô 1000 đội.
+
 M0 đủ để nhóm tiếp tục phát triển từng module từ luồng demo; kết quả này không xác nhận hệ thống đủ điều kiện tổ chức giải thật.

@@ -8,12 +8,20 @@ import { AccountsTeamsModule } from './modules/accounts-teams/accounts-teams.mod
 import { SessionMiddleware } from './modules/accounts-teams/session.middleware.js';
 import { BotsRunnerModule } from './modules/bots-runner/bots-runner.module.js';
 import { RoomsMatchesModule } from './modules/rooms-matches/rooms-matches.module.js';
+import { CompetitionModule } from './modules/tournaments/competition.module.js';
 import { TournamentsModule } from './modules/tournaments/tournaments.module.js';
 import { HealthController } from './system/health.controller.js';
 import { OpenApiController } from './system/openapi.js';
 
 @Module({
-  imports: [CoreModule, TournamentsModule, AccountsTeamsModule, BotsRunnerModule, RoomsMatchesModule],
+  imports: [
+    CoreModule,
+    TournamentsModule,
+    AccountsTeamsModule,
+    BotsRunnerModule,
+    RoomsMatchesModule,
+    CompetitionModule,
+  ],
   controllers: [HealthController, OpenApiController],
   providers: [
     { provide: APP_GUARD, useClass: AccessGuard },

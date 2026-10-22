@@ -1,4 +1,4 @@
-// TV3 — giải, giai đoạn, cặp đấu (đặc tả M0 mục 13–14). Ghép cặp Swiss, xếp hạng, khiếu nại chưa làm ở M0.
+// TV3 — giải, giai đoạn, cấu hình, sơ loại Swiss chia mức, cây 32 → 4, khiếu nại.
 import { z } from 'zod';
 import { Id, IsoDateTime } from './common.js';
 
@@ -101,3 +101,188 @@ export const PairAssignment = z.object({
   lockAt: IsoDateTime,
 });
 export type PairAssignment = z.infer<typeof PairAssignment>;
+
+// ---------------------------------------------------------------- Thi đấu: sơ loại chia mức, cây 32 → 4, khiếu nại
+// Tham số còn chờ BTC chốt (Q02–Q05, Q12) dùng giá trị đề xuất; xem docs/TV3_COMPETITION.md.
+
+const Count = z.number().int();
+export const LevelStatus = z.enum(['planned', 'locked', 'running', 'cutting', 'done', 'skipped']);
+export const PairingKind = z.enum(['swiss', 'bye', 'tiebreak', 'knockout']);
+export const KnockoutPhase = z.enum(['r32', 'r16', 'qf']);
+export type KnockoutPhase = z.infer<typeof KnockoutPhase>;
+export const AvoidRematchScope = z.enum(['level', 'qualifier']);
+/** Kết quả một ván/hiệp: 'a' | 'b' thắng, null = hòa. */
+export const GameOutcome = z.enum(['a', 'b']).nullable();
+
+export const ReasonRequest = z.object({ reason: Reason }).strict();
+export const QualifierPlanRequest = z
+  .object({
+    targets: z.array(Count.min(2)).min(1).max(8),
+    rounds: z.union([Count.min(1).max(20), z.array(Count.min(1).max(20)).min(1).max(8)]),
+    names: z.array(z.string().trim().min(1).max(60)).max(8).optional(),
+    avoidRematch: AvoidRematchScope.default('level'),
+    reason: Reason,
+  })
+  .strict();
+export type QualifierPlanRequest = z.infer<typeof QualifierPlanRequest>;
+export const LevelUpdateRequest = z
+  .object({
+    name: z.string().trim().min(1).max(60).optional(),
+    rounds: Count.min(1).max(20).optional(),
+    botLockAt: OptionalTime.optional(),
+    publishAt: OptionalTime.optional(),
+    reason: Reason,
+  })
+  .strict();
+export type LevelUpdateRequest = z.infer<typeof LevelUpdateRequest>;
+export const PairingResultRequest = z
+  .object({ games: z.array(GameOutcome).min(1).max(7), reason: Reason })
+  .strict();
+export type PairingResultRequest = z.infer<typeof PairingResultRequest>;
+export const DemoTeamsRequest = z.object({ count: Count.min(2).max(256) }).strict();
+
+export const AppealRequest = z
+  .object({
+    pairingId: Id,
+    gameNo: Count.min(1).max(7).nullable().default(null),
+    moveNo: Count.min(1).max(2000).nullable().default(null),
+    body: z.string().trim().min(10).max(4000),
+    evidence: z.string().trim().max(2000).nullable().default(null),
+  })
+  .strict();
+export type AppealRequest = z.infer<typeof AppealRequest>;
+export const AppealDecisionRequest = z
+  .object({
+    decision: z.enum(['accept', 'reject']),
+    action: z.enum(['none', 'rerun']).default('none'),
+    reason: z.string().trim().min(5).max(4000),
+  })
+  .strict();
+export type AppealDecisionRequest = z.infer<typeof AppealDecisionRequest>;
+
+const TeamRef = z.object({ id: Id, name: z.string() }).nullable();
+
+export const PairingView = z.object({
+  id: Id,
+  kind: PairingKind,
+  levelOrd: Count.nullable(),
+  round: Count,
+  phase: KnockoutPhase.nullable(),
+  slot: Count.nullable(),
+  teamA: TeamRef,
+  teamB: TeamRef,
+  seedA: Count.nullable(),
+  seedB: Count.nullable(),
+  status: z.enum(['scheduled', 'done', 'cancelled']),
+  result: z.enum(['a', 'b', 'draw']).nullable(),
+  winnerTeamId: Id.nullable(),
+  scoreA: Count,
+  scoreB: Count,
+  games: z.array(GameOutcome),
+  decidedBy: z.string().nullable(),
+  source: z.string().nullable(),
+  resultVersion: Count,
+  confirmed: z.boolean(),
+  openAppeals: Count,
+  updatedAt: IsoDateTime,
+});
+export type PairingView = z.infer<typeof PairingView>;
+
+export const StandingRowView = z.object({
+  rank: Count,
+  teamId: Id,
+  name: z.string(),
+  points: Count,
+  played: Count,
+  w: Count,
+  d: Count,
+  l: Count,
+  byes: Count,
+  diff: Count,
+  oppAvg: z.number(),
+  withdrawn: z.boolean(),
+  /** Nhãn chữ luôn đi kèm màu: zone (trong vùng đi tiếp tạm), maybe (bằng điểm ở ranh giới),
+   *  contest (đang tranh suất), advanced, eliminated, withdrawn. */
+  state: z.enum(['zone', 'maybe', 'contest', 'advanced', 'eliminated', 'withdrawn']).nullable(),
+});
+export type StandingRowView = z.infer<typeof StandingRowView>;
+
+export const LevelView = z.object({
+  id: Id,
+  ord: Count,
+  name: z.string(),
+  status: LevelStatus,
+  teamTarget: Count,
+  rounds: Count,
+  roundsPlayed: Count,
+  teamsIn: Count.nullable(),
+  qualifiedCount: Count.nullable(),
+  botLockAt: OptionalTime,
+  publishAt: OptionalTime,
+  /** Đã quá giờ công bố mà mức chưa chốt → thông báo chậm kết quả. */
+  late: z.boolean(),
+  /** Đã tới mốc khóa bot (giờ máy chủ). */
+  lockDue: z.boolean(),
+  roundsDetail: z.array(
+    z.object({ round: Count, total: Count, done: Count, confirmed: z.boolean(), openAppeals: Count }),
+  ),
+  contest: z.object({ group: z.array(Id), slots: Count, step: Count }).nullable(),
+});
+export type LevelView = z.infer<typeof LevelView>;
+
+export const StandingsView = z.object({
+  level: LevelView.nullable(),
+  provisional: z.boolean(),
+  rows: z.array(StandingRowView),
+});
+export type StandingsView = z.infer<typeof StandingsView>;
+
+export const BracketView = z.array(
+  z.object({
+    phase: KnockoutPhase,
+    title: z.string(),
+    status: z.enum(['pending', 'running', 'finished', 'done']),
+    pairings: z.array(PairingView),
+  }),
+);
+export type BracketView = z.infer<typeof BracketView>;
+
+export const CompetitionView = z.object({
+  tournamentId: Id,
+  avoidRematch: AvoidRematchScope,
+  eligibleTeams: Count,
+  suggestedTargets: z.array(Count),
+  levels: z.array(LevelView),
+  /** Bước BTC nên làm tiếp theo (để giao diện hiển thị đúng một nút chính). */
+  next: z.object({ action: z.string(), label: z.string(), blockedReason: z.string().nullable() }),
+  bracket: BracketView,
+  top4: z.array(z.object({ id: Id, name: z.string() })).nullable(),
+  pending: z.array(PairingView),
+  serverTime: IsoDateTime,
+});
+export type CompetitionView = z.infer<typeof CompetitionView>;
+
+export const AppealView = z.object({
+  id: Id,
+  pairing: PairingView,
+  team: z.object({ id: Id, name: z.string() }),
+  accountId: Id,
+  gameNo: Count.nullable(),
+  moveNo: Count.nullable(),
+  body: z.string(),
+  evidence: z.string().nullable(),
+  status: z.enum(['open', 'accepted', 'rejected']),
+  action: z.string().nullable(),
+  decision: z.string().nullable(),
+  decidedById: Id.nullable(),
+  decidedAt: OptionalTime,
+  createdAt: IsoDateTime,
+});
+export type AppealView = z.infer<typeof AppealView>;
+
+/** Cặp đấu của đội người dùng trong giải hiện tại, kèm quyền khiếu nại. */
+export const MyPairingView = PairingView.extend({
+  canAppeal: z.boolean(),
+  appealBlockedReason: z.string().nullable(),
+});
+export type MyPairingView = z.infer<typeof MyPairingView>;

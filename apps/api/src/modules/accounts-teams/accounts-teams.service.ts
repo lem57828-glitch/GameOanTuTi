@@ -65,4 +65,30 @@ export class AccountsTeamsService {
     const rows = await this.repo.findTeamNames(ids);
     return new Map(rows.map((r) => [r.id, r.name]));
   }
+
+  /** Đội của một giải (cho TV3 ghép cặp/xếp hạng). Đội withdrawn vẫn trả về để giữ lịch sử điểm. */
+  async tournamentTeams(tournamentId: string) {
+    return this.repo.listTournamentTeams(tournamentId);
+  }
+
+  /**
+   * DEMO: tạo thêm `count` đội mẫu (đã duyệt, không có tài khoản đăng nhập) để thử sơ loại/cây đấu với nhiều đội.
+   * Chỉ gọi từ endpoint có @DemoOnly.
+   */
+  async createDemoTeams(tournamentId: string, count: number): Promise<string[]> {
+    const start = (await this.repo.countTeams(tournamentId)) + 1;
+    const rows = Array.from({ length: count }, (_, i) => {
+      const no = String(start + i).padStart(3, '0');
+      const name = `Đội mô phỏng ${no}`;
+      return {
+        id: `team_sim_${tournamentId}_${no}`,
+        tournamentId,
+        name,
+        nameKey: `doi mo phong ${no}`,
+        captainId: 'acc_none',
+      };
+    });
+    await this.repo.createTeams(rows);
+    return rows.map((r) => r.id);
+  }
 }

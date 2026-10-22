@@ -1,4 +1,6 @@
 // TV2 — interface công khai của module bot & runner: phiên bản bot, job chạy ván, hàng đợi, sức khỏe worker.
+import { createHash } from 'node:crypto';
+import { DEMO_RULESET_ID } from '@arena/game-engine';
 import { Inject, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import type { GameJob } from '@prisma/client';
 import {
@@ -91,6 +93,32 @@ export class BotsRunnerService implements OnApplicationBootstrap, OnModuleDestro
   async pickDemoBot(teamId: string, tx?: Tx): Promise<{ id: string; policy: string } | null> {
     const b = await this.repo.latestDemoBot(teamId, tx);
     return b?.demoPolicy ? { id: b.id, policy: b.demoPolicy } : null;
+  }
+
+  /** Chính sách bot mô phỏng mới nhất của từng đội (chỉ dùng cho mô phỏng demo). */
+  async demoPolicies(teamIds: string[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    for (const r of await this.repo.demoPolicies(teamIds))
+      if (!out.has(r.teamId) && r.demoPolicy) out.set(r.teamId, r.demoPolicy);
+    return out;
+  }
+
+  /** DEMO: gắn một bot mô phỏng hợp lệ cho mỗi đội mẫu mới tạo (chính sách xoay vòng random/greedy/rusher). */
+  async createDemoBots(teamIds: string[]): Promise<void> {
+    const policies = ['random', 'greedy', 'rusher'];
+    await this.repo.createDemoBots(
+      teamIds.map((teamId, i) => {
+        const policy = policies[i % policies.length]!;
+        return {
+          id: `bot_${teamId}`,
+          teamId,
+          label: `Bot mô phỏng (${policy})`,
+          sourceHash: createHash('sha256').update(`demo-bot:${teamId}:${policy}`).digest('hex'),
+          rulesetId: DEMO_RULESET_ID,
+          demoPolicy: policy,
+        };
+      }),
+    );
   }
 
   // ------------------------------------------------------------ Job

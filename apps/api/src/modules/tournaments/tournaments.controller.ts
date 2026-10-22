@@ -8,8 +8,7 @@ import {
   Id,
   type SessionUser,
 } from '@arena/contracts';
-import { Authenticated, Roles, CurrentUser } from '../../core/auth/guards.js';
-import { notImplemented } from '../../core/errors.js';
+import { Roles, CurrentUser } from '../../core/auth/guards.js';
 import { ok, parse, type ArenaRequest } from '../../core/http.js';
 import { TournamentsService } from './tournaments.service.js';
 
@@ -152,24 +151,5 @@ export class TournamentsController {
   @Roles('admin', 'referee')
   async history(@Param('id') id: string) {
     return ok(await this.tournaments.history(parse(Id, id)));
-  }
-
-  // ---- Nghiệp vụ thi đấu triển khai ở bước sau.
-
-  @Get('tournaments/:id/standings')
-  standings(@Param('id') _id: string) {
-    notImplemented('Bảng xếp hạng sơ loại', 'TV3');
-  }
-
-  @Post('tournaments/:id/stages/:stageId/pairings')
-  @Roles('admin')
-  pair(@Param('id') _id: string) {
-    notImplemented('Ghép cặp Swiss / loại trực tiếp', 'TV3');
-  }
-
-  @Post('appeals')
-  @Authenticated()
-  appeal() {
-    notImplemented('Gửi khiếu nại', 'TV3');
   }
 }

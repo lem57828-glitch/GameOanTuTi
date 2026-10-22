@@ -1,9 +1,27 @@
 # tournaments (TV3)
 
-Đã có lịch và quy trình duyệt cấu hình giải/stage, kiểm tra revision, công bố và audit. Chi tiết API, trạng thái, điều kiện và bàn giao: [TV3_CONFIGURATION.md](../../../../../docs/TV3_CONFIGURATION.md). Cấu hình đã công bố được đóng băng; ghép cặp/tính điểm/chốt kết quả vẫn chưa triển khai.
+Owner: TV3. Dữ liệu: Tournament, Stage, QualifierLevel, Pairing, BracketRound, Appeal.
 
-Owner: TV3. Du lieu: Tournament, Stage.
+- Cấu hình và công bố giải: [TV3_CONFIGURATION.md](../../../../../docs/TV3_CONFIGURATION.md) (`tournaments.service.ts`, `configuration.ts`).
+- Điều hành thi đấu — sơ loại chia mức + Swiss, tranh suất, cây 32 → 4, khiếu nại: [TV3_COMPETITION.md](../../../../../docs/TV3_COMPETITION.md).
+  - `swiss.ts`, `scoring.ts`: hàm thuần, có test đơn vị.
+  - `competition.service.ts`: điều phối, có transaction và audit.
+  - `competition.controller.ts`: HTTP.
+  - `competition.module.ts`: module riêng để dùng service công khai của TV1/TV2 mà không tạo vòng phụ thuộc.
 
-Interface hien co: current, currentId, pairAssignments (501); GET tournaments/current. Module khac chi goi service cong khai, khong import repository. Controller kiem tra HTTP/quyen, service nghiep vu, repository truy cap Prisma.
+Interface cho module khác:
 
-Viec sau M0: Swiss, standings/tie-break, tranh suat Top 32, cay 32 -> 4, khieu nai/chot ket qua; Pairing/Standing/Appeal chua co schema. Endpoint chua lam tra 501 FEATURE_NOT_IMPLEMENTED kem owner; khong gia thanh cong. Contracts nam o packages/contracts. Xem docs/TEAM.md va docs/DECISIONS.md truoc khi them luat chinh thuc.
+- `TournamentsService.current/currentId`.
+- `CompetitionService.pairAssignments`: TV4 lấy cặp chờ thi.
+- `CompetitionService.recordResult`: TV4 trả kết quả trận.
+
+Module khác không ghi trực tiếp các bảng trên.
+
+Chưa làm:
+
+- Nối kết quả trận thật từ TV4.
+- Thông báo cho đội.
+- Giao diện rút đội.
+- Bán kết/chung kết.
+
+Các tham số Q02–Q05, Q12 đang dùng giá trị đề xuất, xem docs/DECISIONS.md.

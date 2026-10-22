@@ -112,8 +112,7 @@ model RunAttempt {
 }
 
 // ============================================================ TV3 — tournaments
-// Pairing, Standing, Appeal: thiết kế trong apps/api/src/modules/tournaments/README.md, chưa tạo bảng ở M0
-// để không có cột/endpoint trông như đã hoàn chỉnh.
+// Bảng xếp hạng (Standing) tính lại từ Pairing đã có kết quả, không lưu bản sao có thể lệch.
 
 model Tournament {
   id                   String    @id @default(cuid())
@@ -127,9 +126,16 @@ model Tournament {
   registrationClosesAt DateTime?
   teamLockAt           DateTime?
   botLockAt            DateTime?
+  /// Phạm vi tránh tái đấu Swiss: level (trong một mức) | qualifier (toàn bộ sơ loại). Q03 chờ BTC chốt.
+  avoidRematch         String    @default("level")
+  /// Danh sách 4 đội vào bán kết sau khi chốt tứ kết (JSON mảng teamId).
+  top4                 Json?
   createdAt            DateTime  @default(now())
   stages               Stage[]
   teams                Team[]
+  levels               QualifierLevel[]
+  pairings             Pairing[]
+  bracketRounds        BracketRound[]
 }
 
 model Stage {
@@ -146,6 +152,104 @@ model Stage {
   tournament   Tournament @relation(fields: [tournamentId], references: [id])
 
   @@unique([tournamentId, ord])
+}
+
+/// Một mức sơ loại (ví dụ 1000 → 500 → 200 → 100 → 32). Swiss chạy trong từng mức; điểm đặt lại khi sang mức mới.
+model QualifierLevel {
+  id           String     @id @default(cuid())
+  tournamentId String
+  ord          Int
+  name         String
+  teamTarget   Int
+  rounds       Int
+  status       String     @default("planned") // planned | locked | running | cutting | done | skipped
+  seed         Int?
+  teamsIn      Int?
+  /// Đội tham gia mức (JSON mảng teamId), chốt khi khóa mức.
+  entrants     Json?
+  /// Trạng thái tranh suất ở ranh giới cắt (JSON).
+  cutState     Json?
+  /// Đội đi tiếp sau khi chốt mức (JSON mảng teamId, theo thứ hạng).
+  qualified    Json?
+  botLockAt    DateTime?
+  publishAt    DateTime?
+  lockedAt     DateTime?
+  finishedAt   DateTime?
+  tournament   Tournament @relation(fields: [tournamentId], references: [id])
+  pairings     Pairing[]
+
+  @@unique([tournamentId, ord])
+}
+
+/// Vòng loại trực tiếp của cây 32 → 4: r32 | r16 | qf.
+model BracketRound {
+  id           String     @id @default(cuid())
+  tournamentId String
+  phase        String
+  ord          Int
+  status       String     @default("pending") // pending | running | finished | done
+  startedAt    DateTime?
+  confirmedAt  DateTime?
+  tournament   Tournament @relation(fields: [tournamentId], references: [id])
+
+  @@unique([tournamentId, phase])
+}
+
+/// Cặp đấu do TV3 tạo (PairAssignment). TV4 mở trận theo cặp và trả MatchCompleted; TV3 chốt chính thức.
+model Pairing {
+  id            String          @id @default(cuid())
+  tournamentId  String
+  kind          String // swiss | bye | tiebreak | knockout
+  levelId       String?
+  round         Int // vòng Swiss; bước tranh suất (1000 + bước); số thứ tự vòng loại trực tiếp
+  phase         String? // r32 | r16 | qf
+  slot          Int?
+  teamAId       String?
+  teamBId       String?
+  seedA         Int?
+  seedB         Int?
+  status        String          @default("scheduled") // scheduled | done | cancelled
+  seed          Int
+  result        String? // a | b | draw
+  winnerTeamId  String?
+  scoreA        Int             @default(0)
+  scoreB        Int             @default(0)
+  /// Kết quả từng ván/hiệp (JSON) để đối soát.
+  games         Json?
+  decidedBy     String? // score | extra | lots | bye | walkover
+  source        String? // simulation | manual | match
+  resultVersion Int             @default(0)
+  confirmed     Boolean         @default(false)
+  matchId       String? // Match của TV4 khi đã nối phòng đấu
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  tournament    Tournament      @relation(fields: [tournamentId], references: [id])
+  level         QualifierLevel? @relation(fields: [levelId], references: [id])
+  appeals       Appeal[]
+
+  @@index([tournamentId, kind, levelId, round])
+  @@index([tournamentId, phase])
+}
+
+/// Khiếu nại chính thức của đội trưởng về một cặp đấu chưa chốt. Khiếu nại mở chặn việc chốt vòng/mức.
+model Appeal {
+  id          String    @id @default(cuid())
+  pairingId   String
+  teamId      String
+  accountId   String
+  gameNo      Int?
+  moveNo      Int?
+  body        String
+  evidence    String?
+  status      String    @default("open") // open | accepted | rejected
+  action      String? // none | rerun
+  decision    String?
+  decidedById String?
+  decidedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  pairing     Pairing   @relation(fields: [pairingId], references: [id])
+
+  @@index([status])
 }
 
 // ============================================================ TV4 — rooms-matches

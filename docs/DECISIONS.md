@@ -23,4 +23,14 @@ Cây nhị phân 32 đội, ba lượt 32 → 16 → 8 → 4, cặp đấu có p
 | Quyền trọng tài/BTC khi pause/rerun, audit/revision kết quả, xử lý khiếu nại đang mở               | TV3 + TV4          |
 | Production HTTPS, secret/session, lưu source/replay, backup, nhiều API/worker, quan sát vận hành   | Cả nhóm            |
 
-Không tự chọn mặc định cho các câu hỏi này để biến demo thành giải thật. Thay đổi ruleset/hợp đồng phải có test và đồng thuận của module liên quan.
+**Cập nhật 22/10/2026 (TV3):** để luồng thi đấu chạy được, phần sơ loại/cây đấu đang dùng **giá trị đề xuất**, chưa phải luật chốt:
+
+- **Q02:** trận sơ loại 2 ván đổi màu.
+- **Q03:** bye = 3 điểm; tránh tái đấu trong từng mức (BTC đổi được sang toàn sơ loại); số vòng do BTC nhập cho từng mức.
+- **Q04:** tie-break điểm → ĐTB đối thủ → hiệu số ván; bằng hoàn toàn ở vạch cắt thì tranh suất (≤ 10 đội loại trực tiếp, > 10 đội thêm một vòng), trận tranh suất 2 ván + 2 ván phụ + bốc thăm.
+- **Q05:** dưới 32 đội thì đi tiếp do vắng đối thủ.
+- **Q12:** khiếu nại chỉ do đội trưởng gửi, trước khi chốt.
+
+Chi tiết và chỗ sửa: [TV3_COMPETITION.md](TV3_COMPETITION.md).
+
+Không tự chọn mặc định cho các câu hỏi khác để biến demo thành giải thật. Thay đổi ruleset/hợp đồng phải có test và đồng thuận của module liên quan.

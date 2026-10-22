@@ -4,6 +4,7 @@ test('BTC configures and reviews stage schedules with a visible audit trail', as
   await page.goto('/login');
   await page.getByRole('button', { name: 'Đăng nhập bằng BTC Demo', exact: true }).click();
   await expect(page).toHaveURL(/\/admin$/);
+  await page.getByRole('tab', { name: 'Cấu hình giải', exact: true }).click();
   const name = `Kiểm thử lịch ${Date.now()}`;
   await page.getByLabel('Tên giải mới').fill(name);
   await page.getByRole('button', { name: 'Tạo giải nháp', exact: true }).click();
@@ -42,6 +43,7 @@ test('BTC configures and reviews stage schedules with a visible audit trail', as
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByRole('button', { name: 'Hủy', exact: true }).click();
   await page.reload();
+  await page.getByRole('tab', { name: 'Cấu hình giải', exact: true }).click();
   await expect(page.getByText('stage.config.confirm', { exact: true }).first()).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -75,6 +77,7 @@ test('admin creates a real queued simulation; spectators reload and reconnect wi
   await expect
     .poll(async () => (await (await page.request.get('/api/v1/health')).json()).data.workerAlive)
     .toBe(true);
+  await page.getByRole('tab', { name: 'Dịch vụ & ván demo', exact: true }).click();
   await expect(page.getByText('Chưa sẵn sàng')).toHaveCount(0);
   const key = `e2e:${Date.now()}`;
   await page.getByLabel('Mã yêu cầu (requestKey)').fill(key);
@@ -121,4 +124,22 @@ test('admin creates a real queued simulation; spectators reload and reconnect wi
   await page.goto('/');
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: 'test-results/home-desktop.png', fullPage: true });
+});
+
+test('khách xem bảng xếp hạng/nhánh đấu; BTC thấy bảng điều hành thi đấu và khiếu nại', async ({ page }) => {
+  await page.goto('/tournament');
+  await page.getByRole('tab', { name: 'Bảng xếp hạng', exact: true }).click();
+  await expect(page.getByRole('tabpanel')).toBeVisible();
+  await page.getByRole('tab', { name: 'Nhánh 32 → 4', exact: true }).click();
+  await expect(page.getByRole('tabpanel')).toBeVisible();
+  const forbidden = await page.request.post('/api/v1/appeals', {
+    data: { pairingId: 'x', body: 'Không đăng nhập thì không gửi được' },
+  });
+  expect(forbidden.status()).toBe(401);
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Đăng nhập bằng BTC Demo', exact: true }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page.getByText('Bước tiếp theo')).toBeVisible();
+  await page.getByRole('tab', { name: 'Khiếu nại', exact: true }).click();
+  await expect(page.getByText('Khiếu nại chính thức')).toBeVisible();
 });

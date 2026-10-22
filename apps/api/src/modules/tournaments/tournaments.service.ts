@@ -6,10 +6,9 @@ import {
   type UpdateTournamentRequest,
   type StageConfigurationRequest,
   type ConfigurationActionRequest,
-  type PairAssignment,
 } from '@arena/contracts';
 import { AuditService } from '../../core/audit.service.js';
-import { conflict, notImplemented, notFound } from '../../core/errors.js';
+import { conflict, notFound } from '../../core/errors.js';
 import type { Tx } from '../../core/prisma.service.js';
 import { nextConfigurationStatus, registrationPhase, validateTimeline } from './configuration.js';
 import { TournamentsRepository, type TournamentRow } from './tournaments.repository.js';
@@ -214,8 +213,5 @@ export class TournamentsService {
   async history(id: string) {
     if (!(await this.repo.list()).some((t) => t.id === id)) throw notFound('giải đấu');
     return this.audit.forTarget(id);
-  }
-  pairAssignments(_stageId: string): Promise<PairAssignment[]> {
-    notImplemented('Ghép cặp và mở trận theo giai đoạn', 'TV3');
   }
 }

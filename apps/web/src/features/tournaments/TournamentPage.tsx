@@ -2,7 +2,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Badge, Card, CardHeader, EmptyState, Spinner, Tabs } from '@arena/ui';
 import type { TournamentView } from '@arena/contracts';
+import type { CompetitionView } from '@arena/contracts';
 import { api, isApiError } from '../../lib/api';
+import { BracketPanel, StandingsPanel } from './competition-ui';
+import { MyPairings } from './MyPairings';
 
 const STAGE_STATUS: Record<string, string> = {
   planned: 'Dự kiến',
@@ -19,6 +22,12 @@ export function TournamentPage() {
     refetchInterval: 30000,
   });
   const t = q.data;
+  const comp = useQuery({
+    queryKey: ['competition', t?.id],
+    queryFn: () => api<CompetitionView>(`/tournaments/${t!.id}/competition`),
+    enabled: !!t,
+    refetchInterval: 10_000,
+  });
   return (
     <div className="flex flex-col gap-6">
       <header>
@@ -121,22 +130,17 @@ export function TournamentPage() {
             {
               value: 'standings',
               label: 'Bảng xếp hạng',
-              content: (
-                <EmptyState
-                  icon="≡"
-                  title="Chưa có bảng xếp hạng"
-                  description="Tính điểm và xếp hạng sơ loại chưa được triển khai ở M0 (TV3). API trả 501."
-                />
-              ),
+              content: <StandingsPanel tournamentId={t.id} levels={comp.data?.levels ?? []} />,
             },
             {
-              value: 'results',
-              label: 'Kết quả mẫu',
-              content: (
-                <Alert tone="info" title="Kết quả ván mô phỏng nằm ở phòng đấu mẫu">
-                  Các ván do BTC tạo ở khu vực BTC chỉ dùng để kiểm tra hệ thống, không tính vào giải.
-                </Alert>
-              ),
+              value: 'bracket',
+              label: 'Nhánh 32 → 4',
+              content: <BracketPanel bracket={comp.data?.bracket ?? []} top4={comp.data?.top4 ?? null} />,
+            },
+            {
+              value: 'mine',
+              label: 'Trận của đội tôi',
+              content: <MyPairings tournamentId={t.id} />,
             },
           ]}
         />
