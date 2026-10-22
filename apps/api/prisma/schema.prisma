@@ -69,6 +69,10 @@ model BotVersion {
   version    Int
   label      String
   sourceHash String // sha256 nội dung mã đã lưu; phiên bản bất biến
+  sourceCode String? // Toàn văn mã nguồn bot Python được lưu bất biến
+  submittedById String? // ID người nộp
+  duplicateOfId String? // ID của bot bị trùng lặp mã nguồn (nếu có)
+  validationLog String? // Nhật ký kiểm tra tính hợp lệ sơ bộ
   rulesetId  String
   status     String   @default("pending") // pending | valid | invalid
   isDemo     Boolean  @default(false)
@@ -76,8 +80,30 @@ model BotVersion {
   demoPolicy String?
   createdAt  DateTime @default(now())
   team       Team     @relation(fields: [teamId], references: [id])
+  testRuns   BotTestRun[]
 
   @@unique([teamId, version])
+}
+
+/// TV2 - Gói việc 4: Lưu kết quả đấu thử (Practice Match) trong Sandbox
+model BotTestRun {
+  id             String      @id @default(cuid())
+  botVersionId   String
+  mySide         String      @default("blue") // blue | pink
+  opponentType   String      // demo | bot
+  opponentTarget String      // random, greedy, rusher hoặc botVersionId
+  status         String      @default("queued") // queued | running | succeeded | failed
+  winner         String?     // blue | pink | null
+  reason         String?     // goal | eliminate | repetition | max_plies | errors | crash | timeout
+  plies          Int?
+  piecesBlue     Int?
+  piecesPink     Int?
+  events         Json?       // Mảng GameEvent[] bàn giao TV4 replay
+  error          String?
+  logs           String?
+  createdAt      DateTime    @default(now())
+  finishedAt     DateTime?
+  botVersion     BotVersion  @relation(fields: [botVersionId], references: [id])
 }
 
 /// Một job logic cho mỗi requestKey. RunAttempt là từng lần thực thi (retry).
