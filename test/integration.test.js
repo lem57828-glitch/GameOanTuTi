@@ -173,6 +173,7 @@ function makeTeam(i, code) {
   const uid = Number(db.run('INSERT INTO users (email, name, password_hash) VALUES (?,?,?)', `u${i}@t.local`, `U${i}`, pw).lastInsertRowid);
   const tid = Number(db.run('INSERT INTO teams (name, captain_id, invite_code) VALUES (?,?,?)', `T${i}`, uid, `C${i}`).lastInsertRowid);
   db.run('UPDATE users SET team_id = ? WHERE id = ?', tid, uid);
+  db.run('INSERT INTO users (email, name, password_hash, team_id) VALUES (?,?,?,?)', `member${i}@t.local`, `Member ${i}`, pw, tid);
   const team = db.get('SELECT * FROM teams WHERE id = ?', tid);
   const sid = subs.submit({ user: { id: uid }, team, filename: 'b.py', code });
   return { uid, tid, sid, file: db.get('SELECT path FROM submissions WHERE id = ?', sid).path };
@@ -403,19 +404,24 @@ test('đăng ký/đăng nhập: chỉ đếm lần sai, nhiều người cùng I
   const server = express().use('/api', require('../src/routes/api')).listen(0);
   const base = `http://127.0.0.1:${server.address().port}/api`;
   const post = (p, body, cookie) => fetch(`${base}${p}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(cookie ? { cookie } : {}) }, body: JSON.stringify(body) });
+  const mail = require('../src/services/mail');
+  const originalSend = mail.sendVerification;
+  let code;
+  mail.sendVerification = async (_email, value) => { code = value; };
   try {
     // Đăng ký: tên tiếng Việt, email không phân biệt hoa thường, tự đăng nhập sau khi đăng ký.
-    const r = await post('/auth/register', { email: 'Lan.Anh@Truong.edu.vn', name: 'Trần Lan Anh', password: 'matkhau123' });
+    assert.equal((await post('/auth/register/code', { email: '23456789@VNU.edu.vn' })).status, 200);
+    const r = await post('/auth/register', { email: '23456789@VNU.edu.vn', name: 'Trần Lan Anh', password: 'matkhau123', code });
     assert.equal(r.status, 200);
     const me = await (await fetch(`${base}/me`, { headers: { cookie: r.headers.get('set-cookie').split(';')[0] } })).json();
     assert.equal(me.user.name, 'Trần Lan Anh');
-    assert.equal(me.user.email, 'lan.anh@truong.edu.vn');
-    assert.equal((await post('/auth/register', { email: 'LAN.ANH@truong.edu.vn', name: 'X Y', password: 'matkhau123' })).status, 409);
+    assert.equal(me.user.email, '23456789@vnu.edu.vn');
+    assert.equal((await post('/auth/register', { email: '23456789@vnu.edu.vn', name: 'X Y', password: 'matkhau123', code })).status, 409);
     assert.equal((await post('/auth/register', { email: 'x@y.vn', name: 'X Y', password: 'ngan' })).status, 400);
     assert.equal((await post('/auth/register', { email: 'khong-phai-email', name: 'X Y', password: 'matkhau123' })).status, 400);
 
     // 30 lần đăng nhập đúng liên tiếp từ cùng một IP (như cả lớp dùng chung Wi-Fi): không bị chặn.
-    for (let i = 0; i < 30; i++) assert.equal((await post('/auth/login', { email: 'lan.anh@truong.edu.vn', password: 'matkhau123' })).status, 200);
+    for (let i = 0; i < 30; i++) assert.equal((await post('/auth/login', { email: '23456789@vnu.edu.vn', password: 'matkhau123' })).status, 200);
 
     // Sai 5 lần thì khóa riêng tài khoản đó, kể cả khi lần sau nhập đúng; tài khoản khác không bị ảnh hưởng.
     for (let i = 0; i < 5; i++) assert.equal((await post('/auth/login', { email: 'u1@t.local', password: 'sai-mat-khau' })).status, 401);
@@ -426,6 +432,7 @@ test('đăng ký/đăng nhập: chỉ đếm lần sai, nhiều người cùng I
     const lo = await post('/auth/logout', {});
     assert.match(lo.headers.get('set-cookie'), /Max-Age=0/);
   } finally {
+    mail.sendVerification = originalSend;
     server.close();
   }
 });
@@ -645,7 +652,7 @@ test('admin tạo tài khoản mẫu: phân quyền, đội và bot hợp lệ, 
     const student = await login('u2@t.local');
     assert.equal((await create(null, request)).status, 403);
     assert.equal((await create(student, request)).status, 403);
-    for (const invalid of [{ count: 0 }, { count: 101 }, { count: 1.5 }, { members: 4 }, { password: 'short' }, { mode: 'admin' }, { withBots: 'true' }]) {
+    for (const invalid of [{ count: 0 }, { count: 101 }, { count: 1.5 }, { members: 1 }, { members: 5 }, { password: 'short' }, { mode: 'admin' }, { withBots: 'true' }]) {
       assert.equal((await create(admin, { ...request, ...invalid })).status, 400);
     }
     assert.equal(db.get('SELECT COUNT(*) AS n FROM users').n, before);

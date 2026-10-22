@@ -64,7 +64,7 @@ Kiểm thử: `npm test` (50 ca: luật bàn cờ, ghép Swiss, tranh suất ran
 | Khu vực | Đã làm |
 |---|---|
 | Trang chủ & hướng dẫn | Nút Nộp bot / Chơi thử, quỹ thưởng, lịch giai đoạn, thông báo, thể lệ, giao diện bot, tải bot mẫu |
-| Tài khoản & đội | Đăng ký, đăng nhập, lập đội 1-3 người, mã mời, chuyển đội trưởng, mời rời; khóa đổi thành viên khi Swiss khóa |
+| Tài khoản & đội | Đăng ký, đăng nhập, lập đội 2-4 người, mã mời, chuyển đội trưởng, mời rời; khóa đổi thành viên khi Swiss khóa |
 | Bot của tôi | Tải/kéo thả hoặc dán mã, kiểm thử cách ly, xem lỗi + log + mã, lưu phiên bản (SHA-256, người nộp, giờ máy chủ, môi trường), đội trưởng chọn bản thi |
 | Chơi thử | Người đánh cờ với 4 bot mẫu, chọn màu, máy chủ kiểm tra mọi nước; không tính điểm |
 | Chạy thử bot | Bot vs 4 bot mẫu, 1 trận đang chạy/đội, 20 trận/ngày, xem lại từng ván trên bàn cờ |
@@ -77,7 +77,7 @@ Kiểm thử: `npm test` (50 ca: luật bàn cờ, ghép Swiss, tranh suất ran
 
 ### Reset giải để đấu lại
 
-Admin có thể vào **Quản trị → Tài khoản mẫu** để tạo thí sinh giả mà không reset dữ liệu. Chọn chỉ tài khoản hoặc tài khoản kèm đội (1–3 thành viên/đội), tùy chọn nộp bot mẫu, đặt mật khẩu chung và tải danh sách đăng nhập CSV. Mỗi lần có mã đợt riêng để tránh trùng dữ liệu demo cũ. Đội chỉ được tạo trước khi khóa Swiss; bot được worker kiểm thử như bài nộp thường. Tính năng không tạo admin và không tự bắt đầu giải.
+Admin có thể vào **Quản trị → Tài khoản mẫu** để tạo thí sinh giả mà không reset dữ liệu. Chọn chỉ tài khoản hoặc tài khoản kèm đội (2–4 thành viên/đội), tùy chọn nộp bot mẫu, đặt mật khẩu chung và tải danh sách đăng nhập CSV. Mỗi lần có mã đợt riêng để tránh trùng dữ liệu demo cũ. Đội chỉ được tạo trước khi khóa Swiss; bot được worker kiểm thử như bài nộp thường. Tính năng không tạo admin và không tự bắt đầu giải.
 
 Để chỉ chạy lại vòng gần nhất, dùng **Quản trị → Điều hành → Chạy lại vòng hiện tại**. Hỗ trợ Swiss và vòng loại trực tiếp; giữ cặp đấu, bot đã khóa, seed và lịch sử chạy. Swiss cần xác nhận lại kết quả. Vòng loại trực tiếp dựng lại nhánh kế tiếp theo kết quả mới; chứng nhận cũ bị thu hồi và cần cấp lại. Chờ trận đang chạy hoàn tất; không chạy lại vòng trước khi vòng sau đã bắt đầu hoặc khi phiên chung kết đã phát luật cho hai đội bán kết thắng.
 
@@ -115,7 +115,7 @@ def make_move(state):
 - **Ranh giới Top 32:** chỉ nhóm bằng hoàn toàn vắt qua vị trí 32 phải tranh suất. Nhóm ≤ 10: loại trực tiếp rút gọn
   (K−S trận, miễn đấu theo bốc thăm). Nhóm > 10: thêm đúng một vòng trong nhóm rồi loại rút gọn phần còn lại
   (50 đội/32 suất = 25 + 18 = 43 trận như ví dụ đề án). Đội bằng điểm nhưng chắc suất: bốc thăm phân hạt giống.
-- **Vòng chính:** hạt giống 1–32 kiểu chuẩn; vòng 32/16/tứ kết 1 trận; bán kết đủ 3 trận; chung kết thắng 2/3.
+- **Vòng chính:** hạt giống 2–42 kiểu chuẩn; vòng 32/16/tứ kết 1 trận; bán kết đủ 3 trận; chung kết thắng 2/3.
   Hòa: thêm 2 ván đổi màu, vẫn hòa thì bốc thăm theo seed trận. Dưới 32 đội: cặp thiếu đối thủ thì đội còn lại đi tiếp.
 - **Phiên bản:** khóa theo giai đoạn (bảng `entries`). Đổi bản sau khi khóa chỉ áp dụng cho giai đoạn sau.
 - **Chạy lại:** trận (`matches`) tách khỏi lần chạy (`runs`); điểm tính lại từ kết quả trận nên không cộng hai lần.

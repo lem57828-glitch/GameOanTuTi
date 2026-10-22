@@ -36,11 +36,11 @@
           <div class="grid g3">
             <div class="field"><label>Kiểu dữ liệu<select name="mode"><option value="teams">Tài khoản kèm đội</option><option value="accounts">Chỉ tài khoản</option></select></label></div>
             <div class="field"><label><span id="demo-count-label">Số đội</span><input name="count" type="number" min="1" max="100" value="10" required></label></div>
-            <div class="field" id="demo-members"><label>Thành viên mỗi đội<select name="members"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label></div>
+            <div class="field" id="demo-members"><label>Thành viên mỗi đội<select name="members"><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></label></div>
           </div>
           <div class="field"><label>Mật khẩu chung cho tài khoản mẫu<input name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required></label></div>
           <label class="checkbox" id="demo-bots"><input name="withBots" type="checkbox" checked> Nộp bot mẫu cho mỗi đội (luân phiên 4 chiến thuật, kiểm thử qua worker)</label>
-          <p class="muted small">Tối đa 100 đội/lần, mỗi đội 1–3 tài khoản. Chỉ tạo đội trước khi khóa Swiss và khi đang mở lập đội. Chỉ tạo tài khoản vẫn dùng được khi giải đã bắt đầu.</p>
+          <p class="muted small">Tối đa 100 đội/lần, mỗi đội 2–4 tài khoản. Chỉ tạo đội trước khi khóa Swiss và khi đang mở lập đội. Chỉ tạo tài khoản vẫn dùng được khi giải đã bắt đầu.</p>
           <button class="btn primary" type="submit">Tạo tài khoản mẫu</button>
         </form>
       </div><div id="demo-accounts-result"></div>`;

@@ -69,7 +69,7 @@ async function main() {
 
   log(`Tạo ${N} đội...`);
   for (let i = 1; i <= N; i++) {
-    const size = 1 + (i % 3);
+    const size = 2 + (i % 3);
     const ids = [];
     for (let k = 0; k < size; k++) {
       ids.push(Number(db.run('INSERT INTO users (email, name, student_id, school, password_hash) VALUES (?,?,?,?,?)',

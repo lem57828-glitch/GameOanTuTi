@@ -211,7 +211,8 @@ function lockPhase(key, adminId) {
   let teams;
   if (key === 'swiss') {
     teams = db.all(`SELECT t.id, t.official_submission_id AS sub FROM teams t
-      JOIN submissions s ON s.id = t.official_submission_id AND s.status = 'valid' WHERE t.withdrawn = 0`);
+      JOIN submissions s ON s.id = t.official_submission_id AND s.status = 'valid' WHERE t.withdrawn = 0
+      AND (SELECT COUNT(*) FROM users WHERE team_id = t.id) BETWEEN 2 AND 4`);
   } else {
     if (key === 'final') {
       const fsn = db.get('SELECT * FROM final_session WHERE id = 1');

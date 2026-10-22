@@ -2,6 +2,16 @@
 
 Web và worker Python chạy cùng một service Railway, một replica. Turso lưu CSDL libSQL gồm tài khoản, đội, mã nguồn bot, kết quả và lịch sử trận. File Python trong `/data/bots` là cache thực thi, có thể tạo lại từ `submissions.source_code`. Volume `/data` giữ cache và log qua các lần deploy. Bản local mặc định vẫn dùng SQLite; cấu hình cloud không thay đổi database local.
 
+## Email xác minh đăng ký
+
+Hệ thống gửi mã 6 chữ số từ `btc.arena.ai@gmail.com` qua Gmail SMTP (TLS, cổng 465). Chỉ chấp nhận email `@vnu.edu.vn` hoặc tên miền con như `@uet.vnu.edu.vn`. Tài khoản chỉ được tạo sau khi nhập đúng mã trong 120 giây; mã dùng một lần, tối đa 5 lần nhập sai, gửi lại sau 60 giây. Gửi lại sẽ vô hiệu mã trước đó.
+
+1. Đăng nhập tài khoản Gmail hệ thống, bật xác minh 2 bước và [tạo mật khẩu ứng dụng](https://support.google.com/accounts/answer/185833).
+2. Thêm biến bí mật `SMTP_APP_PASSWORD` trên Railway bằng mật khẩu ứng dụng, rồi redeploy. Không dùng mật khẩu đăng nhập Gmail, không đưa mật khẩu vào Git hoặc chat.
+3. Đăng ký thử bằng email VNU thực để kiểm tra thư đến và xác minh trong 2 phút. Máy chủ cần kết nối ra `smtp.gmail.com:465`.
+
+Local: điền `SMTP_APP_PASSWORD` trong file `.env` (được Git bỏ qua) rồi chạy `node --env-file=.env src/server.js`. `npm start` hiện không tự đọc file `.env`. Nếu chưa có cấu hình hoặc gửi thư thất bại, hệ thống báo lỗi và không tạo tài khoản. Tài khoản đã có vẫn đăng nhập bình thường.
+
 ## 1. Tạo dịch vụ
 
 - Đăng ký [Turso](https://app.turso.tech/), tạo database **libSQL-compatible** trống. Lấy URL `libsql://...` và token có quyền ghi; lưu riêng, không đưa token vào Git hoặc chat. Driver này dành cho libSQL, không phải API của Turso Database engine mới.

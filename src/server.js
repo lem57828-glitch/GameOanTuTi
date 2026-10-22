@@ -31,7 +31,12 @@ app.use((req, res, next) => {
 });
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
 app.use('/api', require('./routes/api'));
-app.use(express.static(path.join(config.ROOT, 'public'), { maxAge: '5m' }));
+app.use(express.static(path.join(config.ROOT, 'public'), {
+  maxAge: process.env.NODE_ENV === 'production' ? '5m' : 0,
+  setHeaders(res) {
+    if (process.env.NODE_ENV !== 'production') res.setHeader('Cache-Control', 'no-store');
+  },
+}));
 app.get(/^\/(?!api\/).*/, (req, res) => res.sendFile(path.join(config.ROOT, 'public', 'index.html')));
 
 app.listen(config.PORT, '0.0.0.0', () => {

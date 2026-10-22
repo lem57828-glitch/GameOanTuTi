@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const db = require('../db');
 const config = require('../config');
 const auth = require('../auth');
+const registration = require('../services/registration');
 const queue = require('../services/queue');
 const T = require('../services/tournament');
 const R = require('../services/results');
@@ -142,10 +143,19 @@ api.get('/matches/:id', h((req) => {
 
 // ================================================================ tài khoản
 
+api.post('/auth/register/code', h(async (req) => {
+  const ipKey = `regcode:${req.ip}`;
+  need(hits(ipKey, REGISTER[1]).length < REGISTER[0], 'Đã gửi quá nhiều mã từ mạng này, vui lòng thử lại sau.', 429);
+  const email = registration.validateEmail(req.body.email);
+  need(!db.get('SELECT 1 FROM users WHERE email = ?', email), 'Email đã được đăng ký', 409);
+  record(ipKey);
+  return registration.requestCode(email);
+}));
+
 api.post('/auth/register', h((req, res) => {
   const ipKey = `reg:${req.ip}`;
   need(hits(ipKey, REGISTER[1]).length < REGISTER[0], 'Có quá nhiều tài khoản được tạo từ mạng này, thử lại sau ít phút', 429);
-  const email = str(req.body.email, 120).toLowerCase();
+  const email = registration.validateEmail(req.body.email);
   const name = str(req.body.name, 80);
   const password = String(req.body.password || '');
   need(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email), 'Email không hợp lệ');
@@ -153,10 +163,16 @@ api.post('/auth/register', h((req, res) => {
   need(password.length >= 8, 'Mật khẩu tối thiểu 8 ký tự');
   need(password.length <= 200, 'Mật khẩu tối đa 200 ký tự');
   need(!db.get('SELECT 1 FROM users WHERE email = ?', email), 'Email đã được đăng ký', 409);
-  const id = db.run('INSERT INTO users (email, name, student_id, school, password_hash) VALUES (?,?,?,?,?)',
-    email, name, str(req.body.student_id, 30), str(req.body.school, 120), auth.hashPassword(password)).lastInsertRowid;
+  const result = db.tx(() => {
+    const error = registration.verify(email, req.body.code);
+    if (error) return { error };
+    const id = db.run('INSERT INTO users (email, name, student_id, school, password_hash) VALUES (?,?,?,?,?)',
+      email, name, str(req.body.student_id, 30), str(req.body.school, 120), auth.hashPassword(password)).lastInsertRowid;
+    return { id };
+  });
+  need(!result.error, result.error);
   record(ipKey);
-  auth.setSession(res, Number(id));
+  auth.setSession(res, Number(result.id));
   return { ok: true };
 }));
 
@@ -223,7 +239,7 @@ api.post('/teams/join', auth.requireUser, h((req) => {
   need(!teamsLocked(), 'Sơ loại Swiss đã bắt đầu nên danh sách thành viên đã được khóa.', 403);
   const t = db.get('SELECT * FROM teams WHERE invite_code = ?', str(req.body.code, 20).toUpperCase());
   need(t, 'Mã mời không đúng', 404);
-  need(db.get('SELECT COUNT(*) AS n FROM users WHERE team_id = ?', t.id).n < 3, 'Đội đã đủ 3 thành viên');
+  need(db.get('SELECT COUNT(*) AS n FROM users WHERE team_id = ?', t.id).n < 4, 'Đội đã đủ 4 thành viên');
   db.run('UPDATE users SET team_id = ? WHERE id = ?', t.id, req.user.id);
   return { ok: true, team: t.name };
 }));
@@ -251,11 +267,6 @@ api.post('/teams/captain', auth.requireTeam, auth.requireCaptain, h((req) => {
   const uid = Number(req.body.userId);
   need(db.get('SELECT 1 FROM users WHERE id = ? AND team_id = ?', uid, req.team.id), 'Không phải thành viên đội');
   db.run('UPDATE teams SET captain_id = ? WHERE id = ?', uid, req.team.id);
-  return { ok: true };
-}));
-
-api.post('/teams/invite', auth.requireTeam, auth.requireCaptain, h((req) => {
-  db.run('UPDATE teams SET invite_code = ? WHERE id = ?', inviteCode(), req.team.id);
   return { ok: true };
 }));
 

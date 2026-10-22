@@ -12,7 +12,7 @@ function create({ mode = 'teams', count, members = 2, password, withBots = true 
   const n = Number(count), size = Number(members);
   if (!['teams', 'accounts'].includes(mode)) throw new subs.UserError('Chọn kiểu tạo dữ liệu hợp lệ');
   if (!Number.isInteger(n) || n < 1 || n > 100) throw new subs.UserError('Số lượng phải từ 1 đến 100');
-  if (mode === 'teams' && (!Number.isInteger(size) || size < 1 || size > 3)) throw new subs.UserError('Mỗi đội có 1–3 thành viên');
+  if (mode === 'teams' && (!Number.isInteger(size) || size < 2 || size > 4)) throw new subs.UserError('Mỗi đội có 2–4 thành viên');
   if (typeof password !== 'string' || password.length < 8 || password.length > 128) throw new subs.UserError('Mật khẩu cần 8–128 ký tự');
   if (typeof withBots !== 'boolean') throw new subs.UserError('Tùy chọn bot không hợp lệ');
   if (mode === 'teams' && (db.get("SELECT status FROM phases WHERE key = 'swiss'").status !== 'pending' || db.setting('teams_open', 'true') !== 'true')) {

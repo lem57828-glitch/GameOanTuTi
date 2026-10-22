@@ -151,7 +151,7 @@ function needTeam(root) {
     return true;
   }
   if (state.me.team) return false;
-  root.innerHTML = `<div class="card"><h2>Bạn chưa có đội</h2><p>Mỗi đội 1-3 sinh viên. Bạn có thể tự lập đội một người hoặc nhập mã mời của đội trưởng.
+  root.innerHTML = `<div class="card"><h2>Bạn chưa có đội</h2><p>Mỗi đội 2-4 sinh viên. Bạn có thể lập đội rồi mời thêm thành viên hoặc nhập mã mời của đội trưởng.
     Trong lúc chờ, bạn vẫn có thể <a href="#/dau-truong">chơi thử với bot mẫu</a>.</p><a class="btn primary" href="#/doi">Lập hoặc tham gia đội</a></div>`;
   return true;
 }
@@ -188,6 +188,12 @@ route(/^\/$/, async (root) => {
     </div>
   </div>` : ''}
 
+  ${me.user && !isAdmin ? `
+  <div class="card" style="margin-bottom:16px">
+      <h2>Thông báo</h2>
+      ${o.announcements.length ? o.announcements.map((a) => `<div style="margin-bottom:12px"><b>${esc(a.title)}</b> <span class="muted small">${fmtTime(a.created_at)}</span><p>${esc(a.body)}</p></div>`).join('') : '<p class="muted">Chưa có thông báo.</p>'}
+    </div>` : ''}
+
   <section class="card hero">
     <div>
       <div class="eyebrow">Giải đấu lập trình bot cờ búa-kéo-bao OTTv2 cho sinh viên năm nhất</div>
@@ -215,7 +221,7 @@ route(/^\/$/, async (root) => {
     <div class="card stat"><div class="ico">⏱</div><div><b>${esc(PHASE_VI[o.currentPhase] || '')}</b><span class="muted small">${o.submissionsOpen ? 'Đang nhận bài' : 'Đang khóa nộp bài'}</span></div></div>
   </div>
 
-  <div class="grid g2" style="margin-top:16px">
+  ${isAdmin ? `  <div class="grid g2" style="margin-top:16px">
     <div class="card">
       <div class="card-head"><h2>Bắt đầu ngay</h2>${isAdmin ? '<span class="badge ok">👑 Ban Tổ Chức</span>' : me.user && !me.team ? '<span class="badge accent">Chưa có đội</span>' : ''}</div>
       <div class="stack">
@@ -250,7 +256,7 @@ route(/^\/$/, async (root) => {
         <div><b style="font-size:1.6rem">${o.stats.matches}</b><div class="muted small">trận chính thức đã đấu</div></div>
       </div>
     </div>
-  </div>`;
+  </div>` : ''}`;
 });
 
 // ============================================================ hướng dẫn
@@ -264,7 +270,7 @@ route(/^\/huong-dan$/, async (root) => {
     <div class="card">
       <h1>Hướng dẫn &amp; thể lệ</h1>
       <ol>
-        <li>Tạo tài khoản, lập đội 1-3 người (mỗi người một đội).</li>
+        <li>Tạo tài khoản, lập đội 2-4 người (mỗi người một đội).</li>
         <li>Tải <a href="/api/sample-bots/starter_bot">bot mẫu</a>, sửa hàm <code>make_move</code>.</li>
         <li>Nộp tệp <code>.py</code> ở <a href="#/bot">Bot của tôi</a>. Hệ thống cho bot đánh thử mỗi màu một ván và báo hợp lệ hay lỗi.</li>
         <li>Chạy thử với bot mẫu (${L.practicePerDay} trận/ngày), xem lại từng nước, sửa và nộp lại không giới hạn trước hạn.</li>
@@ -380,14 +386,69 @@ route(/^\/dang-nhap$/, async (root) => {
 route(/^\/dang-ky$/, async (root) => {
   root.innerHTML = `<div class="card" style="max-width:480px;margin:0 auto"><h1>Tạo tài khoản</h1>
     <form id="f">
-      <div class="field"><label for="n">Họ tên (in trên chứng nhận)</label><input id="n" name="name" required autocomplete="name"></div>
-      <div class="field"><label for="e">Email</label><input id="e" name="email" type="email" required autocomplete="email"></div>
-      <div class="grid g2"><div class="field"><label for="s">Mã sinh viên</label><input id="s" name="student_id"></div>
-      <div class="field"><label for="sc">Trường / khoa</label><input id="sc" name="school"></div></div>
+      <div class="field"><label for="n">Họ tên</label><input id="n" name="name" required autocomplete="name"></div>
+      <div class="field"><label for="e">Email trường</label><input id="e" name="email" type="email" required autocomplete="email" placeholder="mssv@vnu.edu.vn" aria-describedby="email-error"><div id="email-error" class="small" style="color:var(--bad)" aria-live="polite"></div></div>
+      <div class="grid g2"><div class="field"><label for="s">Lớp</label><input id="s" name="student_id"></div>
+      <div class="field"><label for="sc">Khoa</label><input id="sc" name="school"></div></div>
       <div class="field"><label for="p">Mật khẩu (≥ 8 ký tự)</label><input id="p" name="password" type="password" minlength="8" required autocomplete="new-password"></div>
-      <button class="btn primary" style="width:100%">Đăng ký</button>
+      <div class="field"><button class="btn" type="button" id="send-code">Gửi mã xác minh</button><div id="code-status" class="small muted" role="status" aria-live="polite"></div></div>
+      <div class="field"><label for="verification-code">Mã xác minh email</label><input id="verification-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="Nhập mã 6 chữ số"></div>
+      <button class="btn primary" id="register-submit" style="width:100%" disabled>Đăng ký</button>
     </form></div>`;
+  const emailInput = $('#e');
+  const sendButton = $('#send-code');
+  const submitButton = $('#register-submit');
+  const codeStatus = $('#code-status');
+  let verifiedEmail = '', expiresAt = 0, resendAt = 0, sending = false;
+  const emailValue = () => emailInput.value.trim().toLowerCase();
+  const validateEmail = () => {
+    const invalid = emailInput.value !== '' && !/^[0-9]{8}@vnu\.edu\.vn$/i.test(emailInput.value.trim());
+    emailInput.setCustomValidity(invalid ? 'Email không hợp lệ' : '');
+    emailInput.setAttribute('aria-invalid', String(invalid));
+    $('#email-error').textContent = invalid ? 'Email không hợp lệ' : '';
+  };
+  const updateCodeStatus = () => {
+    const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+    const cooldown = Math.max(0, Math.ceil((resendAt - Date.now()) / 1000));
+    sendButton.disabled = sending || cooldown > 0;
+    sendButton.textContent = sending ? 'Đang gửi mã...' : resendAt ? 'Gửi lại mã' : 'Gửi mã xác minh';
+    submitButton.disabled = !remaining || verifiedEmail !== emailValue();
+    codeStatus.textContent = cooldown ? `Còn ${cooldown} giây để xác minh.` : '';
+  };
+  emailInput.addEventListener('input', () => {
+    validateEmail();
+    if (verifiedEmail !== emailValue()) {
+      expiresAt = 0;
+      $('#verification-code').value = '';
+    }
+    updateCodeStatus();
+  });
+  sendButton.addEventListener('click', async () => {
+    validateEmail();
+    if (!emailInput.reportValidity()) return;
+    const email = emailValue();
+    sending = true;
+    updateCodeStatus();
+    try {
+      const result = await api('/auth/register/code', { method: 'POST', body: { email } });
+      resendAt = Date.now() + result.expiresIn * 1000;
+      if (email === emailValue()) {
+        verifiedEmail = email;
+        expiresAt = resendAt;
+        $('#verification-code').value = '';
+        $('#verification-code').focus();
+      }
+      toast('Đã gửi mã xác minh. Vui lòng kiểm tra email trường.');
+    } catch (error) {
+      toast(error.message, true);
+    } finally {
+      sending = false;
+      updateCodeStatus();
+    }
+  });
+  every(1000, updateCodeStatus);
   on($('#f'), 'submit', async (e) => {
+    if (Date.now() >= expiresAt || verifiedEmail !== emailValue()) throw new Error('Mã xác minh đã hết hạn hoặc chưa được gửi. Vui lòng yêu cầu mã mới.');
     await api('/auth/register', { method: 'POST', body: formData(e.target) });
     await refreshMe();
     toast('Đã tạo tài khoản. Bước tiếp: lập hoặc tham gia đội.');
@@ -425,7 +486,7 @@ route(/^\/doi$/, async (root) => {
     root.innerHTML = `<div class="grid g2">
       <div class="card"><h2>Lập đội mới</h2><p class="muted">Bạn sẽ là đội trưởng: nộp bài, chọn bản thi, mời thành viên.</p>
         <form id="create"><div class="field"><label for="tn">Tên đội</label><input id="tn" name="name" required maxlength="60"></div><button class="btn primary">Lập đội</button></form></div>
-      <div class="card"><h2>Tham gia đội</h2><p class="muted">Nhập mã mời do đội trưởng gửi. Mỗi đội tối đa 3 người.</p>
+      <div class="card"><h2>Tham gia đội</h2><p class="muted">Nhập mã mời do đội trưởng gửi. Mỗi đội từ 2 đến 4 thành viên.</p>
         <form id="join"><div class="field"><label for="jc">Mã mời</label><input id="jc" name="code" required></div><button class="btn">Tham gia</button></form></div>
     </div>`;
     on($('#create'), 'submit', async (e) => { await api('/teams', { method: 'POST', body: formData(e.target) }); toast('Đã lập đội'); await refreshMe(); render(); });
@@ -440,10 +501,11 @@ route(/^\/doi$/, async (root) => {
       <div class="table-wrap"><table><thead><tr><th>Thành viên</th><th>Mã SV</th><th></th></tr></thead><tbody>
         ${t.members.map((m) => `<tr><td>${esc(m.name)} ${m.id === t.captain_id ? '<span class="badge info">Đội trưởng</span>' : ''}<div class="muted small">${esc(m.email)}</div></td>
           <td>${esc(m.student_id || '')}</td>
-          <td class="right">${t.isCaptain && m.id !== t.captain_id ? `<button class="btn sm" data-cap="${m.id}">Chuyển đội trưởng</button> <button class="btn sm danger" data-kick="${m.id}">Mời rời</button>` : ''}</td></tr>`).join('')}
+          <td class="right">${t.isCaptain && m.id !== t.captain_id ? `<button class="btn sm" data-cap="${m.id}">Chuyển đội trưởng</button> <button class="btn sm danger" data-kick="${m.id}">Xóa</button>` : ''}</td></tr>`).join('')}
       </tbody></table></div>
       ${t.isCaptain ? `<div class="notice" style="margin-top:16px">Mã mời: <b class="mono" style="font-size:1.1rem">${esc(t.invite_code)}</b>
-        <button class="btn sm" id="newcode">Đổi mã</button><div class="small muted">Còn ${3 - t.members.length} chỗ trống.</div></div>` : ''}
+        <button class="btn sm" id="copycode">Sao chép</button><div class="small muted">Còn ${Math.max(0, 4 - t.members.length)} chỗ trống.</div></div>` : ''}
+      ${t.members.length < 2 ? '<p class="notice" style="margin-top:16px">Đội cần ít nhất 2 thành viên để tham gia thi đấu. Hãy mời thêm thành viên.</p>' : ''}
       <div class="row" style="margin-top:16px"><button class="btn danger sm" id="leave">Rời đội</button></div>
     </div>
     <div class="card">
@@ -458,7 +520,30 @@ route(/^\/doi$/, async (root) => {
             <td>${esc(a ? m.name_b : m.name_a)}</td><td><a href="#/tran/${m.id}">${m.status === 'done' ? `${a ? m.wins_a : m.wins_b} - ${a ? m.wins_b : m.wins_a}` : 'xem'}</a></td><td>${res}</td></tr>`;
         }).join('')}</tbody></table></div>` : '<p class="muted">Chưa có trận chính thức.</p>'}
     </div></div>`;
-  on($('#newcode'), 'click', async () => { await api('/teams/invite', { method: 'POST' }); await refreshMe(); render(); });
+  on($('#copycode'), 'click', async () => {
+    try {
+      if (navigator.clipboard?.writeText && window.isSecureContext) {
+        await navigator.clipboard.writeText(t.invite_code);
+      } else {
+        const input = document.createElement('textarea');
+        input.value = t.invite_code;
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        const focused = document.activeElement;
+        try {
+          input.select();
+          if (!document.execCommand('copy')) throw new Error('copy');
+        } finally {
+          input.remove();
+          focused?.focus();
+        }
+      }
+      toast('Đã sao chép mã mời');
+    } catch {
+      throw new Error('Không thể sao chép. Vui lòng chọn và sao chép mã mời thủ công.');
+    }
+  });
   on($('#leave'), 'click', async () => {
     if (!confirm('Rời đội này?')) return;
     await api('/teams/leave', { method: 'POST' }); await refreshMe(); render();

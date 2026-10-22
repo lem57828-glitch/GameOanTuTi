@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "express": "4.21.2",
-    "libsql": "0.5.29"
+    "libsql": "0.5.29",
+    "nodemailer": "10.1.7"
   }
 }
