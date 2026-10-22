@@ -16,6 +16,7 @@ export function TournamentPage() {
   const q = useQuery({
     queryKey: ['tournament', 'current'],
     queryFn: () => api<TournamentView>('/tournaments/current'),
+    refetchInterval: 30000,
   });
   const t = q.data;
   return (
@@ -39,6 +40,42 @@ export function TournamentPage() {
         </Alert>
       )}
       {t && (
+        <Card>
+          <CardHeader
+            title="Lịch đăng ký và mốc khóa"
+            subtitle="Trạng thái do máy chủ xác định theo lịch đã lưu."
+          />
+          {t.description && <p className="mb-3 text-sm text-ink-muted">{t.description}</p>}
+          <Badge>
+            {
+              {
+                unconfigured: 'Chưa cấu hình lịch',
+                scheduled: 'Chưa đến giờ đăng ký',
+                open: 'Đang mở đăng ký',
+                closed: 'Đã đóng đăng ký',
+                teams_locked: 'Đã đến hạn khóa đội hình',
+                bots_locked: 'Đã đến hạn khóa bot',
+              }[t.registrationPhase]
+            }
+          </Badge>
+          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+            {(
+              [
+                ['Mở đăng ký', t.registrationOpensAt],
+                ['Đóng đăng ký', t.registrationClosesAt],
+                ['Khóa đội hình', t.teamLockAt],
+                ['Khóa nộp bot', t.botLockAt],
+              ] as const
+            ).map(([label, date]) => (
+              <div key={label}>
+                <dt className="text-ink-muted">{label}</dt>
+                <dd>{date ? new Date(date).toLocaleString('vi-VN') : 'Chưa ấn định'}</dd>
+              </div>
+            ))}
+          </dl>
+        </Card>
+      )}
+      {t && (
         <Tabs
           label="Thông tin giải"
           items={[
@@ -60,6 +97,21 @@ export function TournamentPage() {
                             ? 'Số ván mỗi trận, số vòng Swiss, bye, tránh tái đấu và tie-break đang chờ chốt (docs/DECISIONS.md).'
                             : 'Top 32 → Top 4. Bán kết và chung kết đổi luật là giai đoạn sau, chưa thuộc M0.'}
                         </p>
+                        {s.startsAt && (
+                          <p className="mt-3 text-sm">
+                            Bắt đầu: {new Date(s.startsAt).toLocaleString('vi-VN')}
+                          </p>
+                        )}
+                        {s.endsAt && (
+                          <p className="mt-1 text-sm">
+                            Kết thúc: {new Date(s.endsAt).toLocaleString('vi-VN')}
+                          </p>
+                        )}
+                        {s.lockAt && (
+                          <p className="mt-1 text-sm">
+                            Hạn khóa: {new Date(s.lockAt).toLocaleString('vi-VN')}
+                          </p>
+                        )}
                       </Card>
                     </li>
                   ))}

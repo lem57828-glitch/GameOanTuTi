@@ -43,6 +43,8 @@ Integration cần database đã migrate/seed và Redis. E2E tự mở API, worke
 
 ## Bàn giao
 
+TV3 đã có [quy trình cấu hình và công bố lịch giải](docs/TV3_CONFIGURATION.md) trong Khu vực BTC. Tạo giải nháp mới để thử; giải demo có sẵn đã công bố nên chỉ đọc cấu hình. Duyệt lịch không chốt kết quả thi đấu.
+
 - [Kiến trúc và luồng dữ liệu](docs/ARCHITECTURE.md)
 - [Hợp đồng API/socket/queue](docs/CONTRACTS.md)
 - [Quyết định và vấn đề còn chờ chốt](docs/DECISIONS.md)

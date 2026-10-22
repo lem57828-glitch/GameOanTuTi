@@ -159,6 +159,80 @@ export function buildOpenApi() {
     request: { params: idParam },
     responses: notImpl,
   });
+  const adminResponses = {
+    200: json(data(C.TournamentView)),
+    400: error('Dữ liệu không hợp lệ'),
+    401: error('Chưa đăng nhập'),
+    403: error('Sai quyền'),
+    404: error('Không tìm thấy'),
+    409: error('Sai trạng thái, lịch hoặc revision'),
+  };
+  r.registerPath({
+    method: 'get',
+    path: '/admin/tournaments',
+    tags: ['tournaments'],
+    security: auth,
+    responses: {
+      200: json(data(z.array(C.TournamentView))),
+      401: error('Chưa đăng nhập'),
+      403: error('Sai quyền'),
+    },
+  });
+  r.registerPath({
+    method: 'post',
+    path: '/admin/tournaments',
+    tags: ['tournaments'],
+    security: auth,
+    request: { body: { content: { 'application/json': { schema: C.CreateTournamentRequest } } } },
+    responses: {
+      201: json(data(C.TournamentView)),
+      400: error('Dữ liệu không hợp lệ'),
+      401: error('Chưa đăng nhập'),
+      403: error('Sai quyền'),
+    },
+  });
+  for (const [method, path, schema, params] of [
+    ['patch', '/admin/tournaments/{id}', C.UpdateTournamentRequest, idParam],
+    ['post', '/admin/tournaments/{id}/stages', C.StageConfigurationRequest, idParam],
+    [
+      'patch',
+      '/admin/tournaments/{id}/stages/{stageId}',
+      C.StageConfigurationRequest,
+      idParam.extend({ stageId: C.Id }),
+    ],
+    ['post', '/admin/tournaments/{id}/configuration', C.ConfigurationActionRequest, idParam],
+    [
+      'post',
+      '/admin/tournaments/{id}/stages/{stageId}/configuration',
+      C.ConfigurationActionRequest,
+      idParam.extend({ stageId: C.Id }),
+    ],
+    ['post', '/admin/tournaments/{id}/publish', C.RevisionRequest.strict(), idParam],
+  ] as const) {
+    r.registerPath({
+      method,
+      path,
+      tags: ['tournaments'],
+      security: auth,
+      description:
+        'Chỉ BTC; cấu hình tách biệt kết quả thi đấu. expectedRevision chống ghi đè. POST thành công trả 201; PATCH trả 200.',
+      request: { params, body: { content: { 'application/json': { schema } } } },
+      responses: { ...adminResponses, ...(method === 'post' ? { 201: json(data(C.TournamentView)) } : {}) },
+    });
+  }
+  r.registerPath({
+    method: 'get',
+    path: '/admin/tournaments/{id}/audit',
+    tags: ['tournaments'],
+    security: auth,
+    request: { params: idParam },
+    responses: {
+      200: json(data(z.array(C.TournamentAuditEntry))),
+      401: error('Chưa đăng nhập'),
+      403: error('Sai quyền'),
+      404: error('Không tìm thấy'),
+    },
+  });
   r.registerPath({
     method: 'post',
     path: '/tournaments/{id}/stages/{stageId}/pairings',

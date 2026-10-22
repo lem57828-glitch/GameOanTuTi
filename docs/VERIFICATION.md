@@ -1,5 +1,13 @@
 # Kiểm chứng nền M0
 
+## Bổ sung TV3: lịch và duyệt cấu hình (20/10/2026)
+
+Migration `20261020160000_tournament_configuration` đã áp dụng, giữ dữ liệu cũ. `pnpm check` qua với **24 unit tests**; `pnpm test:integration` qua **7 tests**; `pnpm test:e2e` qua **3 tests**. Test mới kiểm tra thứ tự lịch, biên giờ do server xác định, quy trình duyệt cấu hình, quyền BTC/trọng tài, revision khi ghi đồng thời, rollback/audit, công bố và đóng băng. E2E đi qua tạo nháp → nhập lịch → duyệt stage/giải → mở và hủy xác nhận công bố → reload xem audit, cùng kiểm tra không tràn ngang ở 390px. Integration kiểm tra công bố thật và dọn fixture riêng; E2E để lại giải nháp đã chốt để xem lại.
+
+Hướng dẫn và giới hạn: [TV3_CONFIGURATION.md](TV3_CONFIGURATION.md). Chốt cấu hình chưa chốt kết quả hay chạy Swiss/cây đấu. Mốc khóa được trả theo giờ server; thao tác đội/nộp bot thật vẫn chờ TV1/TV2 nối kiểm tra.
+
+## Kết quả nền M0 ban đầu
+
 Ngày kiểm tra: 20/10/2026. Nhánh: `foundation/fresh-start`. Môi trường Windows, Node 24.20.0, pnpm 9.15.4; PostgreSQL 16.6 và Redis 7.4.2 chạy qua Compose. Không reset database hoặc xóa dữ liệu cũ.
 
 ## Đã chạy

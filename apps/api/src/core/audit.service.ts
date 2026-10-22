@@ -19,4 +19,13 @@ export class AuditService {
   async record(entry: AuditEntry, tx: Tx = this.prisma): Promise<void> {
     await tx.auditLog.create({ data: entry });
   }
+
+  async forTarget(target: string) {
+    const entries = await this.prisma.auditLog.findMany({
+      where: { target },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 100,
+    });
+    return entries.map((entry) => ({ ...entry, createdAt: entry.createdAt.toISOString() }));
+  }
 }

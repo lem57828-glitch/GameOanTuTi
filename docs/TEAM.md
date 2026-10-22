@@ -11,6 +11,8 @@ M0 đã cung cấp skeleton chung và vertical slice demo cho cả nhóm; không
 
 ## Phối hợp
 
+TV3 đã có thêm [cấu hình và duyệt lịch giải](TV3_CONFIGURATION.md): tạo nháp, lịch đăng ký/khóa, lịch giai đoạn, duyệt cấu hình, công bố và audit. Phần này chưa triển khai chốt kết quả, Swiss hoặc cây đấu.
+
 1. Cả nhóm chạy README và kiểm tra `pnpm check` trước khi tách nhánh.
 2. Chốt contracts trước khi ghép module: TV1 cung cấp SessionUser/team; TV2 nhận GameRequest/trả GameResult; TV3 cung cấp PairAssignment; TV4 phát MatchCompleted.
 3. Mỗi feature có cả API/web trong thư mục module. Gọi service công khai của module khác, không repository trực tiếp. Schema Prisma và contracts cần review người phụ trách module liên quan.

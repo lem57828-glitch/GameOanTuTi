@@ -5,6 +5,7 @@ import { Alert, Badge, Button, Card, CardHeader, Input, Spinner } from '@arena/u
 import type { JobView, ServiceHealth } from '@arena/contracts';
 import { api } from '../lib/api';
 import { useSession } from '../lib/session';
+import { TournamentAdmin } from '../features/tournaments/TournamentAdmin';
 
 type CreatedGame = { job: JobView; gameId: string; roomId: string; created: boolean };
 
@@ -132,6 +133,7 @@ export function AdminPage() {
           )}
         </Card>
       )}
+      <TournamentAdmin />
     </div>
   );
 }

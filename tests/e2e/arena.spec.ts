@@ -1,5 +1,52 @@
 import { expect, test } from '@playwright/test';
 
+test('BTC configures and reviews stage schedules with a visible audit trail', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Đăng nhập bằng BTC Demo', exact: true }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+  const name = `Kiểm thử lịch ${Date.now()}`;
+  await page.getByLabel('Tên giải mới').fill(name);
+  await page.getByRole('button', { name: 'Tạo giải nháp', exact: true }).click();
+  await expect(page.getByLabel('Tên giải', { exact: true })).toHaveValue(name);
+  await page.getByLabel('Lý do thao tác').fill('Chuẩn bị lịch giải cho nhóm');
+  const future = (days: number) => {
+    const date = new Date(Date.now() + days * 86400000);
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
+  for (const [label, day] of [
+    ['Mở đăng ký', 1],
+    ['Đóng đăng ký', 2],
+    ['Khóa đội hình', 3],
+    ['Khóa nộp bot', 4],
+  ] as const)
+    await page.getByLabel(label, { exact: true }).fill(future(day));
+  await page.getByRole('button', { name: 'Lưu cấu hình giải', exact: true }).click();
+  await expect(page.getByText('tournament.configure', { exact: true }).first()).toBeVisible();
+  const add = page.getByRole('region', { name: 'Thêm giai đoạn', exact: true });
+  await add.getByLabel('Tên giai đoạn').fill('Sơ loại theo lịch');
+  await add.getByLabel('Hạn khóa giai đoạn').fill(future(5));
+  await add.getByLabel('Bắt đầu giai đoạn').fill(future(6));
+  await add.getByLabel('Kết thúc giai đoạn').fill(future(7));
+  await add.getByRole('button', { name: 'Thêm giai đoạn', exact: true }).click();
+  const stage = page.getByRole('region', { name: 'Giai đoạn 1', exact: true });
+  await expect(stage.getByLabel('Tên giai đoạn')).toHaveValue('Sơ loại theo lịch');
+  for (const label of ['Mở cấu hình', 'Khóa cấu hình', 'Chốt cấu hình'])
+    await stage.getByRole('button', { name: label, exact: true }).click();
+  await expect(stage.getByText('Đã chốt cấu hình', { exact: true })).toBeVisible();
+  await expect(stage.getByLabel('Tên giai đoạn')).toBeDisabled();
+  const configuration = page.getByRole('region', { name: 'Cấu hình giải', exact: true });
+  for (const label of ['Mở cấu hình', 'Khóa cấu hình', 'Chốt cấu hình'])
+    await configuration.getByRole('button', { name: label, exact: true }).click();
+  await expect(configuration.getByLabel('Tên giải', { exact: true })).toBeDisabled();
+  await configuration.getByRole('button', { name: 'Công bố giải', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByRole('button', { name: 'Hủy', exact: true }).click();
+  await page.reload();
+  await expect(page.getByText('stage.config.confirm', { exact: true }).first()).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test('public pages fit mobile and desktop; private administration checks role', async ({ page }) => {
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });

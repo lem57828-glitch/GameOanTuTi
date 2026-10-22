@@ -24,6 +24,8 @@ Các endpoint đội/bot/giải/phòng chưa làm có placeholder rõ trong cont
 
 ## DTO và queue
 
+API cấu hình giải sau M0: xem [TV3_CONFIGURATION.md](TV3_CONFIGURATION.md). TournamentView/StageView có thêm configStatus, các mốc UTC; TournamentView có revision, serverTime và registrationPhase do server xác định. Mutation admin phải kèm expectedRevision/reason; cấu hình và trạng thái thi đấu là hai vòng đời riêng.
+
 - SessionUser: id, displayName, role, teamId (theo giải hiện tại).
 - BotVersion: id, teamId, version, label, sourceHash, rulesetId, status, createdAt; không gửi source.
 - PairAssignment: pairId, stageId, teamAId, teamBId, kind, lockAt; hợp đồng TV3 → TV4, chưa có ghép cặp chính thức.

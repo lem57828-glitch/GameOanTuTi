@@ -116,13 +116,20 @@ model RunAttempt {
 // để không có cột/endpoint trông như đã hoàn chỉnh.
 
 model Tournament {
-  id        String   @id @default(cuid())
-  name      String
-  status    String   @default("draft") // draft | registration | running | finished
-  isDemo    Boolean  @default(false)
-  createdAt DateTime @default(now())
-  stages    Stage[]
-  teams     Team[]
+  id                   String    @id @default(cuid())
+  name                 String
+  status               String    @default("draft") // draft | registration | running | finished
+  isDemo               Boolean   @default(false)
+  description          String    @default("")
+  configStatus         String    @default("draft")
+  revision             Int       @default(0)
+  registrationOpensAt  DateTime?
+  registrationClosesAt DateTime?
+  teamLockAt           DateTime?
+  botLockAt            DateTime?
+  createdAt            DateTime  @default(now())
+  stages               Stage[]
+  teams                Team[]
 }
 
 model Stage {
@@ -132,6 +139,10 @@ model Stage {
   kind         String // qualifier | knockout
   name         String
   status       String     @default("planned")
+  configStatus String     @default("draft")
+  startsAt     DateTime?
+  endsAt       DateTime?
+  lockAt       DateTime?
   tournament   Tournament @relation(fields: [tournamentId], references: [id])
 
   @@unique([tournamentId, ord])

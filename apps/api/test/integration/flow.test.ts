@@ -24,6 +24,7 @@ let jobId = '';
 let socket: Socket | undefined;
 let worker: ChildProcess | undefined;
 let logs = '';
+const tournamentIds: string[] = [];
 let blockRedis = false;
 const proxySockets = new Set<TcpSocket>();
 const redisTarget = new URL(process.env.REDIS_URL!);
@@ -45,6 +46,7 @@ const proxy = createServer((client) => {
   client.pipe(upstream);
   upstream.pipe(client);
 });
+
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function waitFor(check: () => Promise<boolean>, timeout = 15000) {
   const start = Date.now();
@@ -132,6 +134,9 @@ afterAll(async () => {
   const jobs = await prisma.gameJob.findMany({ where: { roomId }, select: { id: true } });
   const jobIds = jobs.map((j) => j.id);
   await prisma.$transaction([
+    prisma.auditLog.deleteMany({ where: { target: { in: tournamentIds } } }),
+    prisma.stage.deleteMany({ where: { tournamentId: { in: tournamentIds } } }),
+    prisma.tournament.deleteMany({ where: { id: { in: tournamentIds } } }),
     prisma.outboxEvent.deleteMany({ where: { aggregateId: { in: jobIds } } }),
     prisma.auditLog.deleteMany({ where: { target: { in: ids } } }),
     prisma.runAttempt.deleteMany({ where: { jobId: { in: jobIds } } }),
@@ -362,4 +367,120 @@ it('persists pending outbox while Redis is unreachable and dispatches after reco
   );
   expect(await queue.getJob(data.job.id)).toBeTruthy();
   expect((await prisma.gameJob.findUniqueOrThrow({ where: { id: data.job.id } })).status).toBe('dispatched');
+}, 20000);
+
+it('reviews tournament configuration atomically, protects roles/revisions and freezes publication', async () => {
+  const loginAs = async (accountId: string) => {
+    const r = await request('/dev/session', 'POST', { accountId });
+    expect(r.status).toBe(201);
+    cookie = r.headers.get('set-cookie')!.split(';')[0]!;
+  };
+  await loginAs('acc_an');
+  expect((await request('/admin/tournaments')).status).toBe(403);
+  await loginAs('acc_referee');
+  expect((await request('/admin/tournaments')).status).toBe(200);
+  expect((await request('/admin/tournaments', 'POST', { name: 'Forbidden tournament' })).status).toBe(403);
+  await loginAs('acc_admin');
+  const current = (await (await request('/tournaments/current')).json()).data.id;
+  const created = await request('/admin/tournaments', 'POST', { name: 'Integration configuration' });
+  expect(created.status).toBe(201);
+  let t = (await created.json()).data;
+  tournamentIds.push(t.id);
+  const basePath = `/admin/tournaments/${t.id}`;
+  expect((await (await request('/tournaments/current')).json()).data.id).toBe(current);
+  const future = (days: number) => new Date(Date.now() + days * 86400000).toISOString();
+  const fields = {
+    name: t.name,
+    description: 'A reviewed schedule',
+    registrationOpensAt: future(1),
+    registrationClosesAt: future(2),
+    teamLockAt: future(3),
+    botLockAt: future(4),
+  };
+  const send = async (path: string, fields: Record<string, unknown>, method = 'POST', status = 201) => {
+    const r = await request(basePath + path, method, {
+      expectedRevision: t.revision,
+      reason: 'Integration schedule review',
+      ...fields,
+    });
+    const body = await r.json();
+    expect(r.status, JSON.stringify(body)).toBe(status);
+    if (r.ok) t = body.data;
+    return body;
+  };
+  await send('', { ...fields, registrationClosesAt: future(0) }, 'PATCH', 409);
+  expect((await prisma.tournament.findUniqueOrThrow({ where: { id: t.id } })).revision).toBe(0);
+  await send('', fields, 'PATCH', 200);
+  const concurrent = await Promise.all([
+    request(basePath, 'PATCH', {
+      ...fields,
+      name: 'Concurrent edit A',
+      reason: 'Concurrent test',
+      expectedRevision: t.revision,
+    }),
+    request(basePath, 'PATCH', {
+      ...fields,
+      name: 'Concurrent edit B',
+      reason: 'Concurrent test',
+      expectedRevision: t.revision,
+    }),
+  ]);
+  expect(concurrent.map((r) => r.status).sort()).toEqual([200, 409]);
+  t = (
+    await await concurrent
+      .find((r) => r.status === 200)!
+      .clone()
+      .json()
+  ).data;
+  await send('/configuration', { action: 'open' });
+  await send('/configuration', { action: 'lock' }, 'POST', 409);
+  await send('/stages', {
+    name: 'Swiss schedule',
+    kind: 'qualifier',
+    lockAt: future(5),
+    startsAt: future(6),
+    endsAt: future(7),
+  });
+  const stageId = t.stages[0].id;
+  await send(
+    '/stages',
+    {
+      name: 'Overlapping schedule',
+      kind: 'knockout',
+      lockAt: future(6),
+      startsAt: future(8),
+      endsAt: future(9),
+    },
+    'POST',
+    409,
+  );
+  await send('/stages/other_stage/configuration', { action: 'open' }, 'POST', 404);
+  await send(`/stages/${stageId}/configuration`, { action: 'confirm' }, 'POST', 409);
+  await send(`/stages/${stageId}/configuration`, { action: 'open' });
+  await send(`/stages/${stageId}/configuration`, { action: 'lock' });
+  await send(
+    `/stages/${stageId}`,
+    { name: 'Blocked edit', kind: 'qualifier', lockAt: future(5), startsAt: future(6), endsAt: future(7) },
+    'PATCH',
+    409,
+  );
+  await send(`/stages/${stageId}/configuration`, { action: 'reopen' });
+  await send(`/stages/${stageId}/configuration`, { action: 'lock' });
+  await send(`/stages/${stageId}/configuration`, { action: 'confirm' });
+  await send('/publish', {}, 'POST', 409);
+  await send('/configuration', { action: 'lock' });
+  await send('', fields, 'PATCH', 409);
+  await send('/configuration', { action: 'confirm' });
+  await send('/publish', {});
+  expect(t.status).toBe('registration');
+  expect(t.registrationPhase).toBe('scheduled');
+  expect(t.stages[0].status).toBe('planned');
+  expect((await (await request('/tournaments/current')).json()).data.id).toBe(t.id);
+  await send('/configuration', { action: 'reopen' }, 'POST', 409);
+  const history = (await (await request(`${basePath}/audit`)).json()).data;
+  expect(history.some((e: { action: string }) => e.action === 'tournament.publish')).toBe(true);
+  expect(history.every((e: { actorId: string }) => e.actorId === 'acc_admin')).toBe(true);
+  const updated = history.find((e: { action: string }) => e.action === 'tournament.configure');
+  expect(updated.data.before).toBeTruthy();
+  expect(updated.data.after).toBeTruthy();
 }, 20000);
