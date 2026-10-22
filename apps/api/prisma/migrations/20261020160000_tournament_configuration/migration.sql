@@ -1,0 +1,14 @@
+ALTER TABLE "Tournament"
+  ADD COLUMN "description" TEXT NOT NULL DEFAULT '',
+  ADD COLUMN "configStatus" TEXT NOT NULL DEFAULT 'draft',
+  ADD COLUMN "revision" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN "registrationOpensAt" TIMESTAMP(3),
+  ADD COLUMN "registrationClosesAt" TIMESTAMP(3),
+  ADD COLUMN "teamLockAt" TIMESTAMP(3),
+  ADD COLUMN "botLockAt" TIMESTAMP(3);
+
+ALTER TABLE "Stage"
+  ADD COLUMN "configStatus" TEXT NOT NULL DEFAULT 'draft',
+  ADD COLUMN "startsAt" TIMESTAMP(3),
+  ADD COLUMN "endsAt" TIMESTAMP(3),
+  ADD COLUMN "lockAt" TIMESTAMP(3);
