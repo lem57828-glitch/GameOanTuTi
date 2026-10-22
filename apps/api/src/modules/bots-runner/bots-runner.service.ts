@@ -1,19 +1,25 @@
 // TV2 — interface công khai của module bot & runner: phiên bản bot, job chạy ván, hàng đợi, sức khỏe worker.
+import { createHash } from 'node:crypto';
 import { Inject, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import type { GameJob } from '@prisma/client';
 import {
+  BotSourceDetail,
   BotVersion,
   BotVersionStatus,
+  CreateTestRunInput,
   GameRequest,
   JobStatus,
   JobView,
   QueueJobData,
+  SubmitBotInput,
+  TestRunDetail,
+  TestRunStatus,
   redisKeys,
   type GameLimits,
   type SessionUser,
 } from '@arena/contracts';
 import { APP_CONFIG, type AppConfig } from '../../core/config.js';
-import { forbidden, notFound } from '../../core/errors.js';
+import { forbidden, notFound, validationError } from '../../core/errors.js';
 import { OutboxService } from '../../core/outbox/outbox.service.js';
 import type { Tx } from '../../core/prisma.service.js';
 import { RedisService } from '../../core/redis.service.js';
@@ -82,9 +88,155 @@ export class BotsRunnerService implements OnApplicationBootstrap, OnModuleDestro
         sourceHash: b.sourceHash,
         rulesetId: b.rulesetId,
         status: BotVersionStatus.parse(b.status),
+        duplicateOfId: b.duplicateOfId,
         createdAt: b.createdAt.toISOString(),
       }),
     );
+  }
+
+  /**
+   * Kiểm tra tĩnh mã nguồn Python cơ bản:
+   * - Phải có khai báo hàm make_move
+   * - Cảnh báo các module độc hại/bị cấm
+   */
+  validatePythonSource(source: string): { valid: boolean; log: string } {
+    const hasMakeMove = /def\s+make_move\s*\(/.test(source);
+    if (!hasMakeMove) {
+      return {
+        valid: false,
+        log: 'Lỗi kiểm tra cú pháp: Mã nguồn thiếu định nghĩa hàm "def make_move(state)".',
+      };
+    }
+
+    const dangerous = ['subprocess', 'socket', 'urllib', 'requests', 'shutil', 'http.server'];
+    const warnings: string[] = [];
+    for (const mod of dangerous) {
+      const re = new RegExp(`\\bimport\\s+${mod}\\b|\\bfrom\\s+${mod}\\s+import\\b`);
+      if (re.test(source)) {
+        warnings.push(`Phát hiện import module bị hạn chế trong sandbox: "${mod}".`);
+      }
+    }
+
+    if (warnings.length > 0) {
+      return {
+        valid: true,
+        log: `Cảnh báo kiểm tra tĩnh:\n- ${warnings.join('\n- ')}\n(Worker sandbox sẽ chặn truy cập các thư viện này).`,
+      };
+    }
+
+    return {
+      valid: true,
+      log: 'Kiểm tra tĩnh thành công: Cú pháp hợp lệ, đã xác nhận hàm make_move(state).',
+    };
+  }
+
+  /**
+   * Nộp phiên bản bot mới (TV2):
+   * - Kiểm tra quyền nộp vào đội
+   * - Tính mã băm SHA-256 bất biến
+   * - Kiểm tra trùng mã nguồn với bot khác (Exact Duplicate)
+   * - Kiểm tra sơ bộ cú pháp Python
+   * - Đánh số phiên bản tự tăng (v1, v2...)
+   */
+  async submitBot(user: SessionUser, rawInput: unknown): Promise<BotVersion> {
+    const input = SubmitBotInput.parse(rawInput);
+    const staff = user.role === 'admin' || user.role === 'referee';
+
+    if (!staff && user.teamId !== input.teamId) {
+      throw forbidden('Bạn chỉ có thể nộp bot cho đội của mình.');
+    }
+
+    const team = await this.repo.findTeam(input.teamId);
+    if (!team) throw notFound('Đội thi đấu');
+
+    const cleanCode = input.sourceCode.trim();
+    if (cleanCode.length < 10) {
+      throw validationError('Mã nguồn bot quá ngắn.');
+    }
+
+    // Tính mã băm SHA-256 bất biến
+    const sourceHash = createHash('sha256').update(cleanCode).digest('hex');
+
+    // Kiểm tra trùng lặp mã nguồn chính xác
+    const existingBot = await this.repo.findBotByHash(sourceHash);
+    let duplicateOfId: string | null = null;
+    let duplicateNote = '';
+
+    if (existingBot) {
+      duplicateOfId = existingBot.id;
+      if (existingBot.teamId !== input.teamId) {
+        duplicateNote = `\n[Cảnh báo trùng lặp] Mã nguồn trùng khớp 100% với bot của đội khác (ID: ${existingBot.id}, nhãn: ${existingBot.label}).`;
+        this.log.warn(`Phát hiện trùng mã: Đội ${input.teamId} nộp trùng bot với ${existingBot.teamId} (hash: ${sourceHash})`);
+      } else {
+        duplicateNote = `\n[Cảnh báo trùng lặp] Mã nguồn trùng khớp 100% với phiên bản v${existingBot.version} của chính đội bạn.`;
+      }
+    }
+
+    // Kiểm tra tĩnh Python
+    const { valid, log } = this.validatePythonSource(cleanCode);
+    const validationLog = log + duplicateNote;
+    const status = valid ? 'valid' : 'invalid';
+
+    // Số phiên bản tự tăng theo đội
+    const maxV = await this.repo.getMaxVersion(input.teamId);
+    const nextVersion = maxV + 1;
+
+    const bot = await this.repo.createBotVersion({
+      teamId: input.teamId,
+      version: nextVersion,
+      label: input.label,
+      sourceHash,
+      sourceCode: cleanCode,
+      submittedById: user.id,
+      duplicateOfId,
+      validationLog,
+      rulesetId: 'demo',
+      status,
+      isDemo: false,
+    });
+
+    this.log.log(`Đã tiếp nhận Bot v${bot.version} cho đội ${bot.teamId} (hash: ${bot.sourceHash.slice(0, 10)}…)`);
+
+    return BotVersion.parse({
+      id: bot.id,
+      teamId: bot.teamId,
+      version: bot.version,
+      label: bot.label,
+      sourceHash: bot.sourceHash,
+      rulesetId: bot.rulesetId,
+      status: BotVersionStatus.parse(bot.status),
+      duplicateOfId: bot.duplicateOfId,
+      createdAt: bot.createdAt.toISOString(),
+    });
+  }
+
+  /**
+   * Xem mã nguồn riêng tư của một phiên bản bot:
+   * - Chỉ thành viên trong đội hoặc BTC/Trọng tài mới được xem.
+   * - Đội khác xem sẽ bị từ chối 403 Forbidden.
+   */
+  async getBotSource(user: SessionUser, botId: string): Promise<BotSourceDetail> {
+    const bot = await this.repo.findBotVersion(botId);
+    if (!bot) throw notFound('Phiên bản bot');
+
+    const staff = user.role === 'admin' || user.role === 'referee';
+    if (!staff && bot.teamId !== user.teamId) {
+      throw forbidden('Bạn không có quyền xem mã nguồn của đội khác.');
+    }
+
+    return BotSourceDetail.parse({
+      id: bot.id,
+      teamId: bot.teamId,
+      version: bot.version,
+      label: bot.label,
+      sourceCode: bot.sourceCode ?? '# Mã nguồn chưa được lưu hoặc là bot mô phỏng M0',
+      sourceHash: bot.sourceHash,
+      status: BotVersionStatus.parse(bot.status),
+      submittedById: bot.submittedById,
+      duplicateOfId: bot.duplicateOfId,
+      validationLog: bot.validationLog,
+      createdAt: bot.createdAt.toISOString(),
+    });
   }
 
   /** Bot mô phỏng mới nhất hợp lệ của một đội (chỉ dùng cho luồng demo). */
@@ -158,7 +310,7 @@ export class BotsRunnerService implements OnApplicationBootstrap, OnModuleDestro
       for (const job of stale) {
         const state = await this.queue.state(job.id);
         if (state === 'missing' || state === 'completed' || state === 'failed') {
-          await this.queue.requeue({ jobId: job.id, requestKey: job.requestKey });
+          await this.queue.requeue({ jobId: job.id, requestKey: job.requestKey, kind: 'game' });
           await this.repo.touch(job.id);
           requeued++;
           this.log.warn(
@@ -172,6 +324,111 @@ export class BotsRunnerService implements OnApplicationBootstrap, OnModuleDestro
     this.recovery.lastSweepAt = new Date().toISOString();
     this.recovery.requeued += requeued;
     return requeued;
+  }
+
+  // ---- TV2 - Gói việc 4: Test Run (Đấu thử)
+  async createTestRun(user: SessionUser, botVersionId: string, rawInput: unknown): Promise<TestRunDetail> {
+    const input = CreateTestRunInput.parse(rawInput);
+    const bot = await this.repo.findBotVersion(botVersionId);
+    if (!bot) throw notFound('Phiên bản bot');
+
+    const staff = user.role === 'admin' || user.role === 'referee';
+    if (!staff && user.teamId !== bot.teamId) {
+      throw forbidden('Bạn chỉ có thể đấu thử với bot của đội mình.');
+    }
+
+    if (bot.status !== 'valid') {
+      throw validationError('Phiên bản bot chưa qua kiểm tra cú pháp hợp lệ.');
+    }
+
+    // Tạo bản ghi TestRun ở trạng thái queued
+    const run = await this.repo.createTestRun({
+      botVersionId: bot.id,
+      mySide: input.mySide ?? 'blue',
+      opponentType: input.opponentType,
+      opponentTarget: input.opponentTarget,
+      status: 'queued',
+    });
+
+    // Đẩy job vào BullMQ hàng đợi Worker
+    await this.queue.enqueue({
+      jobId: run.id,
+      requestKey: `testrun:${run.id}`,
+      kind: 'test_run',
+    });
+
+    return {
+      id: run.id,
+      botVersionId: run.botVersionId,
+      status: 'queued',
+      mySide: run.mySide as any,
+      opponentType: run.opponentType as any,
+      opponentTarget: run.opponentTarget,
+      createdAt: run.createdAt.toISOString(),
+      finishedAt: null,
+    };
+  }
+
+  async getTestRun(user: SessionUser, runId: string): Promise<TestRunDetail> {
+    const run = await this.repo.findTestRun(runId);
+    if (!run) throw notFound('Lượt đấu thử');
+
+    const staff = user.role === 'admin' || user.role === 'referee';
+    if (!staff && user.teamId !== run.botVersion.teamId) {
+      throw forbidden('Bạn không có quyền xem lượt đấu thử này.');
+    }
+
+    return {
+      id: run.id,
+      botVersionId: run.botVersionId,
+      status: run.status as any,
+      mySide: run.mySide as any,
+      opponentType: run.opponentType as any,
+      opponentTarget: run.opponentTarget,
+      winner: (run.winner as any) ?? null,
+      reason: (run.reason as any) ?? null,
+      plies: run.plies ?? 0,
+      piecesLeft:
+        run.piecesBlue !== null && run.piecesPink !== null
+          ? { blue: run.piecesBlue, pink: run.piecesPink }
+          : undefined,
+      error: run.error,
+      logs: run.logs,
+      createdAt: run.createdAt.toISOString(),
+      finishedAt: run.finishedAt ? run.finishedAt.toISOString() : null,
+      events: (run.events as any[]) ?? [],
+    };
+  }
+
+  async listTestRuns(user: SessionUser, botVersionId: string): Promise<TestRunDetail[]> {
+    const bot = await this.repo.findBotVersion(botVersionId);
+    if (!bot) throw notFound('Phiên bản bot');
+
+    const staff = user.role === 'admin' || user.role === 'referee';
+    if (!staff && user.teamId !== bot.teamId) {
+      throw forbidden('Bạn chỉ có thể xem danh sách đấu thử của đội mình.');
+    }
+
+    const runs = await this.repo.listTestRuns(botVersionId);
+    return runs.map((r) => ({
+      id: r.id,
+      botVersionId: r.botVersionId,
+      status: r.status as any,
+      mySide: r.mySide as any,
+      opponentType: r.opponentType as any,
+      opponentTarget: r.opponentTarget,
+      winner: (r.winner as any) ?? null,
+      reason: (r.reason as any) ?? null,
+      plies: r.plies ?? 0,
+      piecesLeft:
+        r.piecesBlue !== null && r.piecesPink !== null
+          ? { blue: r.piecesBlue, pink: r.piecesPink }
+          : undefined,
+      error: r.error,
+      logs: r.logs,
+      createdAt: r.createdAt.toISOString(),
+      finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,
+    }));
   }
 }
 

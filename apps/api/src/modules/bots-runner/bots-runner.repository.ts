@@ -13,6 +13,45 @@ export class BotsRunnerRepository {
     });
   }
 
+  findBotVersion(id: string) {
+    return this.prisma.botVersion.findUnique({ where: { id } });
+  }
+
+  findBotByHash(sourceHash: string) {
+    return this.prisma.botVersion.findFirst({
+      where: { sourceHash },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async getMaxVersion(teamId: string): Promise<number> {
+    const agg = await this.prisma.botVersion.aggregate({
+      where: { teamId },
+      _max: { version: true },
+    });
+    return agg._max.version ?? 0;
+  }
+
+  findTeam(teamId: string) {
+    return this.prisma.team.findUnique({ where: { id: teamId } });
+  }
+
+  createBotVersion(data: {
+    teamId: string;
+    version: number;
+    label: string;
+    sourceHash: string;
+    sourceCode: string;
+    submittedById: string;
+    duplicateOfId?: string | null;
+    validationLog?: string | null;
+    rulesetId: string;
+    status: string;
+    isDemo?: boolean;
+  }) {
+    return this.prisma.botVersion.create({ data });
+  }
+
   latestDemoBot(teamId: string, tx: Tx = this.prisma) {
     return tx.botVersion.findFirst({
       where: { teamId, status: 'valid', demoPolicy: { not: null } },
@@ -60,5 +99,52 @@ export class BotsRunnerRepository {
 
   touch(id: string) {
     return this.prisma.gameJob.update({ where: { id }, data: { updatedAt: new Date() } });
+  }
+
+  // ---- TV2 - Gói việc 4: Test Runs
+  createTestRun(data: {
+    botVersionId: string;
+    mySide: string;
+    opponentType: string;
+    opponentTarget: string;
+    status: string;
+  }) {
+    return this.prisma.botTestRun.create({ data });
+  }
+
+  findTestRun(id: string) {
+    return this.prisma.botTestRun.findUnique({
+      where: { id },
+      include: { botVersion: true },
+    });
+  }
+
+  listTestRuns(botVersionId: string) {
+    return this.prisma.botTestRun.findMany({
+      where: { botVersionId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+  }
+
+  updateTestRun(
+    id: string,
+    data: {
+      status: string;
+      winner?: string | null;
+      reason?: string | null;
+      plies?: number | null;
+      piecesBlue?: number | null;
+      piecesPink?: number | null;
+      events?: Prisma.InputJsonValue;
+      error?: string | null;
+      logs?: string | null;
+      finishedAt?: Date | null;
+    },
+  ) {
+    return this.prisma.botTestRun.update({
+      where: { id },
+      data,
+    });
   }
 }
