@@ -189,7 +189,7 @@ it('protects source, results and opponent bots from other teams', async () => {
   await login('acc_an');
 });
 
-it('locks valid bot sets per stage and prevents late/unauthorized changes', async () => {
+it('rejects practice-only bots, locks eligible demo sets and prevents late/unauthorized changes', async () => {
   const stage = await prisma.stage.create({
     data: {
       tournamentId: 'tour_demo',
@@ -200,7 +200,22 @@ it('locks valid bot sets per stage and prevents late/unauthorized changes', asyn
     },
   });
   stageId = stage.id;
-  const body = { teamId: 'team_alpha', botVersionIds: [good, alternate] };
+  const direct = await request(`/stages/${stageId}/bot-selection`, 'POST', {
+    teamId: 'team_alpha',
+    botVersionIds: [good, alternate],
+  });
+  expect(direct.status).toBe(400);
+  expect(await direct.text()).toContain('GitHub');
+  // This suite uses DEMO_MODE=true. Official GitHub snapshots are covered by test:github-match.
+  const eligible = await prisma.botVersion.findMany({
+    where: { teamId: 'team_alpha', status: 'valid', isDemo: true },
+    orderBy: { version: 'asc' },
+    select: { id: true },
+    take: 2,
+  });
+  expect(eligible).toHaveLength(2);
+  const botVersionIds = eligible.map((bot) => bot.id);
+  const body = { teamId: 'team_alpha', botVersionIds };
   expect((await request(`/stages/${stageId}/bot-selection`, 'POST', body)).status).toBe(201);
   await login('acc_binh');
   expect((await request(`/stages/${stageId}/bot-selection`, 'POST', body)).status).toBe(403);
@@ -208,9 +223,9 @@ it('locks valid bot sets per stage and prevents late/unauthorized changes', asyn
   expect((await request(`/stages/${stageId}/bot-selection/lock`, 'POST', body)).status).toBe(201);
   await login('acc_an');
   expect(
-    (await request(`/stages/${stageId}/bot-selection`, 'POST', { ...body, botVersionIds: [good] })).status,
+    (await request(`/stages/${stageId}/bot-selection`, 'POST', { ...body, botVersionIds: [botVersionIds[0]] })).status,
   ).toBe(409);
   const selection = (await (await request(`/stages/${stageId}/bot-selection/team_alpha`)).json()).data;
   expect(selection.locked).toBe(true);
-  expect(selection.botVersionIds).toEqual([good, alternate]);
+  expect(selection.botVersionIds).toEqual(botVersionIds);
 });
