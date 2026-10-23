@@ -4,6 +4,7 @@
 import type { GameEndReason, GameRequest, MoveRecord, Side } from '@arena/contracts';
 
 export interface RunOutcome {
+  logs?: string;
   winner: Side | null;
   reason: GameEndReason;
   plies: number;

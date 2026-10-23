@@ -17,17 +17,11 @@ describe('Gói việc 4 — Chế độ Đấu thử (Practice Match) & API Test
     counts: vi.fn(),
   };
 
-  const mockOutbox = {} as any;
+  const mockOutbox = { poke: vi.fn() } as any;
   const mockRedis = {} as any;
   const mockConfig = { jobRecoveryMs: 60000 } as any;
 
-  const service = new BotsRunnerService(
-    mockRepo as any,
-    mockOutbox,
-    mockRedis,
-    mockQueue as any,
-    mockConfig,
-  );
+  const service = new BotsRunnerService(mockRepo as any, mockOutbox, mockRedis, mockQueue as any, mockConfig);
 
   const studentAlpha: SessionUser = {
     id: 'usr_an',
@@ -74,12 +68,9 @@ describe('Gói việc 4 — Chế độ Đấu thử (Practice Match) & API Test
     expect(run).toBeDefined();
     expect(run.id).toBe('test_run_123');
     expect(run.status).toBe('queued');
-    expect(mockQueue.enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({
-        jobId: 'test_run_123',
-        kind: 'test_run',
-      }),
-    );
+    expect(mockOutbox.poke).toHaveBeenCalled();
+    expect(mockQueue.enqueue).not.toHaveBeenCalled();
+    expect(mockRepo.createTestRun).toHaveBeenCalledWith(expect.objectContaining({ extraType: 'PAPER' }));
   });
 
   it('từ chối nếu sinh viên đội khác cố tình kích hoạt đấu thử bot không thuộc đội mình', async () => {
@@ -130,6 +121,23 @@ describe('Gói việc 4 — Chế độ Đấu thử (Practice Match) & API Test
     expect(detail.winner).toBe('blue');
     expect(detail.reason).toBe('eliminate');
     expect(detail.events).toHaveLength(2);
-    expect(detail.events?.[0].seq).toBe(1);
+    expect(detail.events?.[0]?.seq).toBe(1);
+  });
+  it('rejects another team as opponent before creating a run', async () => {
+    mockRepo.findBotVersion
+      .mockResolvedValueOnce({ id: 'bot_alpha_1', teamId: 'team_alpha', status: 'valid' })
+      .mockResolvedValueOnce({ id: 'bot_beta_1', teamId: 'team_beta', status: 'valid' });
+    await expect(
+      service.createTestRun(studentAlpha, 'bot_alpha_1', {
+        botVersionId: 'bot_alpha_1',
+        opponentType: 'bot',
+        opponentTarget: 'bot_beta_1',
+      }),
+    ).rejects.toThrow('Chỉ được đấu thử với bot thuộc đội mình');
+  });
+  it('returns a validation error for malformed input', async () => {
+    await expect(service.createTestRun(studentAlpha, 'bot_alpha_1', {})).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    });
   });
 });

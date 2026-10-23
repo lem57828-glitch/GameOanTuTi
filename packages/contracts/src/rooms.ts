@@ -51,6 +51,8 @@ export const RoomSnapshot = z.object({
   teams: z.object({ a: RoomTeam, b: RoomTeam }),
   coinResult: CoinResult.nullable(),
   board: Board,
+  initialBoard: Board.optional(),
+  maxPlies: z.number().int().positive().optional(),
   turn: z.object({ side: Side, ply: z.number().int().nonnegative() }).nullable(),
   history: z.array(MoveRecord),
   result: z

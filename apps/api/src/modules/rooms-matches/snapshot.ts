@@ -1,13 +1,22 @@
 // Dựng RoomSnapshot từ dữ liệu bền vững. Hàm thuần để kiểm thử đơn vị; không đọc database.
 // Bàn cờ luôn được dựng lại từ danh sách nước đã lưu bằng game-engine, không tin trạng thái tạm ở client.
-import { CoinResult, GameEndReason, MoveRecord, RoomSnapshot, RoomStatus, Side } from '@arena/contracts';
-import { DEMO_RULESET, getRuleset, newGame, replay } from '@arena/game-engine';
+import {
+  CoinResult,
+  PieceType,
+  GameEndReason,
+  MoveRecord,
+  RoomSnapshot,
+  RoomStatus,
+  Side,
+} from '@arena/contracts';
+import { STANDARD_RULESET, getRuleset, newGame, replay } from '@arena/game-engine';
 
 export interface SnapshotInput {
   room: { id: string; title: string; isDemo: boolean; status: string };
   teams: { a: { id: string; name: string }; b: { id: string; name: string } };
   game: {
     id: string;
+    choices?: Array<{ side: string; extraType: string | null }>;
     rulesetId: string;
     maxPlies: number;
     lastSeq: number;
@@ -52,14 +61,18 @@ export function buildSnapshot(input: SnapshotInput): RoomSnapshot {
       gameId: null,
       rulesetId: null,
       coinResult: null,
-      board: newGame(DEMO_RULESET, 1).board,
+      board: newGame(STANDARD_RULESET, 200).board,
       turn: null,
       history: [],
       result: null,
       job: null,
     });
   }
-  const rules = getRuleset(game.rulesetId);
+  const choice = (side: string) => game.choices?.find((c) => c.side === side)?.extraType;
+  const rules = getRuleset(game.rulesetId, {
+    blue: PieceType.parse(choice('blue') ?? 'PAPER'),
+    pink: PieceType.parse(choice('pink') ?? 'PAPER'),
+  });
   const history = input.moves.map((m) => MoveRecord.parse(m));
   const state = replay(rules, history, game.maxPlies);
   const finished = input.result !== null;
@@ -73,6 +86,8 @@ export function buildSnapshot(input: SnapshotInput): RoomSnapshot {
     rulesetId: game.rulesetId,
     coinResult: game.coinResult ? CoinResult.parse(game.coinResult) : null,
     board: state.board,
+    initialBoard: newGame(rules, game.maxPlies).board,
+    maxPlies: game.maxPlies,
     turn: finished || status === 'failed' ? null : { side: state.toMove, ply: state.ply },
     history,
     result: r

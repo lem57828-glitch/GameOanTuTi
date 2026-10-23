@@ -15,7 +15,11 @@ const STATUS: Record<BotVersion['status'], { label: string; tone: 'neutral' | 's
 export function MyBotsPage() {
   const { user } = useSession();
   const queryClient = useQueryClient();
-  const q = useQuery({ queryKey: ['bots', user?.id], queryFn: () => api<BotVersion[]>('/bots') });
+  const q = useQuery({
+    queryKey: ['bots', user?.id],
+    queryFn: () => api<BotVersion[]>('/bots'),
+    refetchInterval: (query) => (query.state.data?.some((bot) => bot.status === 'pending') ? 1000 : false),
+  });
 
   // State cho xem chi tiết & mã nguồn
   const [selectedBot, setSelectedBot] = useState<BotVersion | null>(null);
@@ -44,12 +48,12 @@ export function MyBotsPage() {
     mutationFn: (botId: string) =>
       api<TestRunDetail>(`/bots/${botId}/test-runs`, {
         method: 'POST',
-        body: JSON.stringify({
+        json: {
           botVersionId: botId,
           opponentType: 'demo',
           opponentTarget: opponentPolicy,
           mySide: 'blue',
-        }),
+        },
       }),
     onSuccess: (data) => {
       setActiveTestRunId(data.id);
@@ -58,6 +62,7 @@ export function MyBotsPage() {
 
   // State cho nộp bot mới
   const [submitOpen, setSubmitOpen] = useState(false);
+  const [submitTeamId, setSubmitTeamId] = useState('');
   const [label, setLabel] = useState('');
   const [sourceCode, setSourceCode] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -69,7 +74,7 @@ export function MyBotsPage() {
     mutationFn: (data: { teamId: string; label: string; sourceCode: string }) =>
       api<BotVersion>('/bots', {
         method: 'POST',
-        body: JSON.stringify(data),
+        json: data,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['bots'] });
@@ -78,7 +83,7 @@ export function MyBotsPage() {
       setSourceCode('');
       setSubmitError(null);
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       setSubmitError(err?.message || 'Không thể nộp bot.');
     },
   });
@@ -115,9 +120,7 @@ export function MyBotsPage() {
             {staff ? 'Tất cả phiên bản bot' : 'Bot của tôi'}
           </h1>
         </div>
-        <Button onClick={handleOpenSubmit}>
-          + Nộp phiên bản mới
-        </Button>
+        <Button onClick={handleOpenSubmit}>+ Nộp phiên bản mới</Button>
       </header>
 
       {q.isLoading && <Spinner label="Đang tải bot" />}
@@ -140,7 +143,11 @@ export function MyBotsPage() {
             empty={
               <EmptyState
                 title="Chưa có phiên bản bot nào"
-                description={user?.teamId ? 'Đội của bạn chưa có bot. Hãy nộp phiên bản đầu tiên!' : 'Bạn cần thuộc một đội để có bot.'}
+                description={
+                  user?.teamId
+                    ? 'Đội của bạn chưa có bot. Hãy nộp phiên bản đầu tiên!'
+                    : 'Bạn cần thuộc một đội để có bot.'
+                }
               />
             }
             columns={[
@@ -185,10 +192,14 @@ export function MyBotsPage() {
                       size="sm"
                       variant="secondary"
                       onClick={() => {
+                        startTestRunMutation.reset();
                         setTestRunBot(b);
                         setActiveTestRunId(null);
                       }}
                       disabled={b.status !== 'valid'}
+                      title={
+                        b.status !== 'valid' ? 'Bot phải hợp lệ trước khi đấu thử' : 'Mở cấu hình đấu thử'
+                      }
                     >
                       Đấu thử
                     </Button>
@@ -288,7 +299,11 @@ export function MyBotsPage() {
               setSubmitError('Mã nguồn không được để trống.');
               return;
             }
-            const teamId = user?.teamId || 'team_demo_1'; // fallback nếu admin test
+            const teamId = user?.teamId || submitTeamId.trim();
+            if (!teamId) {
+              setSubmitError('Chọn đội nhận bot trước khi nộp.');
+              return;
+            }
             submitMutation.mutate({ teamId, label: label.trim(), sourceCode });
           }}
         >
@@ -298,7 +313,16 @@ export function MyBotsPage() {
             </Alert>
           )}
 
+          {staff && !user?.teamId && (
+            <Input
+              label="ID đội nhận bot"
+              value={submitTeamId}
+              onChange={(e) => setSubmitTeamId(e.target.value)}
+              required
+            />
+          )}
           <Input
+            maxLength={100}
             label="Tên phiên bản / Nhãn chiến thuật"
             placeholder="Ví dụ: Bot phản công nhanh, v2 chỉnh sửa..."
             value={label}
@@ -361,6 +385,16 @@ export function MyBotsPage() {
       >
         {testRunBot && (
           <div className="flex flex-col gap-4">
+            {startTestRunMutation.error && (
+              <Alert tone="error" title="Không thể bắt đầu đấu thử">
+                {startTestRunMutation.error.message}
+              </Alert>
+            )}
+            {testRunQuery.error && (
+              <Alert tone="error" title="Không tải được kết quả">
+                {testRunQuery.error.message}
+              </Alert>
+            )}
             {!activeTestRunId ? (
               <div className="flex flex-col gap-4">
                 <div>
@@ -406,16 +440,16 @@ export function MyBotsPage() {
                           testRunQuery.data.status === 'succeeded'
                             ? 'success'
                             : testRunQuery.data.status === 'failed'
-                            ? 'danger'
-                            : 'neutral'
+                              ? 'danger'
+                              : 'neutral'
                         }
                         dot
                       >
                         {testRunQuery.data.status === 'succeeded'
                           ? 'Hoàn thành'
                           : testRunQuery.data.status === 'failed'
-                          ? 'Thất bại'
-                          : 'Đang chạy trong Sandbox...'}
+                            ? 'Thất bại'
+                            : 'Đang chạy trong Sandbox...'}
                       </Badge>
                     </div>
 
@@ -434,15 +468,21 @@ export function MyBotsPage() {
                             {testRunQuery.data.winner === 'blue'
                               ? '🏆 Bot của bạn (Xanh) THẮNG!'
                               : testRunQuery.data.winner === 'pink'
-                              ? '❌ Đối thủ (Hồng) THẮNG!'
-                              : '🤝 Kết quả HÒA!'}
+                                ? '❌ Đối thủ (Hồng) THẮNG!'
+                                : '🤝 Kết quả HÒA!'}
                           </p>
                           <p className="mt-1 text-xs text-ink-muted">
-                            Lý do: <span className="font-semibold text-ink">{testRunQuery.data.reason}</span> • Tổng số nước: <span className="font-semibold text-ink">{testRunQuery.data.plies}</span>
+                            Lý do: <span className="font-semibold text-ink">{testRunQuery.data.reason}</span>{' '}
+                            • Tổng số nước:{' '}
+                            <span className="font-semibold text-ink">{testRunQuery.data.plies}</span>
                           </p>
+                          {testRunQuery.data.logs && (
+                            <pre className="whitespace-pre-wrap text-xs">{testRunQuery.data.logs}</pre>
+                          )}
                           {testRunQuery.data.piecesLeft && (
                             <p className="mt-1 text-xs text-ink-muted">
-                              Số quân còn lại: Xanh {testRunQuery.data.piecesLeft.blue} - Hồng {testRunQuery.data.piecesLeft.pink}
+                              Số quân còn lại: Xanh {testRunQuery.data.piecesLeft.blue} - Hồng{' '}
+                              {testRunQuery.data.piecesLeft.pink}
                             </p>
                           )}
                         </div>
@@ -450,12 +490,14 @@ export function MyBotsPage() {
                         {testRunQuery.data.events && testRunQuery.data.events.length > 0 && (
                           <div>
                             <span className="text-xs font-semibold text-ink-muted">
-                              Nhật ký diễn biến ván đấu ({testRunQuery.data.events.length} sự kiện bàn giao TV4):
+                              Nhật ký diễn biến ván đấu ({testRunQuery.data.events.length} sự kiện bàn giao
+                              TV4):
                             </span>
                             <div className="mt-1 max-h-48 overflow-auto rounded border border-line bg-surface p-2 font-mono text-xs text-ink">
-                              {testRunQuery.data.events.map((ev: any) => (
+                              {testRunQuery.data.events.map((ev) => (
                                 <div key={ev.seq} className="py-0.5 border-b border-line/40 last:border-b-0">
-                                  #{ev.seq} [Nước {ev.ply}] {ev.side.toUpperCase()}: {ev.from} ➔ {ev.to} {ev.capture ? `(Ăn quân ${ev.capture})` : ''}
+                                  #{ev.seq} [Nước {ev.ply}] {ev.side.toUpperCase()}: {ev.from} ➔ {ev.to}{' '}
+                                  {ev.capture ? `(Ăn quân ${ev.capture})` : ''}
                                 </div>
                               ))}
                             </div>

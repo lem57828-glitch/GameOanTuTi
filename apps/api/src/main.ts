@@ -36,7 +36,7 @@ async function bootstrap(): Promise<void> {
     bodyParser: false,
     bufferLogs: false,
   });
-  app.useBodyParser('json', { limit: '16kb' });
+  app.useBodyParser('json', { limit: '4mb' });
   app.use(requestIdMiddleware);
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');

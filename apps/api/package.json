@@ -11,7 +11,7 @@
     "start": "node --env-file-if-exists=../../.env dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --dir test/unit",
-    "test:integration": "dotenv -e ../../.env -- vitest run --dir test/integration",
+    "test:integration": "node scripts/test-integration.mjs",
     "db:generate": "prisma generate",
     "db:migrate": "dotenv -e ../../.env -- prisma migrate deploy",
     "db:migrate:dev": "dotenv -e ../../.env -- prisma migrate dev",

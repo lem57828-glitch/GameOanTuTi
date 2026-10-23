@@ -19,7 +19,7 @@ export class RoomsRepository {
   }
 
   findGame(id: string, tx: Tx = this.prisma) {
-    return tx.game.findUnique({ where: { id }, include: { result: true } });
+    return tx.game.findUnique({ where: { id }, include: { result: true, choices: true } });
   }
 
   /** Sự kiện của một ván theo thứ tự seq; `afterSeq` để lấy phần còn thiếu. */

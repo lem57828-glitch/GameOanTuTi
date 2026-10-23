@@ -20,8 +20,8 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
         <RDialog.Overlay className="fixed inset-0 z-40 bg-bg-deep/80 backdrop-blur-sm animate-fade-in" />
         <RDialog.Content
           className={cn(
-            'fixed left-1/2 top-1/2 z-50 w-[calc(100vw-32px)] max-w-lg -translate-x-1/2 -translate-y-1/2',
-            'rounded-lg border border-line bg-surface p-6 shadow-deep animate-pop-in focus:outline-none',
+            'fixed left-1/2 top-1/2 z-50 w-[calc(100vw-32px)] max-w-lg max-h-[calc(100dvh-32px)] overflow-y-auto overscroll-contain -translate-x-1/2 -translate-y-1/2',
+            'rounded-lg border border-line bg-surface p-6 shadow-deep animate-fade-in focus:outline-none',
             className,
           )}
         >

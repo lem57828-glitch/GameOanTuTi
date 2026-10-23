@@ -115,7 +115,12 @@ export function buildOpenApi() {
     path: '/bots',
     tags: ['bots-runner'],
     security: auth,
-    responses: notImpl,
+    request: { body: { required: true, content: { 'application/json': { schema: C.SubmitBotInput } } } },
+    responses: {
+      201: json(data(C.BotVersion)),
+      400: error('Mã/nguồn không hợp lệ'),
+      403: error('Không có quyền'),
+    },
   });
   r.registerPath({
     method: 'get',
@@ -123,15 +128,109 @@ export function buildOpenApi() {
     tags: ['bots-runner'],
     security: auth,
     request: { params: idParam },
-    responses: notImpl,
+    responses: { 200: json(data(C.BotSourceDetail)), 403: error('Không có quyền') },
   });
   r.registerPath({
     method: 'post',
     path: '/bots/{id}/test-runs',
     tags: ['bots-runner'],
     security: auth,
+    request: {
+      params: idParam,
+      body: { required: true, content: { 'application/json': { schema: C.CreateTestRunInput } } },
+    },
+    responses: {
+      201: json(data(C.TestRunDetail)),
+      400: error('Yêu cầu không hợp lệ'),
+      403: error('Không có quyền'),
+    },
+  });
+  r.registerPath({
+    method: 'get',
+    path: '/test-runs/{id}',
+    tags: ['bots-runner'],
+    security: auth,
     request: { params: idParam },
-    responses: notImpl,
+    responses: { 200: json(data(C.TestRunDetail)), 403: error('Không có quyền') },
+  });
+  r.registerPath({
+    method: 'get',
+    path: '/bots/{id}/test-runs',
+    tags: ['bots-runner'],
+    security: auth,
+    request: { params: idParam },
+    responses: { 200: json(data(z.array(C.TestRunDetail))) },
+  });
+  for (const suffix of ['', '/lock'])
+    r.registerPath({
+      method: 'post',
+      path: `/stages/{stageId}/bot-selection${suffix}`,
+      tags: ['bots-runner'],
+      security: auth,
+      request: {
+        params: z.object({ stageId: C.Id }),
+        body: { required: true, content: { 'application/json': { schema: C.BotSelectionInput } } },
+      },
+      responses: {
+        201: json(data(C.BotSelectionView)),
+        400: error('Bộ bot không hợp lệ'),
+        403: error('Không có quyền'),
+        409: error('Đã khóa'),
+      },
+    });
+  r.registerPath({
+    method: 'get',
+    path: '/stages/{stageId}/bot-selection/{teamId}',
+    tags: ['bots-runner'],
+    security: auth,
+    request: { params: z.object({ stageId: C.Id, teamId: C.Id }) },
+    responses: { 200: json(data(C.BotSelectionView.nullable())) },
+  });
+  r.registerPath({
+    method: 'get',
+    path: '/admin/bots/duplicates',
+    tags: ['bots-runner'],
+    security: auth,
+    responses: {
+      200: json(
+        data(
+          z.array(
+            z.object({
+              id: C.Id,
+              teamId: C.Id,
+              label: z.string(),
+              sourceHash: z.string(),
+              duplicateOfId: C.Id.nullable(),
+              createdAt: C.IsoDateTime,
+            }),
+          ),
+        ),
+      ),
+      403: error('Chỉ BTC/trọng tài'),
+    },
+  });
+  r.registerPath({
+    method: 'get',
+    path: '/games/{id}/bot-diagnostics',
+    tags: ['bots-runner'],
+    security: auth,
+    request: { params: idParam },
+    responses: {
+      200: json(
+        data(
+          z.array(
+            z.object({
+              id: C.Id,
+              attemptNo: z.number().int(),
+              status: z.string(),
+              diagnostics: z.string().nullable(),
+            }),
+          ),
+        ),
+      ),
+      403: error('Chỉ đội sở hữu/staff'),
+      404: error('Không có ván'),
+    },
   });
   r.registerPath({
     method: 'get',

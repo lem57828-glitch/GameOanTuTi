@@ -1,6 +1,7 @@
 // TV2 — Gói việc 3: Quản lý tiến trình Python trong Sandbox cách ly (Process Sandbox)
+import { randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface, type Interface } from 'node:readline';
@@ -10,10 +11,21 @@ export interface PythonProcessOptions {
   sourceCode: string;
   startupMs?: number;
   wallMsPerMove?: number;
+  cpuMsPerMove?: number;
+  seed?: number;
+  maxRuntimeMs?: number;
   pythonCmd?: string;
+  /** Only for trusted local development, never submissions from other users. */
+  trustedLocal?: boolean;
 }
 
-export type ProcessErrorType = 'STARTUP_TIMEOUT' | 'STARTUP_ERROR' | 'MOVE_TIMEOUT' | 'CRASH' | 'INVALID_RESPONSE';
+export type ProcessErrorType =
+  | 'SANDBOX_UNAVAILABLE'
+  | 'STARTUP_TIMEOUT'
+  | 'STARTUP_ERROR'
+  | 'MOVE_TIMEOUT'
+  | 'CRASH'
+  | 'INVALID_RESPONSE';
 
 export class PythonProcessError extends Error {
   constructor(
@@ -34,7 +46,11 @@ export class PythonProcessError extends Error {
 const RUNNER_SCRIPT = `
 import sys
 import json
+import time
+import random
+random.seed(BOT_SEED)
 
+print(json.dumps({"status": "BOOT"}), flush=True)
 try:
     import bot
     if not hasattr(bot, 'make_move') or not callable(getattr(bot, 'make_move')):
@@ -51,7 +67,11 @@ for line in sys.stdin:
         break
     try:
         state = json.loads(line)
+        cpu_started = time.process_time()
         move = bot.make_move(state)
+        if time.process_time() - cpu_started > CPU_BUDGET:
+            print(json.dumps({"status": "CPU_TIMEOUT", "message": "Bot vượt ngân sách CPU mỗi nước"}), flush=True)
+            continue
         print(json.dumps({"status": "OK", "move": move}), flush=True)
     except Exception as e:
         print(json.dumps({"status": "ERROR", "message": f"Lỗi thực thi make_move: {str(e)}"}), flush=True)
@@ -62,6 +82,10 @@ export class PythonBotProcess {
   private readline: Interface | null = null;
   private tempDir: string | null = null;
   private isTerminated = false;
+  private containerName: string | null = null;
+  private stderr = '';
+  private outputBytes = 0;
+  private watchdog: ChildProcess | null = null;
 
   constructor(private readonly opts: PythonProcessOptions) {}
 
@@ -74,11 +98,25 @@ export class PythonBotProcess {
    */
   async start(): Promise<void> {
     const startupMs = this.opts.startupMs ?? 3000;
-    const pythonCmd = this.opts.pythonCmd ?? 'python';
+    const pythonCmd = this.opts.pythonCmd ?? process.env.PYTHON_CMD ?? 'python';
+    const local =
+      this.opts.trustedLocal === true ||
+      (process.env.BOT_SANDBOX_MODE === 'trusted-local' && process.env.NODE_ENV !== 'production');
 
     this.tempDir = await mkdtemp(join(tmpdir(), 'arena-bot-'));
     await writeFile(join(this.tempDir, 'bot.py'), this.opts.sourceCode, 'utf8');
-    await writeFile(join(this.tempDir, 'runner.py'), RUNNER_SCRIPT, 'utf8');
+    await writeFile(
+      join(this.tempDir, 'runner.py'),
+      RUNNER_SCRIPT.replace(
+        'import sys',
+        `import sys\nCPU_BUDGET = ${(this.opts.cpuMsPerMove ?? 200) / 1000}\nBOT_SEED = ${this.opts.seed ?? 0}`,
+      ),
+      'utf8',
+    );
+    // The non-root container user must be able to read its isolated bind mount.
+    await chmod(this.tempDir, 0o755);
+    await chmod(join(this.tempDir, 'bot.py'), 0o644);
+    await chmod(join(this.tempDir, 'runner.py'), 0o644);
 
     // Chỉ truyền các biến môi trường thiết yếu của hệ thống, tuyệt đối chặn secret DB / Redis
     const safeEnv: NodeJS.ProcessEnv = {
@@ -87,51 +125,146 @@ export class PythonBotProcess {
       HOMEPATH: process.env.HOMEPATH,
       USERPROFILE: process.env.USERPROFILE,
       PYTHONUNBUFFERED: '1',
+      PYTHONIOENCODING: 'utf-8',
+      PYTHONHASHSEED: String(this.opts.seed ?? 0),
     };
 
     return new Promise<void>((resolve, reject) => {
       let resolved = false;
-      const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          this.terminate();
-          reject(new PythonProcessError('STARTUP_TIMEOUT', `Bot không khởi động xong trong ${startupMs}ms.`));
-        }
-      }, startupMs);
+      let booted = false;
+      let timeout = setTimeout(
+        () => {
+          if (!resolved) {
+            resolved = true;
+            this.terminate();
+            reject(
+              new PythonProcessError(
+                local ? 'STARTUP_TIMEOUT' : 'SANDBOX_UNAVAILABLE',
+                `Môi trường Python/container chưa sẵn sàng. ${this.stderr}`,
+              ),
+            );
+          }
+        },
+        local ? startupMs : 15_000,
+      );
 
       try {
-        this.child = spawn(pythonCmd, ['runner.py'], {
+        this.containerName = local ? null : `arena-bot-${randomUUID()}`;
+        const args = local
+          ? ['-X', 'utf8', '-u', 'runner.py']
+          : [
+              'run',
+              '--pull=never',
+              '--rm',
+              '-i',
+              '--name',
+              this.containerName!,
+              '--network=none',
+              '--read-only',
+              '--env',
+              `PYTHONHASHSEED=${this.opts.seed ?? 0}`,
+              '--cap-drop=ALL',
+              '--security-opt=no-new-privileges',
+              '--memory=128m',
+              '--memory-swap=128m',
+              `--cpus=${Math.max(0.01, Math.min(1, (this.opts.cpuMsPerMove ?? 200) / (this.opts.wallMsPerMove ?? 1000)))}`,
+              '--pids-limit=32',
+              '--user=65534:65534',
+              '--tmpfs=/tmp:rw,noexec,nosuid,size=16m',
+              '--mount',
+              `type=bind,source=${this.tempDir},target=/bot,readonly`,
+              '-w',
+              '/bot',
+              process.env.BOT_SANDBOX_IMAGE || 'python:3.13-slim',
+              'python',
+              '-X',
+              'utf8',
+              '-B',
+              '-u',
+              'runner.py',
+            ];
+        this.child = spawn(local ? pythonCmd : process.env.BOT_CONTAINER_CMD || 'docker', args, {
           cwd: this.tempDir!,
-          env: safeEnv,
+          env: local ? safeEnv : process.env,
           stdio: ['pipe', 'pipe', 'pipe'],
         });
+        if (!local) {
+          // Independent host watchdog survives a worker crash; untrusted code cannot stop it.
+          this.watchdog = spawn(
+            process.execPath,
+            [
+              '-e',
+              `const {execFile}=require('node:child_process');setTimeout(()=>execFile(process.argv[1],['rm','-f',process.argv[2]],()=>process.exit()),Number(process.argv[3]));`,
+              process.env.BOT_CONTAINER_CMD || 'docker',
+              this.containerName!,
+              String(this.opts.maxRuntimeMs ?? 230_000),
+            ],
+            { detached: true, windowsHide: true, stdio: 'ignore' },
+          );
+          this.watchdog.on('error', () => this.terminate());
+          this.watchdog.unref();
+        }
+        this.child.stderr!.on('data', (chunk: Buffer) => {
+          this.stderr = (this.stderr + chunk.toString()).slice(-8192);
+          this.outputBytes += chunk.length;
+          if (this.outputBytes > 1024 * 1024) this.terminate();
+        });
+        this.child.stdout!.on('data', (chunk: Buffer) => {
+          this.outputBytes += chunk.length;
+          if (this.outputBytes > 1024 * 1024) this.terminate();
+        });
+        this.child.stdin!.on('error', () => this.terminate());
 
         this.readline = createInterface({ input: this.child.stdout! });
 
-        this.readline.once('line', (line) => {
-          clearTimeout(timeout);
+        const onStartupLine = (line: string) => {
           if (resolved) return;
-          resolved = true;
           try {
             const res = JSON.parse(line);
-            if (res.status === 'READY') {
-              resolve();
-            } else {
+            if (res.status === 'BOOT' && !booted) {
+              booted = true;
+              clearTimeout(timeout);
+              timeout = setTimeout(() => {
+                if (resolved) return;
+                resolved = true;
+                this.terminate();
+                reject(
+                  new PythonProcessError(
+                    'STARTUP_TIMEOUT',
+                    `Bot không khởi động xong trong ${startupMs}ms sau khi Python sẵn sàng.`,
+                  ),
+                );
+              }, startupMs);
+              return;
+            }
+            resolved = true;
+            clearTimeout(timeout);
+            this.readline?.removeListener('line', onStartupLine);
+            if (res.status === 'READY' && booted) resolve();
+            else {
               this.terminate();
               reject(new PythonProcessError('STARTUP_ERROR', res.message || 'Lỗi khởi động bot.'));
             }
           } catch {
+            resolved = true;
+            clearTimeout(timeout);
             this.terminate();
             reject(new PythonProcessError('INVALID_RESPONSE', 'Phản hồi khởi động không phải JSON hợp lệ.'));
           }
-        });
+        };
+        this.readline.on('line', onStartupLine);
 
         this.child.on('error', (err) => {
           clearTimeout(timeout);
           if (!resolved) {
             resolved = true;
             this.terminate();
-            reject(new PythonProcessError('CRASH', `Không thể khởi chạy tiến trình Python: ${err.message}`));
+            reject(
+              new PythonProcessError(
+                'SANDBOX_UNAVAILABLE',
+                `Không thể khởi chạy môi trường bot: ${err instanceof Error ? err.message : String(err)}. Kiểm tra Docker/image hoặc PYTHON_CMD.`,
+              ),
+            );
           }
         });
 
@@ -140,13 +273,23 @@ export class PythonBotProcess {
           if (!resolved) {
             resolved = true;
             this.terminate();
-            reject(new PythonProcessError('CRASH', `Tiến trình bot thoát sớm với mã lỗi ${code}.`));
+            reject(
+              new PythonProcessError(
+                !local && (code === 125 || code === 126 || code === 127) ? 'SANDBOX_UNAVAILABLE' : 'CRASH',
+                `Tiến trình bot thoát sớm với mã lỗi ${code}. ${this.stderr}`,
+              ),
+            );
           }
         });
-      } catch (err: any) {
+      } catch (err) {
         clearTimeout(timeout);
         this.terminate();
-        reject(new PythonProcessError('CRASH', `Lỗi tạo tiến trình: ${err.message}`));
+        reject(
+          new PythonProcessError(
+            'CRASH',
+            `Lỗi tạo tiến trình: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
       }
     });
   }
@@ -165,7 +308,9 @@ export class PythonBotProcess {
         if (!done) {
           done = true;
           this.terminate();
-          reject(new PythonProcessError('MOVE_TIMEOUT', `Bot chạy quá thời gian suy nghĩ cho phép (${wallMs}ms).`));
+          reject(
+            new PythonProcessError('MOVE_TIMEOUT', `Bot chạy quá thời gian suy nghĩ cho phép (${wallMs}ms).`),
+          );
         }
       }, wallMs);
 
@@ -173,30 +318,60 @@ export class PythonBotProcess {
         clearTimeout(timer);
         if (done) return;
         done = true;
+        this.child?.removeListener('exit', onExit);
 
         try {
           const res = JSON.parse(line);
-          if (res.status === 'OK' && res.move && typeof res.move.from === 'string' && typeof res.move.to === 'string') {
+          if (
+            res.status === 'OK' &&
+            res.move &&
+            typeof res.move.from === 'string' &&
+            typeof res.move.to === 'string'
+          ) {
             resolve({ from: res.move.from, to: res.move.to });
+          } else if (res.status === 'CPU_TIMEOUT') {
+            reject(new PythonProcessError('MOVE_TIMEOUT', res.message));
           } else if (res.status === 'ERROR') {
-            reject(new PythonProcessError('CRASH', res.message || 'Lỗi thực thi trong bot.'));
+            reject(
+              new PythonProcessError('CRASH', `${res.message || 'Lỗi thực thi trong bot.'} ${this.stderr}`),
+            );
           } else {
-            reject(new PythonProcessError('INVALID_RESPONSE', 'Bot trả về cấu trúc nước đi không đúng chuẩn {from, to}.'));
+            reject(
+              new PythonProcessError(
+                'INVALID_RESPONSE',
+                'Bot trả về cấu trúc nước đi không đúng chuẩn {from, to}.',
+              ),
+            );
           }
         } catch {
-          reject(new PythonProcessError('INVALID_RESPONSE', 'Dữ liệu nước đi của bot không phải JSON hợp lệ.'));
+          reject(
+            new PythonProcessError('INVALID_RESPONSE', 'Dữ liệu nước đi của bot không phải JSON hợp lệ.'),
+          );
         }
       };
 
+      const onExit = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        this.readline?.removeListener('line', onLine);
+        reject(new PythonProcessError('CRASH', `Tiến trình bot đã thoát khi đang tính nước đi. ${this.stderr}`));
+      };
+      this.child!.once('exit', onExit);
       this.readline!.once('line', onLine);
 
       try {
         const payload = JSON.stringify(state) + '\n';
         this.child!.stdin!.write(payload);
-      } catch (err: any) {
+      } catch (err) {
         clearTimeout(timer);
         this.terminate();
-        reject(new PythonProcessError('CRASH', `Không thể gửi dữ liệu cho bot: ${err.message}`));
+        reject(
+          new PythonProcessError(
+            'CRASH',
+            `Không thể gửi dữ liệu cho bot: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
       }
     });
   }
@@ -213,13 +388,22 @@ export class PythonBotProcess {
         this.child.stdin?.write('QUIT\n');
         this.child.kill('SIGTERM');
         setTimeout(() => {
-          if (this.child && !this.child.killed) this.child.kill('SIGKILL');
+          if (this.child && this.child.exitCode === null) this.child.kill('SIGKILL');
         }, 500);
       }
     } catch {
       // bỏ qua lỗi kill
     }
 
+    this.watchdog?.kill();
+    this.watchdog = null;
+    if (this.containerName) {
+      const cleanup = spawn(process.env.BOT_CONTAINER_CMD || 'docker', ['rm', '-f', this.containerName], {
+        stdio: 'ignore',
+      });
+      cleanup.on('error', () => undefined);
+      this.containerName = null;
+    }
     if (this.readline) {
       this.readline.close();
       this.readline = null;

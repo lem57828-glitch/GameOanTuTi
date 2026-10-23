@@ -22,13 +22,40 @@ export const BotVersion = z.object({
 export type BotVersion = z.infer<typeof BotVersion>;
 
 /** DTO gửi lên khi nộp bot mới (TV2). */
-export const SubmitBotInput = z.object({
-  teamId: Id,
-  label: z.string().min(1, 'Tên phiên bản không được để trống').max(100),
-  sourceCode: z.string().min(10, 'Mã nguồn quá ngắn').max(500_000, 'Mã nguồn tối đa 500KB'),
-  githubRepo: z.string().url('URL GitHub không hợp lệ').optional().or(z.literal('')),
-  commitSha: z.string().regex(/^[a-f0-9]{40}$/, 'Commit SHA phải gồm 40 ký tự hex').optional().or(z.literal('')),
-});
+export const SubmitBotInput = z
+  .object({
+    teamId: Id,
+    label: z.string().min(1, 'Tên phiên bản không được để trống').max(100),
+    sourceCode: z.string().min(10, 'Mã nguồn quá ngắn').max(500_000, 'Mã nguồn tối đa 500KB').optional(),
+    sourcePath: z.string().max(240).optional(),
+    githubRepo: z.string().url('URL GitHub không hợp lệ').optional().or(z.literal('')),
+    commitSha: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/, 'Commit SHA phải gồm 40 ký tự hex')
+      .optional()
+      .or(z.literal('')),
+  })
+  .superRefine((v, ctx) => {
+    if (v.githubRepo) {
+      if (!v.commitSha)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['commitSha'],
+          message: 'Nộp GitHub phải có commit SHA cố định.',
+        });
+      if (v.sourceCode)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['sourceCode'],
+          message: 'Chọn nộp mã trực tiếp hoặc GitHub.',
+        });
+    } else if (!v.sourceCode)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sourceCode'],
+        message: 'Cần mã Python hoặc repository/commit GitHub.',
+      });
+  });
 export type SubmitBotInput = z.infer<typeof SubmitBotInput>;
 
 /** DTO trả về khi xem chi tiết mã nguồn bot (chỉ người có quyền). */
@@ -38,6 +65,9 @@ export const BotSourceDetail = z.object({
   version: z.number().int(),
   label: z.string(),
   sourceCode: z.string(),
+  githubRepo: z.string().nullable().optional(),
+  commitSha: z.string().nullable().optional(),
+  sourcePath: z.string().nullable().optional(),
   sourceHash: z.string(),
   status: BotVersionStatus,
   submittedById: z.string().nullable().optional(),
@@ -84,6 +114,7 @@ export const GameRequest = z.object({
   contractVersion: z.literal(CONTRACT_VERSION),
   requestKey: REQUEST_KEY,
   gameId: Id,
+  stageId: Id.optional(),
   choices: z.object({ blue: LockedChoice, pink: LockedChoice }),
   rulesetId: z.string(),
   seed: z
@@ -143,7 +174,7 @@ export type JobView = z.infer<typeof JobView>;
 export const QueueJobData = z.object({
   jobId: Id,
   requestKey: REQUEST_KEY,
-  kind: z.enum(['game', 'test_run']).optional().default('game'),
+  kind: z.enum(['game', 'test_run', 'validate_bot']).optional().default('game'),
 });
 export type QueueJobData = z.infer<typeof QueueJobData>;
 
@@ -161,6 +192,7 @@ export const CreateTestRunInput = z.object({
   opponentTarget: z.string().min(1),
   mySide: Side.optional().default('blue'),
   extraType: PieceType.optional().default('PAPER'),
+  opponentExtraType: PieceType.optional().default('PAPER'),
 });
 export type CreateTestRunInput = z.infer<typeof CreateTestRunInput>;
 
@@ -183,6 +215,35 @@ export const TestRunDetail = z.object({
   createdAt: IsoDateTime,
   finishedAt: IsoDateTime.nullable().optional(),
   /** Danh sách sự kiện nước đi chuẩn bàn giao TV4 */
-  events: z.array(z.any()).optional(),
+  rulesetId: z.string().optional(),
+  seed: z.number().int().nonnegative().optional(),
+  extraType: PieceType.optional(),
+  opponentExtraType: PieceType.optional(),
+  initialBoard: z.record(z.string(), z.object({ side: Side, type: PieceType })).optional(),
+  maxPlies: z.number().int().positive().optional(),
+  events: z
+    .array(
+      z.object({
+        seq: z.number().int().positive(),
+        ply: z.number().int().positive(),
+        side: Side,
+        from: z.string(),
+        to: z.string(),
+        type: PieceType.optional(),
+        capture: PieceType.nullable().optional(),
+      }),
+    )
+    .optional(),
 });
 export type TestRunDetail = z.infer<typeof TestRunDetail>;
+
+export const BotSelectionInput = z
+  .object({ teamId: Id, botVersionIds: z.array(Id).min(1).max(3) })
+  .refine((v) => new Set(v.botVersionIds).size === v.botVersionIds.length, 'Không chọn trùng phiên bản.');
+export const BotSelectionView = z.object({
+  teamId: Id,
+  stageId: Id,
+  botVersionIds: z.array(Id),
+  locked: z.boolean(),
+  updatedAt: IsoDateTime,
+});

@@ -1,3 +1,4 @@
+import { conflict, forbidden, notFound, validationError } from '../../core/errors.js';
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService, type Tx } from '../../core/prisma.service.js';
@@ -38,10 +39,12 @@ export class BotsRunnerRepository {
 
   createBotVersion(data: {
     teamId: string;
-    version: number;
     label: string;
     sourceHash: string;
     sourceCode: string;
+    githubRepo?: string;
+    commitSha?: string;
+    sourcePath?: string;
     submittedById: string;
     duplicateOfId?: string | null;
     validationLog?: string | null;
@@ -49,7 +52,79 @@ export class BotsRunnerRepository {
     status: string;
     isDemo?: boolean;
   }) {
-    return this.prisma.botVersion.create({ data });
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${data.teamId}))`;
+      const latest = await tx.botVersion.aggregate({
+        where: { teamId: data.teamId },
+        _max: { version: true },
+      });
+      const bot = await tx.botVersion.create({ data: { ...data, version: (latest._max.version ?? 0) + 1 } });
+      if (bot.status === 'pending')
+        await tx.outboxEvent.create({
+          data: {
+            type: 'bot.validation.requested',
+            aggregateId: bot.id,
+            payload: { jobId: bot.id, requestKey: `validation:${bot.id}`, kind: 'validate_bot' },
+          },
+        });
+      return bot;
+    });
+  }
+
+  async saveSelection(teamId: string, stageId: string, botVersionIds: string[], lock: boolean) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Stage" WHERE id = ${stageId} FOR UPDATE`;
+      const stage = await tx.stage.findUnique({ where: { id: stageId } });
+      const team = await tx.team.findUnique({ where: { id: teamId } });
+      if (!stage || !team) throw notFound('Đội/giai đoạn');
+      if (stage.tournamentId !== team.tournamentId) throw forbidden('Đội không thuộc giải này.');
+      const current = await tx.botStageSelection.findUnique({
+        where: { teamId_stageId: { teamId, stageId } },
+      });
+      if (
+        current?.locked ||
+        (current?.freezeAt && current.freezeAt <= new Date()) ||
+        (stage.lockAt && stage.lockAt <= new Date())
+      ) {
+        if (current && current.botVersionIds.join('|') === botVersionIds.join('|'))
+          return { ...current, locked: true };
+        throw conflict('Bộ bot của giai đoạn đã khóa.');
+      }
+      if (stage.kind === 'qualifier' && botVersionIds.length !== 1)
+        throw validationError('Sơ loại chỉ chọn một bot.');
+      const bots = await tx.botVersion.findMany({
+        where: { id: { in: botVersionIds }, teamId, status: 'valid' },
+      });
+      if (bots.length !== botVersionIds.length) throw validationError('Chỉ chọn bot hợp lệ thuộc đội.');
+      return tx.botStageSelection.upsert({
+        where: { teamId_stageId: { teamId, stageId } },
+        create: { teamId, stageId, botVersionIds, locked: lock, freezeAt: stage.lockAt },
+        update: { botVersionIds, locked: lock, freezeAt: stage.lockAt },
+      });
+    });
+  }
+
+  async selection(teamId: string, stageId: string) {
+    const stage = await this.prisma.stage.findUnique({ where: { id: stageId } });
+    if (!stage) throw notFound('Giai đoạn');
+    const row = await this.prisma.botStageSelection.findUnique({
+      where: { teamId_stageId: { teamId, stageId } },
+    });
+    return row
+      ? {
+          ...row,
+          locked:
+            row.locked ||
+            Boolean((row.freezeAt ?? stage.lockAt) && (row.freezeAt ?? stage.lockAt)! <= new Date()),
+        }
+      : null;
+  }
+
+  duplicateReport() {
+    return this.prisma.botVersion.findMany({
+      where: { duplicateOfId: { not: null } },
+      select: { id: true, teamId: true, label: true, sourceHash: true, duplicateOfId: true, createdAt: true },
+    });
   }
 
   latestDemoBot(teamId: string, tx: Tx = this.prisma) {
@@ -59,6 +134,9 @@ export class BotsRunnerRepository {
     });
   }
 
+  gameTeams(id: string, tx: Tx) {
+    return tx.game.findUnique({ where: { id }, select: { blueTeamId: true, pinkTeamId: true } });
+  }
   createJob(
     tx: Tx,
     data: { requestKey: string; gameId: string; roomId: string; payload: Prisma.InputJsonValue },
@@ -101,15 +179,54 @@ export class BotsRunnerRepository {
     return this.prisma.gameJob.update({ where: { id }, data: { updatedAt: new Date() } });
   }
 
+  findPendingValidation(olderThan: Date) {
+    return this.prisma.botVersion.findMany({
+      where: { status: 'pending', createdAt: { lt: olderThan } },
+      take: 50,
+    });
+  }
+  async diagnostics(gameId: string) {
+    const game = await this.prisma.game.findUnique({ where: { id: gameId } });
+    const job = await this.prisma.gameJob.findUnique({ where: { gameId } });
+    if (!game || !job) return null;
+    const runs = await this.prisma.runAttempt.findMany({
+      where: { jobId: job.id },
+      select: { id: true, attemptNo: true, status: true, diagnostics: true },
+      orderBy: { attemptNo: 'asc' },
+    });
+    return { game, runs };
+  }
+  findStaleTestRuns(olderThan: Date) {
+    return this.prisma.botTestRun.findMany({
+      where: { status: { in: ['queued', 'running'] }, updatedAt: { lt: olderThan } },
+      take: 50,
+    });
+  }
+
   // ---- TV2 - Gói việc 4: Test Runs
   createTestRun(data: {
     botVersionId: string;
     mySide: string;
     opponentType: string;
     opponentTarget: string;
+    extraType: string;
+    opponentExtraType: string;
+    seed: number;
+    rulesetId: string;
+    initialBoard: Prisma.InputJsonValue;
     status: string;
   }) {
-    return this.prisma.botTestRun.create({ data });
+    return this.prisma.$transaction(async (tx) => {
+      const run = await tx.botTestRun.create({ data });
+      await tx.outboxEvent.create({
+        data: {
+          type: 'test_run.requested',
+          aggregateId: run.id,
+          payload: { jobId: run.id, requestKey: `testrun:${run.id}`, kind: 'test_run' },
+        },
+      });
+      return run;
+    });
   }
 
   findTestRun(id: string) {

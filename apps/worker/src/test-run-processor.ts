@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
-import { STANDARD_RULESET_ID } from '@arena/game-engine';
+import { PieceType } from '@arena/contracts';
 import { SandboxGameRunner } from './runner/sandbox-game-runner.js';
 
 export interface TestRunProcessorDeps {
@@ -29,20 +29,40 @@ export class TestRunProcessor {
       return;
     }
 
-    await prisma.botTestRun.update({
-      where: { id: testRunId },
-      data: { status: 'running' },
+    const owner = `${process.pid}:${crypto.randomUUID()}`;
+    const claim = await prisma.botTestRun.updateMany({
+      where: {
+        id: testRunId,
+        status: { in: ['queued', 'running'] },
+        OR: [{ leaseUntil: null }, { leaseUntil: { lt: new Date() } }],
+      },
+      data: {
+        status: 'running',
+        attempts: { increment: 1 },
+        leaseOwner: owner,
+        leaseUntil: new Date(Date.now() + 30_000),
+      },
     });
+    if (!claim.count) throw new Error('Lượt đấu thử đang được worker khác xử lý.');
+    const lease = setInterval(() => {
+      void prisma.botTestRun
+        .updateMany({
+          where: { id: testRunId, leaseOwner: owner, status: 'running' },
+          data: { leaseUntil: new Date(Date.now() + 30_000) },
+        })
+        .catch((e) => log(String(e)));
+    }, 10_000);
+    lease.unref();
 
-    log(`Bắt đầu chạy đấu thử BotTestRun ${testRunId}: Bot ${run.botVersion.label} (${run.mySide}) vs ${run.opponentType}:${run.opponentTarget}`);
-
-    const mySide = (run.mySide === 'pink' ? 'pink' : 'blue') as 'blue' | 'pink';
-    const oppSide = mySide === 'blue' ? 'pink' : 'blue';
+    log(
+      `Bắt đầu chạy đấu thử BotTestRun ${testRunId}: Bot ${run.botVersion.label} (${run.mySide}) vs ${run.opponentType}:${run.opponentTarget}`,
+    );
 
     const events: Array<{
       seq: number;
       ply: number;
-      side: string;
+      side: 'blue' | 'pink';
+      type: 'ROCK' | 'PAPER' | 'SCISSORS';
       from: string;
       to: string;
       capture?: string | null;
@@ -60,6 +80,7 @@ export class TestRunProcessor {
         seq: events.length + 1,
         ply: move.ply,
         side: move.side,
+        type: move.type,
         from: move.from,
         to: move.to,
         capture: move.capture ?? null,
@@ -74,54 +95,68 @@ export class TestRunProcessor {
           gameId: `game:${testRunId}`,
           choices: {
             blue: {
-              botVersionId: run.mySide === 'blue' ? run.botVersionId : (run.opponentType === 'bot' ? run.opponentTarget : `demo:${run.opponentTarget}`),
-              extraType: 'PAPER',
+              botVersionId:
+                run.mySide === 'blue'
+                  ? run.botVersionId
+                  : run.opponentType === 'bot'
+                    ? run.opponentTarget
+                    : `demo:${run.opponentTarget}`,
+              extraType: PieceType.parse(run.mySide === 'blue' ? run.extraType : run.opponentExtraType),
             },
             pink: {
-              botVersionId: run.mySide === 'pink' ? run.botVersionId : (run.opponentType === 'bot' ? run.opponentTarget : `demo:${run.opponentTarget}`),
-              extraType: 'PAPER',
+              botVersionId:
+                run.mySide === 'pink'
+                  ? run.botVersionId
+                  : run.opponentType === 'bot'
+                    ? run.opponentTarget
+                    : `demo:${run.opponentTarget}`,
+              extraType: PieceType.parse(run.mySide === 'pink' ? run.extraType : run.opponentExtraType),
             },
           },
-          rulesetId: STANDARD_RULESET_ID,
-          seed: Math.floor(Math.random() * 1000000),
+          rulesetId: run.rulesetId,
+          seed: run.seed,
           limits: {
             cpuMsPerMove: 200,
             wallMsPerMove: 1000,
             startupMs: 3000,
-            maxPlies: 200,
+            maxPlies: run.maxPlies,
             maxErrorsPerGame: 3,
           },
         },
         onMove,
       );
 
-      await prisma.botTestRun.update({
-        where: { id: testRunId },
+      await prisma.botTestRun.updateMany({
+        where: { id: testRunId, leaseOwner: owner, status: 'running' },
         data: {
           status: 'succeeded',
+          leaseOwner: null,
+          leaseUntil: null,
+          logs: outcome.logs,
           winner: outcome.winner,
           reason: outcome.reason,
           plies: outcome.plies,
           piecesBlue: outcome.piecesLeft.blue,
           piecesPink: outcome.piecesLeft.pink,
-          events: events as any,
+          events,
           finishedAt: new Date(),
         },
       });
 
-      log(`Đấu thử BotTestRun ${testRunId} thành công. Thắng: ${outcome.winner ?? 'Hòa'}, Lý do: ${outcome.reason}, Số nước: ${outcome.plies}.`);
+      log(
+        `Đấu thử BotTestRun ${testRunId} thành công. Thắng: ${outcome.winner ?? 'Hòa'}, Lý do: ${outcome.reason}, Số nước: ${outcome.plies}.`,
+      );
     } catch (err) {
       const errorMsg = (err as Error).message || String(err);
       log(`Đấu thử BotTestRun ${testRunId} thất bại: ${errorMsg}`);
 
-      await prisma.botTestRun.update({
-        where: { id: testRunId },
-        data: {
-          status: 'failed',
-          error: errorMsg,
-          finishedAt: new Date(),
-        },
+      await prisma.botTestRun.updateMany({
+        where: { id: testRunId, leaseOwner: owner, status: 'running' },
+        data: { error: errorMsg, leaseOwner: null, leaseUntil: null },
       });
+      throw err;
+    } finally {
+      clearInterval(lease);
     }
   }
 }
