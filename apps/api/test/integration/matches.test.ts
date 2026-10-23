@@ -344,6 +344,8 @@ it('gửi bù kết quả trận bị mất giữa chừng; đặt lại phần 
   const summary = (await call('acc_referee', `/admin/tournaments/${tid}/matches/summary`)).data;
   expect(summary).toMatchObject({ pending: 1, notOpened: 0 });
   expect(summary.selecting + summary.running).toBe(1);
+  expect(summary.byGame).toHaveLength(1);
+  expect(summary.byGame[0].selecting + summary.byGame[0].running).toBe(1);
   const fresh = await prisma.match.findFirstOrThrow({
     where: { pairId: real.id },
     orderBy: { createdAt: 'desc' },

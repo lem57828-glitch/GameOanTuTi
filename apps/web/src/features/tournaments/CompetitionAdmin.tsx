@@ -39,6 +39,8 @@ type RoomsSummary = {
   running: number;
   paused: number;
   completed: number;
+  /** Số phòng đang chọn / đang thi theo từng hiệp. */
+  byGame: Array<{ no: number; selecting: number; running: number }>;
 };
 
 export function CompetitionAdmin() {
@@ -182,6 +184,18 @@ export function CompetitionAdmin() {
               {r.completed ? ` · ${r.completed} đã xong, đang gửi kết quả` : ''}
             </p>
           )}
+          {r && r.byGame.length > 0 && (
+            <ul className="flex w-full flex-wrap gap-2 text-xs" aria-label="Tiến độ theo hiệp">
+              {r.byGame.map((g) => (
+                <li key={g.no} className="rounded border border-line bg-surface-2 px-2 py-1">
+                  <span className="font-semibold">Hiệp {g.no}:</span>{' '}
+                  {[g.selecting && `${g.selecting} đang chọn`, g.running && `${g.running} đang thi`]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </li>
+              ))}
+            </ul>
+          )}
           {isAdmin && unopened > 0 && (
             <Button loading={busy} onClick={() => run('/matches/open', 'Đã mở phòng thi đấu')}>
               Mở phòng thi đấu cho {unopened} cặp
@@ -193,7 +207,7 @@ export function CompetitionAdmin() {
               loading={busy}
               onClick={() => run('/matches/force-lock', 'Đã khóa lựa chọn các phòng đang chọn')}
             >
-              Khóa lựa chọn ngay ({r!.selecting} phòng đang chọn)
+              Khóa lựa chọn ngay ({r!.selecting} phòng đang chọn · {gameRange(r!.byGame.filter((g) => g.selecting))})
             </Button>
           )}
           {health.data?.demoMode && isAdmin && unopened > 0 && (
@@ -836,4 +850,12 @@ function LevelDialog({
       </div>
     </Dialog>
   );
+}
+
+/** "hiệp 2" hoặc "hiệp 1–3" cho các hiệp có phòng đang chọn. */
+function gameRange(games: Array<{ no: number }>): string {
+  if (!games.length) return 'hiệp ?';
+  const lo = games[0]!.no;
+  const hi = games.at(-1)!.no;
+  return lo === hi ? `hiệp ${lo}` : `hiệp ${lo}–${hi}`;
 }
