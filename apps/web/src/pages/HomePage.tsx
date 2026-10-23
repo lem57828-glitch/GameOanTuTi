@@ -1,3 +1,4 @@
+import { useSession } from '../lib/session';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Alert, Badge, Button, Card, CardHeader } from '@arena/ui';
@@ -6,6 +7,7 @@ import { Board } from '../components/Board';
 import { api } from '../lib/api';
 
 export function HomePage() {
+  const { user, isLoading } = useSession();
   const room = useQuery({ queryKey: ['home-room'], queryFn: () => api<RoomSnapshot>('/rooms/room_demo_1') });
   return (
     <div className="flex flex-col gap-10">
@@ -21,9 +23,11 @@ export function HomePage() {
             Xây dựng bot Búa – Bao – Kéo, gặp đối thủ và theo dõi từng nước đi cùng cả cộng đồng.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
-            <Button asChild>
-              <Link to="/login">Thử bản demo</Link>
-            </Button>
+            {!isLoading && !user && (
+              <Button asChild>
+                <Link to="/register">Đăng ký tham gia</Link>
+              </Button>
+            )}
             <Button asChild variant="secondary">
               <Link to="/rooms">Xem phòng đấu</Link>
             </Button>
@@ -53,6 +57,12 @@ export function HomePage() {
           </p>
         </Card>
       </section>
+      <Card>
+        <CardHeader title="Thông báo và tài liệu từ BTC" subtitle="Lịch giải, thể lệ và hướng dẫn tham gia" />
+        <Link to="/news" className="font-semibold text-accent">
+          Xem nội dung mới nhất →
+        </Link>
+      </Card>
       <section aria-label="Ba bước tham gia" className="grid gap-4 md:grid-cols-3">
         {['Đăng nhập và lập đội', 'Chuẩn bị các phiên bản bot', 'Vào phòng, theo dõi trận đấu'].map(
           (title, i) => (
@@ -108,8 +118,8 @@ export function GuidePage() {
       <Card>
         <CardHeader title="Các phần làm tiếp" />
         <p className="text-sm leading-relaxed text-ink-muted">
-          Đăng nhập thật, đăng ký đội, nộp bot và sandbox, ghép cặp Swiss, cây đấu 32 → 4, chốt bot/quân kín
-          và khiếu nại chưa được triển khai ở M0.
+          Đăng ký đội, nộp bot và sandbox, ghép cặp Swiss, cây đấu 32 → 4, chốt bot/quân kín và khiếu nại chưa
+          được triển khai ở M0.
         </p>
       </Card>
     </div>

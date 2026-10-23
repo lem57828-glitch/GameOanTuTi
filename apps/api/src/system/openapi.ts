@@ -73,8 +73,103 @@ export function buildOpenApi() {
       404: error('DEMO_DISABLED / không có tài khoản'),
     },
   });
-  r.registerPath({ method: 'post', path: '/auth/register', tags: ['accounts-teams'], responses: notImpl });
-  r.registerPath({ method: 'post', path: '/auth/login', tags: ['accounts-teams'], responses: notImpl });
+  r.registerPath({
+    method: 'post',
+    path: '/auth/register',
+    tags: ['accounts-teams'],
+    request: { body: { content: { 'application/json': { schema: C.CompleteRegistrationRequest } } } },
+    responses: {
+      201: json(data(z.object({ accountId: C.Id }))),
+      400: error('VALIDATION_ERROR'),
+      409: error('Email hoặc MSSV đã đăng ký'),
+      429: error('RATE_LIMITED'),
+    },
+  });
+  r.registerPath({
+    method: 'post',
+    path: '/auth/login',
+    tags: ['accounts-teams'],
+    request: { body: { content: { 'application/json': { schema: C.LoginRequest } } } },
+    responses: {
+      200: json(data(z.object({ user: C.SessionUser }))),
+      400: error('VALIDATION_ERROR'),
+      401: error('Email hoặc mật khẩu không đúng'),
+      429: error('RATE_LIMITED'),
+    },
+  });
+  r.registerPath({
+    method: 'post',
+    path: '/auth/registration-code',
+    tags: ['accounts-teams'],
+    request: { body: { content: { 'application/json': { schema: C.RegistrationEmailRequest } } } },
+    responses: {
+      200: json(data(z.object({ expiresAt: z.string().datetime(), serverTime: z.string().datetime() }))),
+      400: error('VALIDATION_ERROR'),
+      409: error('CONFLICT'),
+      429: error('RATE_LIMITED'),
+      500: error('Không gửi được mã xác minh'),
+    },
+  });
+  // TV1 endpoints use the same request schemas as HTTP validation.
+  const tv1Routes: {
+    method: 'get' | 'post' | 'patch' | 'delete';
+    path: string;
+    schema?: ZodTypeAny;
+    access?: 'user' | 'admin';
+  }[] = [
+    { method: 'get', path: '/auth/options' },
+    { method: 'post', path: '/auth/forgot-password', schema: C.EmailRequest },
+    { method: 'post', path: '/auth/resend-verification', access: 'user' },
+    { method: 'post', path: '/auth/verify-email', schema: C.TokenRequest },
+    { method: 'post', path: '/auth/reset-password', schema: C.ResetPasswordRequest },
+    { method: 'get', path: '/profile', access: 'user' },
+    { method: 'patch', path: '/profile', schema: C.ProfileUpdateRequest, access: 'user' },
+    { method: 'post', path: '/profile/password', schema: C.ChangePasswordRequest, access: 'user' },
+    { method: 'post', path: '/teams/mine/captain', schema: C.TransferCaptainRequest, access: 'user' },
+    { method: 'delete', path: '/teams/mine/members/{accountId}', access: 'user' },
+    { method: 'get', path: '/notifications', access: 'user' },
+    { method: 'post', path: '/notifications/read-all', access: 'user' },
+    { method: 'post', path: '/notifications/{id}/read', access: 'user' },
+    { method: 'get', path: '/dev/mailbox', access: 'user' },
+    { method: 'get', path: '/publications' },
+    { method: 'get', path: '/admin/publications', access: 'admin' },
+    { method: 'post', path: '/admin/publications', schema: C.PublicationRequest, access: 'admin' },
+    { method: 'patch', path: '/admin/publications/{id}', schema: C.PublicationRequest, access: 'admin' },
+    { method: 'delete', path: '/admin/publications/{id}', access: 'admin' },
+    { method: 'get', path: '/admin/accounts', access: 'admin' },
+    { method: 'patch', path: '/admin/accounts/{id}', schema: C.AdminAccountRequest, access: 'admin' },
+    { method: 'get', path: '/admin/teams', access: 'admin' },
+    { method: 'patch', path: '/admin/teams/{id}', schema: C.AdminTeamRequest, access: 'admin' },
+    { method: 'get', path: '/admin/tv1/audit', access: 'admin' },
+    { method: 'get', path: '/admin/mail-status', access: 'admin' },
+    { method: 'post', path: '/admin/mail-status/{id}/retry', access: 'admin' },
+    { method: 'post', path: '/admin/notification-events', access: 'admin' },
+  ];
+  for (const route of tv1Routes) {
+    const params: Record<string, ZodTypeAny> = {};
+    for (const match of route.path.matchAll(/\{([^}]+)\}/g)) params[match[1]!] = C.Id;
+    r.registerPath({
+      method: route.method,
+      path: route.path,
+      tags: ['accounts-teams'],
+      description: route.access === 'admin' ? 'Chỉ quản trị viên.' : undefined,
+      security: route.access ? auth : undefined,
+      request: {
+        ...(Object.keys(params).length ? { params: z.object(params) } : {}),
+        ...(route.schema ? { body: { content: { 'application/json': { schema: route.schema } } } } : {}),
+      },
+      responses: {
+        200: json(data(z.unknown())),
+        ...(route.method === 'post' ? { 201: json(data(z.unknown())) } : {}),
+        400: error('VALIDATION_ERROR'),
+        401: error('UNAUTHENTICATED'),
+        403: error('FORBIDDEN'),
+        404: error('NOT_FOUND'),
+        409: error('CONFLICT'),
+        429: error('RATE_LIMITED'),
+      },
+    });
+  }
   r.registerPath({
     method: 'get',
     path: '/teams/mine',
@@ -87,15 +182,29 @@ export function buildOpenApi() {
     path: '/teams',
     tags: ['accounts-teams'],
     security: auth,
-    responses: notImpl,
+    request: { body: { content: { 'application/json': { schema: C.CreateTeamRequest } } } },
+    responses: {
+      201: json(data(z.object({ team: C.TeamView }))),
+      400: error('VALIDATION_ERROR'),
+      401: error('UNAUTHENTICATED'),
+      403: error('FORBIDDEN'),
+      409: error('CONFLICT'),
+    },
   });
   r.registerPath({
     method: 'post',
-    path: '/teams/{id}/members',
+    path: '/teams/join',
     tags: ['accounts-teams'],
     security: auth,
-    request: { params: idParam },
-    responses: notImpl,
+    request: { body: { content: { 'application/json': { schema: C.JoinTeamRequest } } } },
+    responses: {
+      201: json(data(z.object({ team: C.TeamView }))),
+      400: error('VALIDATION_ERROR'),
+      401: error('UNAUTHENTICATED'),
+      403: error('FORBIDDEN'),
+      404: error('NOT_FOUND'),
+      409: error('CONFLICT'),
+    },
   });
 
   r.registerPath({

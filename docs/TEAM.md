@@ -2,12 +2,14 @@
 
 | Người | Module chính                       | Việc sau nền M0                                                                                                 |
 | ----- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| TV1   | accounts-teams                     | Đăng nhập/xác minh thật, đội 2–4 người, captain/membership theo giải, profile/thông báo                         |
+| TV1   | accounts-teams                     | Tài khoản/xác minh/khôi phục, đội 2–4 người, profile/thông báo/email/nội dung BTC; không gồm chat               |
 | TV2   | bots-runner + worker + game-engine | Nộp/version bot, kiểm thử, sandbox, tài nguyên/giao thức, engine luật chính thức                                |
 | TV3   | tournaments                        | Sơ loại/Swiss, standings/tie-break, tranh suất Top 32, cây 32 → 4, khiếu nại/chốt kết quả; phối hợp CI/tài liệu |
 | TV4   | rooms-matches                      | Phòng công khai, Match/Game, lựa chọn kín/ready/deadline, coin, trực tiếp/replay, bàn giao kết quả              |
 
 M0 đã cung cấp skeleton chung và vertical slice demo cho cả nhóm; không có nghĩa toàn bộ phần việc từng người đã xong. Phần giải đấu hiện có được giữ nguyên, chỉ kết nối vào ứng dụng. TV3 bắt đầu tại `apps/api/src/modules/tournaments`, `apps/web/src/features/tournaments` và `packages/contracts/src/tournaments.ts`.
+
+TV1 đã được triển khai theo [hướng dẫn kiểm tra và bàn giao](TV1_IMPLEMENTATION.md). Quy định mới: tối đa 4 người/đội, cần 2–4 người khi chốt; chỉ email @vnu.edu.vn. Chat được bỏ theo yêu cầu người dùng.
 
 ## Phối hợp
 

@@ -43,16 +43,11 @@ Integration cần database đã migrate/seed và Redis. E2E tự mở API, worke
 
 ## Bàn giao
 
-- **TV2 (Đã hoàn thành 5 gói việc — 30/30đ)**:
-  - Quản lý phiên bản Bot, Hash SHA-256 bất biến, chống trùng lặp, bảo mật mã nguồn.
-  - Engine cờ 9x9 với 10 quân tiêu chuẩn, luật Threefold Repetition, luật 200 nước, luật eliminate, dữ liệu chuẩn cho Bot Python.
-  - Worker Sandbox cách ly thực thi Python (Persistent process ~1.87ms/nước, sanitized env, timeouts 3s/1s).
-  - Chế độ Đấu thử (Practice Match) độc lập, stream sự kiện seq Replay cho TV4.
-  - Bộ test 5 kịch bản Bot độc hại, Benchmark tải, Hướng dẫn thiết lập Cụm 4 Laptop phân tán qua Tailscale (>2.100 ván/phút): xem [OPERATIONS.md](apps/worker/OPERATIONS.md).
-- **TV3**: Đã có [quy trình cấu hình và công bố lịch giải](docs/TV3_CONFIGURATION.md) trong Khu vực BTC.
+TV3 đã có [quy trình cấu hình và công bố lịch giải](docs/TV3_CONFIGURATION.md) trong Khu vực BTC. Tạo giải nháp mới để thử; giải demo có sẵn đã công bố nên chỉ đọc cấu hình. Duyệt lịch không chốt kết quả thi đấu.
+
 - [Kiến trúc và luồng dữ liệu](docs/ARCHITECTURE.md)
 - [Hợp đồng API/socket/queue](docs/CONTRACTS.md)
 - [Quyết định và vấn đề còn chờ chốt](docs/DECISIONS.md)
 - [Phân công và cách làm việc nhóm](docs/TEAM.md)
 
-Đăng nhập thật, thao tác đội, nộp bot/sandbox, Swiss, cây đấu chính thức, khiếu nại và lựa chọn kín còn là placeholder 501 có người phụ trách. Bán kết/chung kết offline nằm ngoài M0. Production từ chối bật demo; worker M0 chỉ chạy demo ở development/test. Chưa có cấu hình triển khai thi thật.
+TV1 đã có tài khoản, xác minh/khôi phục mật khẩu, hồ sơ, quản lý đội 2–4 người, thông báo/email và nội dung BTC; xem [hướng dẫn TV1](docs/TV1_IMPLEMENTATION.md). Chat được bỏ theo yêu cầu. Nộp bot/sandbox, Swiss, cây đấu chính thức, khiếu nại và lựa chọn kín còn là placeholder 501 có người phụ trách. Bán kết/chung kết offline nằm ngoài M0. Production từ chối bật demo; worker M0 chỉ chạy demo ở development/test. Chưa có cấu hình triển khai thi thật.

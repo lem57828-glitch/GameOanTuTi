@@ -1,0 +1,13 @@
+ALTER TABLE "Account" ADD COLUMN "emailVerifiedAt" TIMESTAMP(3), ADD COLUMN "sessionVersion" INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE "AuthToken" ("id" TEXT NOT NULL PRIMARY KEY, "accountId" TEXT NOT NULL, "kind" TEXT NOT NULL, "tokenHash" TEXT NOT NULL UNIQUE, "expiresAt" TIMESTAMP(3) NOT NULL, "usedAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX "AuthToken_accountId_kind_idx" ON "AuthToken"("accountId", "kind");
+CREATE TABLE "TeamInvitation" ("id" TEXT NOT NULL PRIMARY KEY, "teamId" TEXT NOT NULL, "email" TEXT NOT NULL, "invitedBy" TEXT NOT NULL, "status" TEXT NOT NULL DEFAULT 'pending', "expiresAt" TIMESTAMP(3) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE UNIQUE INDEX "TeamInvitation_teamId_email_key" ON "TeamInvitation"("teamId", "email");
+CREATE INDEX "TeamInvitation_email_status_idx" ON "TeamInvitation"("email", "status");
+CREATE TABLE "Notification" ("id" TEXT NOT NULL PRIMARY KEY, "accountId" TEXT NOT NULL, "sourceKey" TEXT NOT NULL, "title" TEXT NOT NULL, "body" TEXT NOT NULL, "href" TEXT, "readAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE UNIQUE INDEX "Notification_accountId_sourceKey_key" ON "Notification"("accountId", "sourceKey");
+CREATE INDEX "Notification_accountId_createdAt_idx" ON "Notification"("accountId", "createdAt");
+CREATE TABLE "EmailMessage" ("id" TEXT NOT NULL PRIMARY KEY, "to" TEXT NOT NULL, "subject" TEXT NOT NULL, "text" TEXT NOT NULL, "dedupeKey" TEXT NOT NULL UNIQUE, "status" TEXT NOT NULL DEFAULT 'pending', "attempts" INTEGER NOT NULL DEFAULT 0, "lastError" TEXT, "availableAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "sentAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX "EmailMessage_status_availableAt_idx" ON "EmailMessage"("status", "availableAt");
+CREATE TABLE "Publication" ("id" TEXT NOT NULL PRIMARY KEY, "title" TEXT NOT NULL, "body" TEXT NOT NULL, "kind" TEXT NOT NULL DEFAULT 'announcement', "linkUrl" TEXT, "published" BOOLEAN NOT NULL DEFAULT false, "authorId" TEXT NOT NULL, "revision" INTEGER NOT NULL DEFAULT 0, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL);
+CREATE TABLE "NotificationCursor" ("name" TEXT NOT NULL PRIMARY KEY, "at" TIMESTAMP(3) NOT NULL, "lastId" TEXT NOT NULL DEFAULT '');

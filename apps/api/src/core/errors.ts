@@ -20,8 +20,6 @@ export const forbidden = (message = 'Bạn không có quyền thực hiện thao
   new AppError('FORBIDDEN', message);
 export const notFound = (what: string) => new AppError('NOT_FOUND', `Không tìm thấy ${what}.`);
 export const conflict = (message: string, details?: unknown) => new AppError('CONFLICT', message, details);
-export const validationError = (message: string, details?: unknown) =>
-  new AppError('VALIDATION_ERROR', message, details);
 
 /**
  * Nghiệp vụ chưa làm trong M0. `owner` là thành viên phụ trách (TV1–TV4) để người gọi biết hỏi ai.

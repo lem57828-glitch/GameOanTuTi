@@ -8,6 +8,7 @@ export const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 export interface SessionClaims {
   sub: string;
+  v?: number;
   demo: boolean;
   iat: number;
 }
@@ -34,6 +35,7 @@ export function decodeSession(
   try {
     const claims = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as SessionClaims;
     if (
+      (claims.v !== undefined && (!Number.isInteger(claims.v) || claims.v < 0)) ||
       typeof claims.sub !== 'string' ||
       !claims.sub ||
       typeof claims.demo !== 'boolean' ||

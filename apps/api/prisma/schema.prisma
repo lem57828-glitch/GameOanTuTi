@@ -27,6 +27,11 @@ model Account {
   role         Role         @default(student)
   status       String       @default("active") // active | disabled
   // Đăng nhập thật (TV1, sau M0). Tài khoản mẫu không có mật khẩu.
+  studentId    String?      @unique
+  className    String?
+  faculty      String?
+  emailVerifiedAt DateTime?
+  sessionVersion Int @default(0)
   passwordHash String?
   isDemo       Boolean      @default(false)
   createdAt    DateTime     @default(now())
@@ -34,6 +39,7 @@ model Account {
 }
 
 model Team {
+  joinCode     String       @unique @default(dbgenerated("upper(substr(md5((random())::text), 1, 10))"))
   id           String       @id @default(cuid())
   tournamentId String
   name         String
@@ -69,10 +75,6 @@ model BotVersion {
   version    Int
   label      String
   sourceHash String // sha256 nội dung mã đã lưu; phiên bản bất biến
-  sourceCode String? // Toàn văn mã nguồn bot Python được lưu bất biến
-  submittedById String? // ID người nộp
-  duplicateOfId String? // ID của bot bị trùng lặp mã nguồn (nếu có)
-  validationLog String? // Nhật ký kiểm tra tính hợp lệ sơ bộ
   rulesetId  String
   status     String   @default("pending") // pending | valid | invalid
   isDemo     Boolean  @default(false)
@@ -80,30 +82,8 @@ model BotVersion {
   demoPolicy String?
   createdAt  DateTime @default(now())
   team       Team     @relation(fields: [teamId], references: [id])
-  testRuns   BotTestRun[]
 
   @@unique([teamId, version])
-}
-
-/// TV2 - Gói việc 4: Lưu kết quả đấu thử (Practice Match) trong Sandbox
-model BotTestRun {
-  id             String      @id @default(cuid())
-  botVersionId   String
-  mySide         String      @default("blue") // blue | pink
-  opponentType   String      // demo | bot
-  opponentTarget String      // random, greedy, rusher hoặc botVersionId
-  status         String      @default("queued") // queued | running | succeeded | failed
-  winner         String?     // blue | pink | null
-  reason         String?     // goal | eliminate | repetition | max_plies | errors | crash | timeout
-  plies          Int?
-  piecesBlue     Int?
-  piecesPink     Int?
-  events         Json?       // Mảng GameEvent[] bàn giao TV4 replay
-  error          String?
-  logs           String?
-  createdAt      DateTime    @default(now())
-  finishedAt     DateTime?
-  botVersion     BotVersion  @relation(fields: [botVersionId], references: [id])
 }
 
 /// Một job logic cho mỗi requestKey. RunAttempt là từng lần thực thi (retry).
@@ -299,4 +279,84 @@ model OutboxEvent {
   dispatchedAt DateTime?
 
   @@index([status, availableAt])
+}
+
+model AuthToken {
+  id String @id @default(cuid())
+  accountId String
+  kind String
+  tokenHash String @unique
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([accountId, kind])
+}
+
+model TeamInvitation {
+  id String @id @default(cuid())
+  teamId String
+  email String
+  invitedBy String
+  status String @default("pending")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@unique([teamId, email])
+  @@index([email, status])
+}
+
+model Notification {
+  id String @id @default(cuid())
+  accountId String
+  sourceKey String
+  title String
+  body String
+  href String?
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([accountId, sourceKey])
+  @@index([accountId, createdAt])
+}
+
+model EmailMessage {
+  id String @id @default(cuid())
+  to String
+  subject String
+  text String
+  dedupeKey String @unique
+  status String @default("pending")
+  attempts Int @default(0)
+  lastError String?
+  availableAt DateTime @default(now())
+  sentAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([status, availableAt])
+}
+
+model Publication {
+  id String @id @default(cuid())
+  title String
+  body String
+  kind String @default("announcement")
+  linkUrl String?
+  published Boolean @default(false)
+  authorId String
+  revision Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model NotificationCursor {
+  name String @id
+  at DateTime
+  lastId String @default("")
+}
+
+model RegistrationCode {
+  email String @id
+  codeHash String
+  nonce String
+  attempts Int @default(0)
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
 }

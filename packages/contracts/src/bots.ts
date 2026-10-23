@@ -6,7 +6,7 @@ export const BotVersionStatus = z.enum(['pending', 'valid', 'invalid']);
 
 /**
  * Phiên bản bot BẤT BIẾN. Mã nguồn và báo cáo kiểm thử riêng không nằm trong DTO công khai;
- * chỉ trả cho thành viên đội sở hữu (endpoint riêng, TV2 phụ trách).
+ * chỉ trả cho thành viên đội sở hữu (endpoint riêng, chưa làm trong M0).
  */
 export const BotVersion = z.object({
   id: Id,
@@ -16,36 +16,9 @@ export const BotVersion = z.object({
   sourceHash: z.string().regex(/^[a-f0-9]{64}$/, 'sha256 dạng hex'),
   rulesetId: z.string(),
   status: BotVersionStatus,
-  duplicateOfId: z.string().nullable().optional(),
   createdAt: IsoDateTime,
 });
 export type BotVersion = z.infer<typeof BotVersion>;
-
-/** DTO gửi lên khi nộp bot mới (TV2). */
-export const SubmitBotInput = z.object({
-  teamId: Id,
-  label: z.string().min(1, 'Tên phiên bản không được để trống').max(100),
-  sourceCode: z.string().min(10, 'Mã nguồn quá ngắn').max(500_000, 'Mã nguồn tối đa 500KB'),
-  githubRepo: z.string().url('URL GitHub không hợp lệ').optional().or(z.literal('')),
-  commitSha: z.string().regex(/^[a-f0-9]{40}$/, 'Commit SHA phải gồm 40 ký tự hex').optional().or(z.literal('')),
-});
-export type SubmitBotInput = z.infer<typeof SubmitBotInput>;
-
-/** DTO trả về khi xem chi tiết mã nguồn bot (chỉ người có quyền). */
-export const BotSourceDetail = z.object({
-  id: Id,
-  teamId: Id,
-  version: z.number().int(),
-  label: z.string(),
-  sourceCode: z.string(),
-  sourceHash: z.string(),
-  status: BotVersionStatus,
-  submittedById: z.string().nullable().optional(),
-  duplicateOfId: z.string().nullable().optional(),
-  validationLog: z.string().nullable().optional(),
-  createdAt: IsoDateTime,
-});
-export type BotSourceDetail = z.infer<typeof BotSourceDetail>;
 
 export const Side = z.enum(['blue', 'pink']);
 export type Side = z.infer<typeof Side>;
@@ -140,49 +113,5 @@ export const JobView = z.object({
 export type JobView = z.infer<typeof JobView>;
 
 /** Payload BullMQ: chỉ mang id job; worker đọc nội dung bền vững từ PostgreSQL. */
-export const QueueJobData = z.object({
-  jobId: Id,
-  requestKey: REQUEST_KEY,
-  kind: z.enum(['game', 'test_run']).optional().default('game'),
-});
+export const QueueJobData = z.object({ jobId: Id, requestKey: REQUEST_KEY });
 export type QueueJobData = z.infer<typeof QueueJobData>;
-
-// ============================================================ TV2 — Gói việc 4: Đấu thử (Practice Run)
-export const TestRunOpponentType = z.enum(['demo', 'bot']);
-export type TestRunOpponentType = z.infer<typeof TestRunOpponentType>;
-
-export const CreateTestRunInput = z.object({
-  botVersionId: Id,
-  opponentType: TestRunOpponentType,
-  /**
-   * Nếu opponentType === 'demo': 'random' | 'greedy' | 'rusher'
-   * Nếu opponentType === 'bot': ID của một BotVersion khác
-   */
-  opponentTarget: z.string().min(1),
-  mySide: Side.optional().default('blue'),
-  extraType: PieceType.optional().default('PAPER'),
-});
-export type CreateTestRunInput = z.infer<typeof CreateTestRunInput>;
-
-export const TestRunStatus = z.enum(['queued', 'running', 'succeeded', 'failed']);
-export type TestRunStatus = z.infer<typeof TestRunStatus>;
-
-export const TestRunDetail = z.object({
-  id: Id,
-  botVersionId: Id,
-  status: TestRunStatus,
-  mySide: Side,
-  opponentType: TestRunOpponentType,
-  opponentTarget: z.string(),
-  winner: Side.nullable().optional(),
-  reason: GameEndReason.nullable().optional(),
-  plies: z.number().int().nonnegative().optional(),
-  piecesLeft: z.object({ blue: z.number().int(), pink: z.number().int() }).optional(),
-  error: z.string().nullable().optional(),
-  logs: z.string().nullable().optional(),
-  createdAt: IsoDateTime,
-  finishedAt: IsoDateTime.nullable().optional(),
-  /** Danh sách sự kiện nước đi chuẩn bàn giao TV4 */
-  events: z.array(z.any()).optional(),
-});
-export type TestRunDetail = z.infer<typeof TestRunDetail>;

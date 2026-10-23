@@ -63,7 +63,7 @@ export function DemoLoginPage() {
         <EmptyState
           icon="⏻"
           title="Đăng nhập mẫu đang tắt"
-          description="Máy chủ không bật DEMO_MODE. Đăng nhập thật chưa được triển khai ở M0 (TV1)."
+          description="Máy chủ không bật DEMO_MODE. Bạn có thể đăng nhập bằng email và mật khẩu tại trang Đăng nhập."
         />
       )}
       {accounts.error && !disabled && (

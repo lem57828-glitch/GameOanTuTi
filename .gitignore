@@ -14,7 +14,3 @@ docs/~$*
 playwright-report/
 test-results/
 .tools/
-
-.idea/
-.pnpm-store/
-apps/api/src/generated/
