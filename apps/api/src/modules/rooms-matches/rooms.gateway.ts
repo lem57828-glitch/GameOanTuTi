@@ -18,6 +18,7 @@ import { RoomJoinPayload, RoomSignal, SOCKET_EVENTS, redisKeys } from '@arena/co
 import { APP_CONFIG, type AppConfig } from '../../core/config.js';
 import { AppError } from '../../core/errors.js';
 import { RedisService } from '../../core/redis.service.js';
+import { MatchesService } from './matches.service.js';
 import { RoomsService } from './rooms.service.js';
 import { streamIdOf } from './snapshot.js';
 
@@ -38,18 +39,23 @@ export class RoomsGateway implements OnGatewayConnection, OnModuleInit, OnModule
   constructor(
     private readonly rooms: RoomsService,
     private readonly redis: RedisService,
+    private readonly matches: MatchesService,
     @Inject(APP_CONFIG) cfg: AppConfig,
   ) {
     this.signalChannel = redisKeys(cfg.queuePrefix).roomSignals;
   }
 
   async onModuleInit(): Promise<void> {
+    // Trạng thái trận (chọn kín, sẵn sàng, sang hiệp mới) không sinh sự kiện ván → đẩy snapshot đầy đủ.
+    this.matches.onChange((roomId) => this.flush(roomId, true));
     await this.redis.subscriber.subscribe(this.signalChannel);
     this.redis.subscriber.on('message', (ch, raw) => {
       if (ch !== this.signalChannel) return;
       try {
         const signal = RoomSignal.parse(JSON.parse(raw));
         this.flush(signal.roomId);
+        // Ván vừa có tiến triển: cho trận chuyển hiệp ngay, không đợi bộ hẹn giờ.
+        void this.matches.advanceRoom(signal.roomId).catch(() => undefined);
       } catch {
         this.log.warn('Bỏ qua tín hiệu phòng không hợp lệ.');
       }
@@ -96,10 +102,10 @@ export class RoomsGateway implements OnGatewayConnection, OnModuleInit, OnModule
   }
 
   /** Phát phần sự kiện mới của phòng (gọi khi có tín hiệu từ worker hoặc sau khi API tự ghi sự kiện). */
-  flush(roomId: string): void {
+  flush(roomId: string, full = false): void {
     const prev = this.chains.get(roomId) ?? Promise.resolve();
     const next = prev
-      .then(() => this.doFlush(roomId))
+      .then(() => this.doFlush(roomId, full))
       .catch((e: Error) => this.log.warn(`Phát sự kiện phòng ${roomId} lỗi: ${e.message}`));
     this.chains.set(roomId, next);
     void next.finally(() => {
@@ -107,11 +113,11 @@ export class RoomsGateway implements OnGatewayConnection, OnModuleInit, OnModule
     });
   }
 
-  private async doFlush(roomId: string): Promise<void> {
+  private async doFlush(roomId: string, full = false): Promise<void> {
     const gameId = await this.rooms.currentGameId(roomId);
     const streamId = gameId ? streamIdOf(gameId) : null;
     const cur = this.cursor.get(roomId);
-    if (!gameId || !cur || cur.streamId !== streamId) {
+    if (full || !gameId || !cur || cur.streamId !== streamId) {
       const snapshot = await this.rooms.snapshot(roomId);
       this.cursor.set(roomId, { streamId: snapshot.streamId, seq: snapshot.seq });
       this.server.to(channel(roomId)).emit(SOCKET_EVENTS.snapshot, snapshot);

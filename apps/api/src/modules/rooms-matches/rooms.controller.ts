@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Post, Query, Req, Res } from '@nestjs/com
 import type { Response } from 'express';
 
 import { DemoGameRequest, Id, z, type SessionUser } from '@arena/contracts';
-import { Authenticated, CurrentUser, DemoOnly, Roles } from '../../core/auth/guards.js';
+import { CurrentUser, DemoOnly, Roles } from '../../core/auth/guards.js';
 import { notImplemented } from '../../core/errors.js';
 import { ok, parse, type ArenaRequest } from '../../core/http.js';
 import { RateLimiter } from '../../core/rate-limit.js';
@@ -58,13 +58,7 @@ export class RoomsController {
     return ok(out);
   }
 
-  // ---- Chưa làm ở M0 (TV4).
-
-  @Post('rooms/:id/choices')
-  @Authenticated()
-  choose(@Param('id') _id: string) {
-    notImplemented('Chọn bot/quân kín trước ván', 'TV4');
-  }
+  // ---- Chưa làm (TV4): phòng ngoài cặp đấu của giải; phòng theo cặp mở qua admin/tournaments/:id/matches/open.
 
   @Post('rooms')
   @Roles('admin', 'referee')

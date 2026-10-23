@@ -4,7 +4,7 @@ Phần này nối tiếp [cấu hình giải](TV3_CONFIGURATION.md). Giải ph�
 
 ## Luồng điều hành
 
-1. **Lập kế hoạch các mức** (BTC). Nhập số đội đi tiếp của từng mức, giảm dần, mức cuối luôn là 32. Ví dụ 1000 → 500 → 200 → 100 → 32; với 180 đội gợi ý 100 → 32. Nhập thêm số vòng Swiss mỗi mức (đề xuất 3–5) và phạm vi tránh tái đấu (trong một mức hoặc toàn bộ sơ loại).
+1. **Lập kế hoạch các mức** (BTC). Chọn **số mức** (1–8), rồi mỗi mức một dòng: tên, **số đội giữ lại** và **số vòng Swiss** riêng. Số đội giảm dần; mức cuối cố định 32. Ô báo lỗi ngay khi nhập; mức giữ lại không ít hơn số đội đang có được cảnh báo là sẽ bị bỏ qua khi khóa. Ví dụ 1000 → 500 → 200 → 100 → 32; với 180 đội gợi ý 100 → 32. Nhập thêm số vòng Swiss mỗi mức (đề xuất 3–5) và phạm vi tránh tái đấu (trong một mức hoặc toàn bộ sơ loại).
 2. **Khóa bot và mở mức.** Mức 1 nhận mọi đội đã duyệt; các mức sau nhận các đội đi tiếp của mức trước. Mức không phải mức cuối mà số đội đã ≤ chỉ tiêu thì tự bỏ qua. Nếu đặt mốc khóa bot cho mức, máy chủ tự khóa khi tới giờ (kiểm tra mỗi 30 giây theo giờ máy chủ).
 3. **Ghép vòng.**
    - Vòng 1 bốc thăm theo seed của mức; các vòng sau ghép đội gần điểm và tránh tái đấu.
@@ -60,7 +60,7 @@ Trang **Khu vực BTC → Điều hành thi đấu** chỉ hiện đúng một n
 | POST admin/pairings/:id/result                              | BTC/trọng tài | Nhập kết quả `{games: ['a'\|'b'\|null], reason}`    |
 | POST admin/tournaments/:id/qualifier/rounds/:r/confirm      | BTC/trọng tài | Xác nhận vòng                                       |
 | POST admin/tournaments/:id/knockout/:phase/confirm          | BTC/trọng tài | Chốt vòng r32/r16/qf                                |
-| POST admin/tournaments/:id/qualifier/plan                   | BTC           | `{targets, rounds, avoidRematch, reason}`           |
+| POST admin/tournaments/:id/qualifier/plan                   | BTC           | `{targets, rounds[], names[], avoidRematch, reason}` |
 | PATCH admin/tournaments/:id/qualifier/levels/:ord           | BTC           | Tên, số vòng, mốc khóa bot, mốc công bố             |
 | POST admin/tournaments/:id/qualifier/lock · rounds · finish | BTC           | Khóa mức · ghép vòng · chốt mức                     |
 | POST admin/tournaments/:id/qualifier/rounds/:r/rerun        | BTC           | Thi lại vòng gần nhất chưa xác nhận                 |

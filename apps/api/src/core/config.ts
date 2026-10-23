@@ -33,6 +33,8 @@ const Env = z.object({
   OUTBOX_POLL_MS: z.coerce.number().int().positive().default(1000),
   /** Job đã giao cho worker mà không tiến triển sau khoảng này sẽ được kiểm tra và đưa lại vào hàng đợi. */
   JOB_RECOVERY_MS: z.coerce.number().int().positive().default(120_000),
+  /** Thời gian chọn kín bot/quân thứ 10 trước mỗi hiệp (thể lệ 2.0: tối đa 10 phút). */
+  MATCH_SELECT_SECONDS: z.coerce.number().int().min(1).max(3600).default(600),
 });
 
 export interface AppConfig {
@@ -54,6 +56,7 @@ export interface AppConfig {
   queuePrefix: string;
   outboxPollMs: number;
   jobRecoveryMs: number;
+  matchSelectSeconds: number;
 }
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -97,6 +100,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     queuePrefix: e.QUEUE_PREFIX,
     outboxPollMs: e.OUTBOX_POLL_MS,
     jobRecoveryMs: e.JOB_RECOVERY_MS,
+    matchSelectSeconds: e.MATCH_SELECT_SECONDS,
   };
 }
 

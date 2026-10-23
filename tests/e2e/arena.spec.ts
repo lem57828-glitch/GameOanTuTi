@@ -106,6 +106,10 @@ test('admin creates a real queued simulation; spectators reload and reconnect wi
       .toBe('finished');
     const first = (await (await room.request.get(`/api/v1/rooms/${data.roomId}`)).json()).data;
     await room.reload();
+    // Vào phòng không tự chạy: đứng ở nước 0, chưa lộ kết quả; tua tới nước cuối mới hiện kết quả.
+    await expect(room.getByText(/^Nước 0\/\d+$/)).toBeVisible();
+    await expect(room.getByRole('heading', { name: 'Kết quả', exact: true })).toHaveCount(0);
+    await room.getByRole('button', { name: 'Tới nước cuối' }).click();
     await expect(room.getByRole('heading', { name: 'Kết quả', exact: true })).toBeVisible();
     await spectator.setOffline(true);
     await expect(room.getByText('Đang mất kết nối trực tiếp')).toBeVisible();
@@ -136,7 +140,7 @@ test('khách xem bảng xếp hạng/nhánh đấu; BTC thấy bảng điều h�
     data: { pairingId: 'x', body: 'Không đăng nhập thì không gửi được' },
   });
   expect(forbidden.status()).toBe(401);
-  await page.goto('/login');
+  await page.goto('/demo-login');
   await page.getByRole('button', { name: 'Đăng nhập bằng BTC Demo', exact: true }).click();
   await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByText('Bước tiếp theo')).toBeVisible();

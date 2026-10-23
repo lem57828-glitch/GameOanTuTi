@@ -26,6 +26,7 @@ import type {
   StandingRowView,
   StandingsView,
 } from '@arena/contracts';
+import { pairingRoomId } from '@arena/contracts';
 import { DEMO_RULESET, simulate } from '@arena/game-engine';
 import { AuditService } from '../../core/audit.service.js';
 import { AppError, conflict, forbidden, notFound } from '../../core/errors.js';
@@ -38,7 +39,7 @@ import {
   type LevelRow,
   type PairingRow,
 } from './competition.repository.js';
-import { evaluatePairing, gamesNeeded, type GameOutcome } from './scoring.js';
+import { FORMAT, evaluatePairing, gamesNeeded, type GameOutcome } from './scoring.js';
 import {
   applyContest,
   compare,
@@ -65,6 +66,9 @@ export const PHASES: Array<{ phase: KnockoutPhase; title: string }> = [
 const ACTIVE_LEVEL = ['locked', 'running', 'cutting'];
 const ELIGIBLE_TEAM = ['approved', 'locked'];
 const MAX_PLIES = 200;
+/** Kết quả cặp không tự sinh ra: phải mở phòng (TV4) hoặc nhập tay/mô phỏng. Nói rõ để BTC không chờ vô ích. */
+const WAITING_HINT =
+  'Kết quả đến khi trận trong phòng đấu kết thúc. Bấm "Mở phòng thi đấu" để các đội chọn bot và thi; hoặc trọng tài nhập kết quả từng cặp, hoặc "Mô phỏng" khi đang bật chế độ demo.';
 
 interface CutState {
   seed: number;
@@ -165,7 +169,39 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
         : (t.levels.find((l) => ACTIVE_LEVEL.includes(l.status)) ??
           [...t.levels].reverse().find((l) => !['planned', 'skipped'].includes(l.status)) ??
           t.levels[0]);
-    if (!pick) return { level: null, provisional: false, rows: [] };
+    // Mức chưa khóa (hoặc chưa lập kế hoạch): hiện đội DỰ KIẾN tham gia thay vì bảng trống.
+    // Mức 1 / chưa có mức: các đội đủ điều kiện (đã duyệt, chưa rút). Mức sau: đội đi tiếp của mức trước (nếu đã chốt).
+    if (!pick || pick.status === 'planned') {
+      const prev = pick ? t.levels.find((l) => l.ord === pick.ord - 1) : undefined;
+      const teamIds = prev
+        ? prev.status === 'done' || prev.status === 'skipped'
+          ? ids(prev.qualified)
+          : []
+        : ctx.teams.filter((x) => ELIGIBLE_TEAM.includes(x.status)).map((x) => x.id);
+      const rows: StandingRowView[] = teamIds
+        .map((teamId) => ({
+          rank: 0,
+          teamId,
+          name: ctx.names.get(teamId) ?? teamId,
+          points: 0,
+          played: 0,
+          w: 0,
+          d: 0,
+          l: 0,
+          byes: 0,
+          diff: 0,
+          oppAvg: 0,
+          withdrawn: ctx.withdrawn.has(teamId),
+          state: null,
+        }))
+        .sort((x, y) => x.name.localeCompare(y.name, 'vi'));
+      return {
+        level: pick ? await this.levelView(t, pick, ctx) : null,
+        provisional: false,
+        preview: true,
+        rows,
+      };
+    }
     const levelPairings = ctx.pairings.filter(
       (p) => p.levelId === pick.id && (p.kind === 'swiss' || p.kind === 'bye'),
     );
@@ -207,7 +243,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
         state,
       };
     });
-    return { level: await this.levelView(t, pick, ctx), provisional, rows: view };
+    return { level: await this.levelView(t, pick, ctx), provisional, preview: false, rows: view };
   }
 
   async bracket(tournamentId: string): Promise<BracketView> {
@@ -484,6 +520,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
         where: { id: { in: list.filter((p) => p.kind === 'swiss').map((p) => p.id) } },
         data: {
           status: 'scheduled',
+          matchId: null,
           result: null,
           winnerTeamId: null,
           scoreA: 0,
@@ -695,8 +732,9 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
     // Tranh suất có thể sinh bước mới sau mỗi lượt → lặp tới khi hết cặp chờ (giới hạn để không chạy vô hạn).
     while (rounds++ < 20) {
       const fresh = (await this.repo.findTournament(tournamentId))!;
+      // Bỏ qua cặp đang thi trong phòng đấu (TV4): kết quả sẽ đến từ trận thật.
       const pending = (await this.repo.pairings(tournamentId, { status: 'scheduled' })).filter(
-        (p) => this.playable(fresh, p) && p.teamAId && p.teamBId,
+        (p) => this.playable(fresh, p) && p.teamAId && p.teamBId && !p.matchId,
       );
       if (!pending.length) break;
       const policies = await this.bots.demoPolicies([
@@ -787,6 +825,8 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
             games: json([]),
             decidedBy: null,
             source: null,
+            // Gỡ trận cũ: TV4 mở trận mới trong cùng phòng của cặp.
+            matchId: null,
           },
         });
         if (p.kind === 'knockout' && p.phase) {
@@ -861,6 +901,64 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
   }
 
   /** TV3 → TV4: cặp đang chờ thi (đã đủ hai đội, vòng đang chạy). */
+  /**
+   * TV3 → TV4: thông tin một cặp để mở phòng/trận. `playable` = vòng/mức của cặp đang thi.
+   * stageId: giai đoạn sơ loại cho swiss/tiebreak, loại trực tiếp cho knockout (TV2 kiểm bộ bot đã khóa theo stage).
+   */
+  async assignment(pairingId: string) {
+    const p = await this.repo.findPairing(pairingId);
+    if (!p) throw notFound('cặp đấu');
+    const t = (await this.repo.findTournament(p.tournamentId))!;
+    const stage = t.stages.find((s) => s.kind === (p.kind === 'knockout' ? 'knockout' : 'qualifier')) ?? null;
+    const level = t.levels.find((l) => l.id === p.levelId) ?? null;
+    const phaseTitle = PHASES.find((x) => x.phase === p.phase)?.title;
+    const title =
+      p.kind === 'knockout'
+        ? `${phaseTitle} · cặp ${(p.slot ?? 0) + 1}`
+        : p.kind === 'tiebreak'
+          ? `${level?.name ?? 'Sơ loại'} · tranh suất bước ${p.round - 1000}`
+          : `${level?.name ?? 'Sơ loại'} · vòng ${p.round}`;
+    return {
+      pairingId: p.id,
+      tournamentId: t.id,
+      isDemo: t.isDemo,
+      kind: p.kind as 'swiss' | 'bye' | 'tiebreak' | 'knockout',
+      status: p.status,
+      matchId: p.matchId,
+      teamAId: p.teamAId,
+      teamBId: p.teamBId,
+      stageId: stage?.id ?? null,
+      title,
+      playable: this.playable(t, p),
+    };
+  }
+
+  /** TV4 gắn trận vừa mở vào cặp (trong transaction của TV4). Một cặp chỉ có một trận hiệu lực. */
+  async attachMatch(tx: Tx, pairingId: string, matchId: string): Promise<void> {
+    const updated = await tx.pairing.updateMany({
+      where: { id: pairingId, matchId: null, status: 'scheduled' },
+      data: { matchId },
+    });
+    if (updated.count === 0) throw conflict('Cặp đã có trận hoặc không còn chờ thi.');
+  }
+
+  /** Thể thức trận theo loại cặp: số hiệp chính và có chọn quân thứ 10 không. */
+  format(kind: 'swiss' | 'tiebreak' | 'knockout') {
+    const f = FORMAT[kind];
+    return {
+      mainGames: f.main,
+      extraGames: f.extra,
+      chooseExtra: kind === 'knockout',
+      win: f.win,
+      draw: f.draw,
+    };
+  }
+
+  /** Còn cần chơi bao nhiêu ván/hiệp nữa (0 = trận đã đủ để phân định). */
+  gamesNeeded(kind: 'swiss' | 'tiebreak' | 'knockout', games: GameOutcome[]): number {
+    return gamesNeeded(kind, games);
+  }
+
   async pairAssignments(tournamentId: string) {
     const t = await this.repo.findTournament(tournamentId);
     if (!t) throw notFound('giải đấu');
@@ -1153,6 +1251,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
       resultVersion: p.resultVersion,
       confirmed: p.confirmed,
       openAppeals: ctx.appeals.get(p.id) ?? 0,
+      roomId: p.matchId ? pairingRoomId(p.id) : null,
       updatedAt: p.updatedAt.toISOString(),
     };
   }
@@ -1228,18 +1327,14 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
       const list = ctx.pairings.filter((p) => p.levelId === active.id);
       if (active.status === 'cutting') {
         const waiting = list.filter((p) => p.kind === 'tiebreak' && p.status === 'scheduled').length;
-        return step(
-          'results',
-          `Chờ ${waiting} cặp tranh suất ranh giới`,
-          'Nhập kết quả hoặc chạy mô phỏng các cặp tranh suất.',
-        );
+        return step('results', `Chờ ${waiting} cặp tranh suất ranh giới`, WAITING_HINT);
       }
       const swiss = list.filter((p) => p.kind === 'swiss' || p.kind === 'bye');
       const played = swiss.reduce((m, p) => Math.max(m, p.round), 0);
       const last = swiss.filter((p) => p.round === played);
       const waiting = last.filter((p) => p.status === 'scheduled').length;
       if (played && waiting)
-        return step('results', `Chờ kết quả ${waiting} cặp vòng ${played}`, 'Vòng đang thi.');
+        return step('results', `Chờ kết quả ${waiting} cặp vòng ${played}`, WAITING_HINT);
       if (played && last.some((p) => !p.confirmed)) {
         const appeals = last.reduce((n, p) => n + (ctx.appeals.get(p.id) ?? 0), 0);
         return step(
@@ -1261,7 +1356,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
         const waiting = ctx.pairings.filter(
           (p) => p.kind === 'knockout' && p.phase === r.phase && p.status === 'scheduled',
         ).length;
-        return step('results', `Chờ kết quả ${waiting} cặp ${title}`, 'Vòng đang thi.');
+        return step('results', `Chờ kết quả ${waiting} cặp ${title}`, WAITING_HINT);
       }
       if (r.status === 'finished') {
         const appeals = ctx.pairings

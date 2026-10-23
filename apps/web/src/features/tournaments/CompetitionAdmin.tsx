@@ -16,8 +16,9 @@ import {
   Table,
   useToast,
 } from '@arena/ui';
-import type { AppealView, CompetitionView, PairingView, TournamentView } from '@arena/contracts';
+import type { AppealView, CompetitionView, LevelView, PairingView, TournamentView } from '@arena/contracts';
 import { api } from '../../lib/api';
+import { PlanEditor } from './PlanEditor';
 import { useSession } from '../../lib/session';
 import { usePublicHealth } from '../../lib/health';
 import {
@@ -31,6 +32,14 @@ import {
 import { APPEAL_STATUS, TextArea } from './MyPairings';
 
 type Outcome = 'a' | 'b' | null;
+type RoomsSummary = {
+  pending: number;
+  notOpened: number;
+  selecting: number;
+  running: number;
+  paused: number;
+  completed: number;
+};
 
 export function CompetitionAdmin() {
   const { user } = useSession();
@@ -40,12 +49,11 @@ export function CompetitionAdmin() {
   const { toast } = useToast();
   const [selected, setSelected] = useState('');
   const [reason, setReason] = useState('Điều hành theo lịch thi');
-  const [targets, setTargets] = useState('');
-  const [rounds, setRounds] = useState('3');
   const [scope, setScope] = useState<'level' | 'qualifier'>('level');
   const [demoCount, setDemoCount] = useState('38');
   const [entry, setEntry] = useState<PairingView | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
+  const [editLevel, setEditLevel] = useState<LevelView | null>(null);
 
   const list = useQuery({
     queryKey: ['admin-tournaments', user?.id],
@@ -60,6 +68,16 @@ export function CompetitionAdmin() {
     refetchInterval: 5000,
   });
   const c = view.data;
+  // Lập (lại) kế hoạch chỉ khi chưa mức nào bắt đầu — máy chủ cũng kiểm tra điều này.
+  const canPlan = isAdmin && !!c && c.levels.every((l) => l.status === 'planned');
+  const currentPlan = c?.levels.map((l) => `${l.teamTarget} (${l.rounds} vòng)`).join(' → ') ?? '';
+  // Trạng thái thật của các phòng (TV4): chỉ phòng "đang chọn" mới bị nút khóa ảnh hưởng.
+  const rooms = useQuery({
+    queryKey: ['competition', tid, 'rooms'],
+    queryFn: () => api<RoomsSummary>(`/admin/tournaments/${tid}/matches/summary`),
+    enabled: !!tid && c?.next.action === 'results',
+    refetchInterval: 3000,
+  });
 
   const act = useMutation({
     mutationFn: ({ path, json }: { path: string; json?: unknown; label: string }) =>
@@ -152,12 +170,44 @@ export function CompetitionAdmin() {
           {c.next.label}
         </Button>
       );
-    if (a === 'results' && health.data?.demoMode && isAdmin)
+    if (a === 'results') {
+      const r = rooms.data;
+      const unopened = r?.notOpened ?? c.pending.filter((p) => !p.roomId).length;
       return (
-        <Button loading={busy} onClick={() => run('/demo/simulate', 'Đã mô phỏng các cặp đang chờ')}>
-          Mô phỏng kết quả các cặp đang chờ
-        </Button>
+        <>
+          {r && r.pending - r.notOpened > 0 && (
+            <p className="w-full text-sm text-ink-muted">
+              {r.pending - r.notOpened} phòng: {r.selecting} đang chọn bot · {r.running} đang thi
+              {r.paused ? ` · ${r.paused} tạm dừng (vào phòng để xử lý)` : ''}
+              {r.completed ? ` · ${r.completed} đã xong, đang gửi kết quả` : ''}
+            </p>
+          )}
+          {isAdmin && unopened > 0 && (
+            <Button loading={busy} onClick={() => run('/matches/open', 'Đã mở phòng thi đấu')}>
+              Mở phòng thi đấu cho {unopened} cặp
+            </Button>
+          )}
+          {(r?.selecting ?? 0) > 0 && (
+            <Button
+              variant="secondary"
+              loading={busy}
+              onClick={() => run('/matches/force-lock', 'Đã khóa lựa chọn các phòng đang chọn')}
+            >
+              Khóa lựa chọn ngay ({r!.selecting} phòng đang chọn)
+            </Button>
+          )}
+          {health.data?.demoMode && isAdmin && unopened > 0 && (
+            <Button
+              variant="secondary"
+              loading={busy}
+              onClick={() => run('/demo/simulate', 'Đã mô phỏng các cặp chưa mở phòng')}
+            >
+              Mô phỏng các cặp chưa mở phòng
+            </Button>
+          )}
+        </>
       );
+    }
     return null;
   };
 
@@ -208,58 +258,37 @@ export function CompetitionAdmin() {
             <div className="flex flex-wrap gap-2">{primary()}</div>
           </Card>
 
-          {c.levels.length === 0 && isAdmin && (
+          {canPlan && (
             <Card>
               <CardHeader
-                title="Kế hoạch các mức sơ loại"
-                subtitle={`Gợi ý theo ${c.eligibleTeams} đội: ${c.suggestedTargets.join(' → ')}`}
+                title={c.levels.length ? 'Lập lại kế hoạch các mức sơ loại' : 'Kế hoạch các mức sơ loại'}
+                subtitle={
+                  c.levels.length
+                    ? `Chưa mức nào bắt đầu nên còn đổi được. Hiện tại: ${currentPlan}. Gợi ý theo ${c.eligibleTeams} đội: ${c.suggestedTargets.join(' → ')}`
+                    : `Gợi ý theo ${c.eligibleTeams} đội: ${c.suggestedTargets.join(' → ')}`
+                }
               />
-              <div className="grid gap-4 md:grid-cols-3">
-                <Input
-                  label="Số đội đi tiếp mỗi mức (giảm dần, mức cuối 32)"
-                  placeholder={c.suggestedTargets.join(', ')}
-                  value={targets}
-                  onChange={(e) => setTargets(e.target.value)}
-                />
-                <Input
-                  label="Số vòng Swiss mỗi mức (đề xuất 3–5)"
-                  value={rounds}
-                  onChange={(e) => setRounds(e.target.value)}
-                  hint="Một số cho mọi mức, hoặc danh sách cách nhau dấu phẩy."
-                />
-                <Select
-                  label="Tránh tái đấu"
-                  value={scope}
-                  onValueChange={(v) => setScope(v as 'level' | 'qualifier')}
-                  options={[
-                    { value: 'level', label: 'Trong từng mức' },
-                    { value: 'qualifier', label: 'Toàn bộ sơ loại' },
-                  ]}
-                />
-              </div>
-              <div className="mt-4">
-                <Button
-                  loading={act.isPending}
-                  onClick={() => {
-                    const t = (targets.trim() ? targets : c.suggestedTargets.join(','))
-                      .split(/[,\s→]+/)
-                      .filter(Boolean)
-                      .map(Number);
-                    const r = rounds
-                      .split(/[,\s]+/)
-                      .filter(Boolean)
-                      .map(Number);
-                    run('/qualifier/plan', 'Đã lập kế hoạch các mức', {
-                      targets: t,
-                      rounds: r.length === 1 ? r[0] : r,
-                      avoidRematch: scope,
-                      reason,
-                    });
-                  }}
-                >
-                  Lưu kế hoạch
-                </Button>
-              </div>
+              <PlanEditor
+                key={`${tid}:${currentPlan}`}
+                levels={c.levels}
+                suggested={c.suggestedTargets}
+                eligibleTeams={c.eligibleTeams}
+                busy={act.isPending}
+                extra={
+                  <Select
+                    label="Tránh tái đấu"
+                    value={scope}
+                    onValueChange={(v) => setScope(v as 'level' | 'qualifier')}
+                    options={[
+                      { value: 'level', label: 'Trong từng mức' },
+                      { value: 'qualifier', label: 'Toàn bộ sơ loại' },
+                    ]}
+                  />
+                }
+                onSubmit={(plan) =>
+                  run('/qualifier/plan', 'Đã lập kế hoạch các mức', { ...plan, avoidRematch: scope, reason })
+                }
+              />
             </Card>
           )}
 
@@ -310,6 +339,39 @@ export function CompetitionAdmin() {
                             ))}
                       </span>
                     ),
+                  },
+                  {
+                    key: 'times',
+                    header: 'Khóa bot / Công bố',
+                    cell: (l) => (
+                      <span className="flex flex-col text-xs">
+                        <span>
+                          {l.botLockAt ? new Date(l.botLockAt).toLocaleString('vi-VN') : 'Khóa bằng tay'}
+                          {l.lockDue && <span className="text-warning"> · đã tới giờ</span>}
+                        </span>
+                        <span className="text-ink-muted">
+                          {l.publishAt
+                            ? `Công bố ${new Date(l.publishAt).toLocaleString('vi-VN')}`
+                            : 'Chưa đặt giờ công bố'}
+                          {l.late && <span className="text-warning"> · đang chậm</span>}
+                        </span>
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'edit',
+                    header: <span className="sr-only">Sửa mức</span>,
+                    cell: (l) =>
+                      isAdmin && ['planned', 'locked', 'running'].includes(l.status) ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setEditLevel(l)}
+                          aria-label={`Sửa ${l.name}`}
+                        >
+                          Sửa
+                        </Button>
+                      ) : null,
                   },
                   {
                     key: 'act',
@@ -421,6 +483,15 @@ export function CompetitionAdmin() {
       )}
 
       <ResultDialog pairing={entry} onClose={() => setEntry(null)} reason={reason} />
+      {editLevel && (
+        <LevelDialog
+          key={editLevel.id}
+          tournamentId={tid}
+          level={editLevel}
+          reason={reason}
+          onClose={() => setEditLevel(null)}
+        />
+      )}
       <Dialog
         open={resetOpen}
         onOpenChange={setResetOpen}
@@ -665,5 +736,104 @@ export function AppealsAdmin() {
         </div>
       </Dialog>
     </section>
+  );
+}
+
+/** Giá trị cho ô datetime-local theo giờ của thiết bị; máy chủ lưu UTC. */
+function localInput(value: string | null): string {
+  if (!value) return '';
+  const d = new Date(value);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+/** Sửa một mức: tên, số vòng (không nhỏ hơn số vòng đã ghép), mốc khóa bot (chỉ khi chưa khóa), mốc công bố. */
+function LevelDialog({
+  tournamentId,
+  level,
+  reason,
+  onClose,
+}: {
+  tournamentId: string;
+  level: LevelView;
+  reason: string;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [name, setName] = useState(level.name);
+  const [rounds, setRounds] = useState(String(level.rounds));
+  const [lockAt, setLockAt] = useState(localInput(level.botLockAt));
+  const [publishAt, setPublishAt] = useState(localInput(level.publishAt));
+  const planned = level.status === 'planned';
+  const save = useMutation({
+    mutationFn: () =>
+      api(`/admin/tournaments/${tournamentId}/qualifier/levels/${level.ord}`, {
+        method: 'PATCH',
+        json: {
+          name: name.trim(),
+          rounds: Number(rounds),
+          ...(planned ? { botLockAt: lockAt ? new Date(lockAt).toISOString() : null } : {}),
+          publishAt: publishAt ? new Date(publishAt).toISOString() : null,
+          reason,
+        },
+      }),
+    onSuccess: () => {
+      toast({ title: `Đã cập nhật ${name.trim()}`, tone: 'success' });
+      void qc.invalidateQueries({ queryKey: ['competition'] });
+      onClose();
+    },
+    onError: (e) =>
+      toast({ title: 'Không cập nhật được mức', description: (e as Error).message, tone: 'error' }),
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title={`Sửa ${level.name}`}
+      description={`Chọn ${level.teamTarget} đội đi tiếp · ${LEVEL_STATUS[level.status].label}`}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Hủy
+          </Button>
+          <Button
+            loading={save.isPending}
+            disabled={!name.trim() || !Number(rounds)}
+            onClick={() => save.mutate()}
+          >
+            Lưu
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <Input label="Tên mức" value={name} onChange={(e) => setName(e.target.value)} />
+        <Input
+          label="Số vòng Swiss"
+          inputMode="numeric"
+          value={rounds}
+          onChange={(e) => setRounds(e.target.value.replace(/\D/g, ''))}
+          hint={`1–20, không nhỏ hơn số vòng đã ghép (${level.roundsPlayed}).`}
+        />
+        <Input
+          label="Mốc khóa bot (giờ máy chủ tự khóa mức)"
+          type="datetime-local"
+          value={lockAt}
+          onChange={(e) => setLockAt(e.target.value)}
+          disabled={!planned}
+          hint={planned ? 'Để trống: BTC khóa bằng tay.' : 'Mức đã khóa bot, không đổi được mốc này.'}
+        />
+        <Input
+          label="Mốc công bố kết quả"
+          type="datetime-local"
+          value={publishAt}
+          onChange={(e) => setPublishAt(e.target.value)}
+          hint="Phải sau mốc khóa bot. Quá giờ mà mức chưa chốt thì bảng xếp hạng báo chậm kết quả."
+        />
+        <p className="text-xs text-ink-muted">
+          Giờ nhập theo múi giờ thiết bị; máy chủ lưu UTC. Lý do lấy từ ô "Lý do thao tác".
+        </p>
+      </div>
+    </Dialog>
   );
 }

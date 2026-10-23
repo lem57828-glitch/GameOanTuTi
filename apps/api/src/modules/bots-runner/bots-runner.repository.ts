@@ -18,6 +18,27 @@ export class BotsRunnerRepository {
     return this.prisma.botVersion.findUnique({ where: { id } });
   }
 
+  /**
+   * Xóa hẳn một phiên bản bot cùng các lượt đấu thử của nó. Từ chối nếu bot đã vào bộ bot của một giai đoạn
+   * hoặc đã được chọn/chạy trong trận chính thức (giữ lại để xem lại ván, kháng nghị, kiểm tra trùng mã).
+   */
+  deleteBotVersion(id: string, teamId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${teamId}))`;
+      const [choices, selections, stages] = await Promise.all([
+        tx.gameChoice.count({ where: { botVersionId: id } }),
+        tx.matchSelection.count({ where: { botVersionId: id } }),
+        tx.botStageSelection.count({ where: { botVersionIds: { has: id } } }),
+      ]);
+      if (choices || selections)
+        throw conflict('Bot đã thi đấu trong giải nên được giữ lại để xem lại ván và giải quyết kháng nghị.');
+      if (stages) throw conflict('Bot đang nằm trong bộ bot đã chọn cho một giai đoạn. Bỏ bot khỏi bộ trước khi xóa.');
+      const runs = await tx.botTestRun.deleteMany({ where: { botVersionId: id } });
+      await tx.botVersion.delete({ where: { id } });
+      return { testRuns: runs.count };
+    });
+  }
+
   findBotByHash(sourceHash: string) {
     return this.prisma.botVersion.findFirst({
       where: { sourceHash },
@@ -286,6 +307,13 @@ export class BotsRunnerRepository {
     return this.prisma.botTestRun.update({
       where: { id },
       data,
+    });
+  }
+
+  botLabels(ids: string[]) {
+    return this.prisma.botVersion.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, label: true, version: true },
     });
   }
 }

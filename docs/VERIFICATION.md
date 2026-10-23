@@ -55,4 +55,18 @@ E2E kiểm tra các trang công khai không tràn ngang; sinh viên bị chặn 
 
 Giới hạn: kết quả đến từ mô phỏng/nhập tay vì TV4 chưa nối phòng đấu. Chưa kiểm thử quy mô 1000 đội.
 
+## Cập nhật 24/10/2026 — TV4 phòng đấu và trận nhiều hiệp (nhánh `feat/rooms-matches`)
+
+Nền: `main` + nhánh sửa của TV2 `codex/fix-main-registration-database` (bổ sung migration và `scripts/test-integration.mjs`).
+
+| Lệnh / nhóm kiểm tra   | Kết quả                                                                                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| prisma migrate deploy  | Qua; thêm migration `20261024090000_match_orchestration`, không sửa migration cũ                                                                        |
+| build, typecheck, test | Qua (contracts 7, engine 10, web 2, worker 14, API 26)                                                                                                  |
+| pnpm test:integration  | 25/25 qua trong schema riêng; thêm `matches.test.ts` (2 kịch bản, worker thật)                                                                          |
+| pnpm test:e2e          | 4/4 qua (sửa test TV3 dùng `/demo-login` sau khi TV1 đổi `/login` thành đăng nhập thật)                                                                 |
+| Kiểm tra giao diện     | Chromium 1440/390 px: đội trưởng thấy form chọn bot + quân thứ 10, khán giả chỉ thấy cờ "đã chọn", sau 2 hiệp công bố lựa chọn và màu; không tràn ngang |
+
+Lint toàn repo còn lỗi `any` trong test cũ của TV2 (`bot-submission.test.ts`, `test-run.test.ts`); các file TV3/TV4 không có lỗi lint.
+
 M0 đủ để nhóm tiếp tục phát triển từng module từ luồng demo; kết quả này không xác nhận hệ thống đủ điều kiện tổ chức giải thật.

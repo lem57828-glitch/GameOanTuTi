@@ -16,6 +16,7 @@ Prefix `/api/v1`. Thành công `{ data, meta? }`; lỗi `{ error: { code, messag
 | GET dev/accounts / POST dev/session | Chỉ development/test + DEMO_MODE; body accountId                                                   |
 | GET teams/mine                      | Sinh viên xem đội của mình                                                                         |
 | GET bots?teamId=                    | Sinh viên chỉ đội mình; BTC/trọng tài xem các đội; không có source                                 |
+| DELETE bots/:id                     | Thành viên đội (hoặc BTC) xóa phiên bản kèm lượt đấu thử; bot mô phỏng 403; bot đã vào bộ bot/trận chính thức 409 |
 | GET tournaments/current             | Giải hiện tại và danh sách stage công khai                                                         |
 | GET rooms / rooms/:id               | Danh sách phòng / RoomSnapshot công khai                                                           |
 | GET games/:id/events?afterSeq=0     | Replay sự kiện bền vững, seq tăng dần                                                              |
@@ -42,3 +43,17 @@ Client gửi `room.join` / `room.leave` với `{roomId}`. Server gửi `room.sna
 RoomSnapshot có roomId, streamId, seq, status, gameId, rulesetId, teams, coinResult, board, turn, history, result, job, serverTime, deadline. Deadline null ở M0. Coin chỉ do server quyết định và lưu một lần; client chỉ hoạt họa kết quả đã có.
 
 RoomEvent có eventId, type, schemaVersion=1, aggregateId=roomId, streamId, seq, occurredAt, payload. Các loại: game.created/started/move/finished/failed. Stream là `game:<gameId>`. Seq cũ/trùng bỏ qua; nhảy seq/đổi stream tải snapshot. MatchCompleted đã có schema để TV4 bàn giao TV3 ở milestone sau; chưa phát khi demo kết thúc.
+
+## Trận nhiều hiệp (TV4)
+
+`RoomSnapshot.match` (MatchView): `matchId`, `pairingId`, `kind`, `status`, `scoreA/B`, `mainGames`, `chooseExtra`, `currentNo`, `deadline`, `pauseReason`, `selection` và `games`.
+
+- `selection` chỉ có cờ `chosen/ready` cho mỗi đội, **không** chứa bot/quân trước khi khóa.
+- `games` công bố lựa chọn đã khóa của từng ván.
+
+Các request/view khác:
+
+- `MatchChoiceRequest {botVersionId, extraType, ready}`.
+- `MyMatchSelection`: bot được phép và lựa chọn của chính đội mình.
+
+Phòng của cặp có id cố định `pairingRoomId(pairingId) = room_p_<pairingId>`. `PairingView.roomId` khác null khi cặp đã có trận. Xem [TV4_MATCHES.md](TV4_MATCHES.md).

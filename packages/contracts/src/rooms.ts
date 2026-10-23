@@ -1,6 +1,8 @@
 // TV4 — phòng đấu, snapshot, sự kiện (đặc tả M0 mục 14, 16–18).
 import { z } from 'zod';
 import { Id, IsoDateTime } from './common.js';
+
+const Count = z.number().int().nonnegative();
 import { GameEndReason, PieceType, REQUEST_KEY, Side } from './bots.js';
 
 export const Square = z.string().regex(/^[A-I][1-9]$/);
@@ -39,6 +41,73 @@ export const RoomTeam = z.object({ id: Id, name: z.string() });
  * Lần chạy lại (retry) của cùng ván tiếp tục stream cũ: cùng seed nên nước đã lưu không bị ghi lại.
  * Khán giả không bao giờ thấy lựa chọn kín trước thời điểm công bố.
  */
+// ---------------------------------------------------------------- Trận nhiều hiệp (TV4)
+
+/** Phòng của một cặp đấu TV3 có id cố định để các trang khác dẫn link mà không cần tra cứu. */
+export const pairingRoomId = (pairingId: string) => `room_p_${pairingId}`;
+
+export const MatchKind = z.enum(['demo', 'swiss', 'tiebreak', 'knockout']);
+export type MatchKind = z.infer<typeof MatchKind>;
+export const MatchStatus = z.enum(['open', 'selecting', 'running', 'paused', 'completed', 'cancelled']);
+export type MatchStatus = z.infer<typeof MatchStatus>;
+
+/** Trạng thái lựa chọn của một đội cho hiệp đang chọn. KHÔNG chứa bot/quân đã chọn (giữ kín). */
+export const SelectionState = z.object({ chosen: z.boolean(), ready: z.boolean() });
+
+export const MatchGameView = z.object({
+  no: Count,
+  gameId: Id,
+  status: z.string(),
+  /** Theo góc nhìn đội A: a thắng, b thắng, null hòa / chưa xong. */
+  outcome: z.enum(['a', 'b']).nullable(),
+  finished: z.boolean(),
+  blueTeamId: Id.nullable(),
+  /** Lựa chọn đã khóa — chỉ công bố sau khi khóa. */
+  choices: z.object({
+    a: z.object({ botLabel: z.string(), extraType: PieceType }),
+    b: z.object({ botLabel: z.string(), extraType: PieceType }),
+  }),
+});
+export type MatchGameView = z.infer<typeof MatchGameView>;
+
+export const MatchView = z.object({
+  matchId: Id,
+  pairingId: Id.nullable(),
+  kind: MatchKind,
+  status: MatchStatus,
+  scoreA: Count,
+  scoreB: Count,
+  /** Số hiệp chính của thể thức (2 hoặc 5) và có được chọn quân thứ 10 không. */
+  mainGames: Count,
+  chooseExtra: z.boolean(),
+  currentNo: Count,
+  deadline: IsoDateTime.nullable(),
+  pauseReason: z.string().nullable(),
+  selection: z.object({ a: SelectionState, b: SelectionState }).nullable(),
+  games: z.array(MatchGameView),
+  winnerTeamId: Id.nullable(),
+});
+export type MatchView = z.infer<typeof MatchView>;
+
+/** POST /rooms/:id/choices — đội trưởng chọn kín bot (+ quân thứ 10) cho hiệp đang chọn. */
+export const MatchChoiceRequest = z
+  .object({ botVersionId: Id, extraType: PieceType.default('PAPER'), ready: z.boolean().default(true) })
+  .strict();
+export type MatchChoiceRequest = z.infer<typeof MatchChoiceRequest>;
+
+/** Dữ liệu riêng của đội trưởng trong phòng: bot được phép và lựa chọn hiện tại của chính đội mình. */
+export const MyMatchSelection = z.object({
+  matchId: Id,
+  gameNo: Count,
+  side: z.enum(['a', 'b']),
+  isCaptain: z.boolean(),
+  allowedBots: z.array(z.object({ id: Id, label: z.string(), version: Count })),
+  current: z.object({ botVersionId: Id, extraType: PieceType, ready: z.boolean() }).nullable(),
+  canChoose: z.boolean(),
+  reason: z.string().nullable(),
+});
+export type MyMatchSelection = z.infer<typeof MyMatchSelection>;
+
 export const RoomSnapshot = z.object({
   roomId: Id,
   title: z.string(),
@@ -67,6 +136,8 @@ export const RoomSnapshot = z.object({
   job: z.object({ id: Id, status: z.string(), attempts: z.number().int() }).nullable(),
   serverTime: IsoDateTime,
   deadline: IsoDateTime.nullable(),
+  /** Trận nhiều hiệp của phòng (null với phòng mẫu chỉ có ván demo). */
+  match: MatchView.nullable().default(null),
 });
 export type RoomSnapshot = z.infer<typeof RoomSnapshot>;
 

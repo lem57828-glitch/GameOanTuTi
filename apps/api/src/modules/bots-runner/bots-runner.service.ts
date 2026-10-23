@@ -269,6 +269,17 @@ except (SyntaxError, ValueError) as e:
     });
   }
 
+  /** Thành viên đội (hoặc BTC) xóa một phiên bản bot không dùng nữa. Bot mô phỏng của hệ thống không xóa được. */
+  async deleteBot(user: SessionUser, botId: string): Promise<{ id: string; testRuns: number }> {
+    const bot = await this.repo.findBotVersion(botId);
+    if (!bot) throw notFound('Phiên bản bot');
+    if (user.role !== 'admin' && bot.teamId !== user.teamId) throw forbidden('Bạn chỉ có thể xóa bot của đội mình.');
+    if (bot.isDemo) throw forbidden('Bot mô phỏng của hệ thống không xóa được.');
+    const { testRuns } = await this.repo.deleteBotVersion(bot.id, bot.teamId);
+    this.log.log(`Đã xóa Bot v${bot.version} của đội ${bot.teamId} (${testRuns} lượt đấu thử) theo yêu cầu của ${user.id}`);
+    return { id: bot.id, testRuns };
+  }
+
   async saveSelection(user: SessionUser, stageId: string, raw: unknown, lock = false) {
     const input = parse(BotSelectionInput, raw);
     const staff = user.role === 'admin' || user.role === 'referee';
@@ -285,6 +296,32 @@ except (SyntaxError, ValueError) as e:
     const row = await this.repo.selection(teamId, stageId);
     return row ? BotSelectionView.parse({ ...row, updatedAt: row.updatedAt.toISOString() }) : null;
   }
+  /**
+   * TV4: bot một đội được dùng trong trận. Có bộ bot đã khóa của giai đoạn thì chỉ dùng bộ đó;
+   * chưa khóa thì chỉ chế độ demo cho dùng mọi bot hợp lệ của đội (giải thật: đội phải khóa bộ bot trước).
+   */
+  async botsForMatch(
+    teamId: string,
+    stageId: string | null,
+  ): Promise<{ locked: boolean; bots: Array<{ id: string; label: string; version: number }> }> {
+    const valid = (await this.repo.listBots(teamId)).filter((b) => b.status === 'valid');
+    const sel = stageId ? await this.repo.selection(teamId, stageId) : null;
+    const pick = (b: { id: string; label: string; version: number }) => ({
+      id: b.id,
+      label: b.label,
+      version: b.version,
+    });
+    if (sel?.locked)
+      return { locked: true, bots: valid.filter((b) => sel.botVersionIds.includes(b.id)).map(pick) };
+    return { locked: false, bots: this.cfg.demoMode ? valid.map(pick) : [] };
+  }
+
+  /** Nhãn hiển thị của các bot (để công bố lựa chọn đã khóa trong phòng). */
+  async botLabels(ids: string[]): Promise<Map<string, string>> {
+    const rows = await this.repo.botLabels(ids);
+    return new Map(rows.map((b) => [b.id, `v${b.version} · ${b.label}`]));
+  }
+
   async lockedBotIds(teamId: string, stageId: string): Promise<string[]> {
     const row = await this.repo.selection(teamId, stageId);
     if (!row?.locked) throw validationError('Bộ bot chưa khóa.');

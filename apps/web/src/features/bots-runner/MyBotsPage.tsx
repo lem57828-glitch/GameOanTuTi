@@ -2,9 +2,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useRef } from 'react';
 import { Alert, Badge, Button, Card, CardHeader, Dialog, EmptyState, Input, Spinner, Table } from '@arena/ui';
-import type { BotSourceDetail, BotVersion, TestRunDetail } from '@arena/contracts';
+import type { BotSourceDetail, BotVersion, PieceType, TestRunDetail } from '@arena/contracts';
 import { api } from '../../lib/api';
 import { useSession } from '../../lib/session';
+import { TestRunReplay } from './TestRunReplay';
 
 const STATUS: Record<BotVersion['status'], { label: string; tone: 'neutral' | 'success' | 'danger' }> = {
   pending: { label: 'Chờ kiểm thử', tone: 'neutral' },
@@ -29,9 +30,21 @@ export function MyBotsPage() {
     enabled: !!selectedBot,
   });
 
+  // Xóa phiên bản không dùng nữa: hỏi xác nhận; máy chủ từ chối nếu bot đã vào bộ bot/thi đấu chính thức.
+  const [deleteBot, setDeleteBot] = useState<BotVersion | null>(null);
+  const deleteMutation = useMutation({
+    mutationFn: (botId: string) => api<{ id: string; testRuns: number }>(`/bots/${botId}`, { method: 'DELETE' }),
+    onSuccess: (_, botId) => {
+      setDeleteBot(null);
+      if (selectedBot?.id === botId) setSelectedBot(null);
+      void queryClient.invalidateQueries({ queryKey: ['bots'] });
+    },
+  });
+
   // State cho Đấu thử (TV2 - Gói việc 4)
   const [testRunBot, setTestRunBot] = useState<BotVersion | null>(null);
   const [opponentPolicy, setOpponentPolicy] = useState('greedy');
+  const [extraType, setExtraType] = useState<PieceType>('PAPER');
   const [activeTestRunId, setActiveTestRunId] = useState<string | null>(null);
 
   const testRunQuery = useQuery({
@@ -53,6 +66,7 @@ export function MyBotsPage() {
           opponentType: 'demo',
           opponentTarget: opponentPolicy,
           mySide: 'blue',
+          extraType,
         },
       }),
     onSuccess: (data) => {
@@ -102,6 +116,17 @@ export function MyBotsPage() {
     reader.readAsText(file);
   };
 
+  /** "Sửa" bot: phiên bản bất biến nên mở form nộp phiên bản MỚI, điền sẵn mã của phiên bản đang xem. */
+  const handleEditAsNew = () => {
+    if (!selectedBot || !sourceQuery.data) return;
+    setSubmitTeamId(selectedBot.teamId);
+    setLabel(`${selectedBot.label} (sửa từ v${selectedBot.version})`);
+    setSourceCode(sourceQuery.data.sourceCode);
+    setSelectedBot(null);
+    setSubmitError(null);
+    setSubmitOpen(true);
+  };
+
   const handleOpenSubmit = () => {
     if (!user?.teamId && !staff) {
       alert('Bạn cần tham gia hoặc tạo một đội để có thể nộp bot.');
@@ -134,7 +159,7 @@ export function MyBotsPage() {
         <Card>
           <CardHeader
             title="Phiên bản đã nộp"
-            subtitle="Mỗi phiên bản bất biến, định danh bằng mã băm SHA-256 chống sửa đổi."
+            subtitle="Mỗi phiên bản là bất biến: muốn sửa, nộp phiên bản mới."
           />
           <Table
             label="Danh sách phiên bản bot"
@@ -164,13 +189,6 @@ export function MyBotsPage() {
                   <Badge tone={STATUS[b.status].tone} dot>
                     {STATUS[b.status].label}
                   </Badge>
-                ),
-              },
-              {
-                key: 'hash',
-                header: 'Mã băm SHA-256',
-                cell: (b) => (
-                  <span className="font-mono text-xs text-ink-muted">{b.sourceHash.slice(0, 14)}…</span>
                 ),
               },
               {
@@ -211,6 +229,17 @@ export function MyBotsPage() {
                     >
                       Chi tiết & Code
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => {
+                        deleteMutation.reset();
+                        setDeleteBot(b);
+                      }}
+                      aria-label={`Xóa v${b.version}`}
+                    >
+                      Xóa
+                    </Button>
                   </div>
                 ),
               },
@@ -237,8 +266,6 @@ export function MyBotsPage() {
               </dd>
               <dt className="text-ink-muted">Tạo lúc:</dt>
               <dd>{new Date(selectedBot.createdAt).toLocaleString('vi-VN')}</dd>
-              <dt className="text-ink-muted">SHA-256 đầy đủ:</dt>
-              <dd className="break-all font-mono text-xs text-accent">{selectedBot.sourceHash}</dd>
             </dl>
 
             {sourceQuery.isLoading && <Spinner label="Đang tải mã nguồn..." />}
@@ -269,6 +296,9 @@ export function MyBotsPage() {
                     >
                       Sao chép mã
                     </Button>
+                    <Button size="sm" variant="secondary" onClick={handleEditAsNew}>
+                      Sửa thành phiên bản mới
+                    </Button>
                   </div>
                   <pre className="max-h-72 overflow-auto rounded border border-line bg-surface p-3 font-mono text-xs text-ink">
                     {sourceQuery.data.sourceCode}
@@ -278,6 +308,40 @@ export function MyBotsPage() {
             )}
           </div>
         )}
+      </Dialog>
+
+      {/* Dialog xác nhận xóa phiên bản bot */}
+      <Dialog
+        open={!!deleteBot}
+        onOpenChange={(o) => !o && setDeleteBot(null)}
+        title={deleteBot ? `Xóa phiên bản v${deleteBot.version} — ${deleteBot.label}?` : ''}
+        description="Mã nguồn và các lượt đấu thử của phiên bản này bị xóa vĩnh viễn, không khôi phục được."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDeleteBot(null)}>
+              Hủy
+            </Button>
+            <Button
+              variant="danger"
+              loading={deleteMutation.isPending}
+              onClick={() => deleteBot && deleteMutation.mutate(deleteBot.id)}
+            >
+              Xóa vĩnh viễn
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3 text-sm">
+          <p className="text-ink-muted">
+            Bot đã được chọn vào bộ bot của một giai đoạn hoặc đã thi đấu chính thức sẽ không xóa được (giữ lại để xem
+            lại ván và giải quyết kháng nghị). Nên tải hoặc sao chép mã trước nếu còn cần.
+          </p>
+          {deleteMutation.error && (
+            <Alert tone="error" title="Không xóa được">
+              {(deleteMutation.error as Error).message}
+            </Alert>
+          )}
+        </div>
       </Dialog>
 
       {/* Dialog nộp phiên bản bot mới */}
@@ -352,7 +416,7 @@ export function MyBotsPage() {
               </div>
             </div>
             <textarea
-              className="h-48 w-full rounded border border-line bg-surface p-3 font-mono text-xs text-ink focus:border-accent focus:outline-none"
+              className="h-80 w-full rounded border border-line bg-surface p-3 font-mono text-xs text-ink focus:border-accent focus:outline-none"
               placeholder={`# Nhập hoặc dán code Python vào đây\ndef make_move(state):\n    # Viết logic chiến thuật của bạn tại đây\n    return {"from": "A1", "to": "B2"}`}
               value={sourceCode}
               onChange={(e) => setSourceCode(e.target.value)}
@@ -381,6 +445,7 @@ export function MyBotsPage() {
           }
         }}
         title={testRunBot ? `Đấu thử: ${testRunBot.label} (v${testRunBot.version})` : 'Đấu thử'}
+        className="max-w-3xl"
         description="Chạy một ván đấu thử nghiệm độc lập trong Sandbox Worker mà không tính điểm giải đấu."
       >
         {testRunBot && (
@@ -408,6 +473,23 @@ export function MyBotsPage() {
                     <option value="greedy">Bot Tham ăn (Greedy - ưu tiên ăn quân)</option>
                     <option value="rusher">Bot Lao đích (Rusher - phi thẳng về đích)</option>
                   </select>
+                </div>
+
+                <div>
+                  <label htmlFor="practice-extra-piece" className="text-sm font-semibold text-ink">
+                    Quân thứ 10 của đội bạn:
+                  </label>
+                  <select
+                    id="practice-extra-piece"
+                    className="mt-1 w-full rounded border border-line bg-surface p-2 text-sm text-ink"
+                    value={extraType}
+                    onChange={(e) => setExtraType(e.target.value as PieceType)}
+                  >
+                    <option value="ROCK">Búa — 4 Búa, 3 Bao, 3 Kéo</option>
+                    <option value="PAPER">Bao — 3 Búa, 4 Bao, 3 Kéo</option>
+                    <option value="SCISSORS">Kéo — 3 Búa, 3 Bao, 4 Kéo</option>
+                  </select>
+                  <p className="mt-1 text-xs text-ink-muted">Đối thủ mẫu giữ quân thứ 10 là Bao.</p>
                 </div>
 
                 <div className="rounded border border-line bg-surface-2 p-3 text-xs text-ink-muted">
@@ -487,11 +569,12 @@ export function MyBotsPage() {
                           )}
                         </div>
 
+                        <TestRunReplay key={testRunQuery.data.id} run={testRunQuery.data} />
+
                         {testRunQuery.data.events && testRunQuery.data.events.length > 0 && (
                           <div>
                             <span className="text-xs font-semibold text-ink-muted">
-                              Nhật ký diễn biến ván đấu ({testRunQuery.data.events.length} sự kiện bàn giao
-                              TV4):
+                              Nhật ký diễn biến ván đấu ({testRunQuery.data.events.length} sự kiện):
                             </span>
                             <div className="mt-1 max-h-48 overflow-auto rounded border border-line bg-surface p-2 font-mono text-xs text-ink">
                               {testRunQuery.data.events.map((ev) => (

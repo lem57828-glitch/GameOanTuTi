@@ -7,6 +7,9 @@ import { CoinToss } from '../../components/CoinToss';
 import { usePublicHealth } from '../../lib/health';
 import { useSession } from '../../lib/session';
 import { END_REASON, JOB_STATUS, ROOM_STATUS } from './labels';
+import { MatchPanel } from './MatchPanel';
+import { ReplayBar } from './ReplayBar';
+import { useReplay, type Replay } from './useReplay';
 import { useRoomStream, type ConnectionState } from './useRoomStream';
 
 const CONN: Record<ConnectionState, { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {
@@ -19,6 +22,8 @@ const CONN: Record<ConnectionState, { label: string; tone: 'success' | 'warning'
 export function RoomPage() {
   const { roomId = '' } = useParams();
   const { snapshot, connection, error, resync, coinFor, dismissCoin } = useRoomStream(roomId);
+  // Vào phòng không tự chạy: bàn cờ ở nước 0, người xem bấm Chạy / kéo thanh để tua.
+  const replay = useReplay(snapshot);
   const health = usePublicHealth();
   const { user } = useSession();
 
@@ -64,8 +69,13 @@ export function RoomPage() {
     id === s.teams.a.id ? s.teams.a.name : id === s.teams.b.id ? s.teams.b.name : '—';
   const sideOf = (teamId: string): Side | null =>
     s.coinResult ? (s.coinResult.blueTeamId === teamId ? 'blue' : 'pink') : null;
-  const last = s.history.at(-1) ?? null;
-  const status = ROOM_STATUS[s.status];
+  // Trong trận nhiều hiệp, trạng thái phòng giữa các hiệp là bước chọn kín, không phải chờ worker.
+  const status =
+    s.match?.status === 'selecting'
+      ? { label: 'Chờ hai đội chọn', tone: 'warning' as const }
+      : s.match?.status === 'paused'
+        ? { label: 'Tạm dừng', tone: 'danger' as const }
+        : ROOM_STATUS[s.status];
   const workerDown = health.data && !health.data.workerAlive;
   const conn = CONN[connection];
 
@@ -83,7 +93,9 @@ export function RoomPage() {
             <Badge tone={status.tone} dot>
               {status.label}
             </Badge>
-            {s.isDemo && <Badge tone="warning">Dữ liệu mô phỏng — ruleset {s.rulesetId ?? 'demo'}</Badge>}
+            {s.isDemo && (
+              <Badge tone="warning">Dữ liệu mô phỏng{s.rulesetId ? ` — ruleset ${s.rulesetId}` : ''}</Badge>
+            )}
             <span aria-live="polite">
               <Badge tone={conn.tone} dot>
                 {conn.label}
@@ -112,10 +124,13 @@ export function RoomPage() {
         </Alert>
       )}
 
+      {s.match && <MatchPanel s={s} onChanged={() => void resync()} />}
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <Card className="p-3 sm:p-5">
-          <Board board={s.board} lastMove={last} label={`Bàn cờ ${s.title}`} size="lg" />
-          <TurnLine s={s} teamName={teamName} />
+          <Board board={replay.board} lastMove={replay.lastMove} label={`Bàn cờ ${s.title}`} size="lg" />
+          <ReplayBar r={replay} />
+          <TurnLine s={s} teamName={teamName} replay={replay} />
         </Card>
 
         <div className="flex min-w-0 flex-col gap-4">
@@ -148,7 +163,12 @@ export function RoomPage() {
             </ul>
           </Card>
 
-          <ResultCard s={s} teamName={teamName} />
+          {/* Không lộ kết quả khi người xem đang xem lại giữa chừng. */}
+          {replay.atEnd ? (
+            <ResultCard s={s} teamName={teamName} />
+          ) : (
+            s.result && <p className="text-xs text-ink-muted">Kết quả ván sẽ hiện khi xem tới nước cuối.</p>
+          )}
 
           <Card>
             <CardHeader title="Lịch sử nước đi" subtitle={`${s.history.length} nước`} />
@@ -163,7 +183,13 @@ export function RoomPage() {
                 {[...s.history].reverse().map((m) => (
                   <li
                     key={m.ply}
-                    className="flex items-center gap-3 border-b border-line/60 px-3 py-1.5 last:border-0"
+                    onClick={() => replay.seek(m.ply)}
+                    title="Xem bàn cờ sau nước này"
+                    className={cn(
+                      'flex cursor-pointer items-center gap-3 border-b border-line/60 px-3 py-1.5 last:border-0 hover:bg-surface-2/60',
+                      m.ply > replay.cursor && 'opacity-40',
+                      m.ply === replay.cursor && 'bg-accent/15',
+                    )}
                   >
                     <span className="w-8 text-right text-ink-muted">{m.ply}.</span>
                     <SideTag side={m.side} className="w-16 text-xs" />
@@ -195,7 +221,15 @@ export function RoomPage() {
   );
 }
 
-function TurnLine({ s, teamName }: { s: RoomSnapshot; teamName: (id: string | null) => string }) {
+function TurnLine({
+  s,
+  teamName,
+  replay,
+}: {
+  s: RoomSnapshot;
+  teamName: (id: string | null) => string;
+  replay: Replay;
+}) {
   let text = 'Phòng chưa có ván nào.';
   if (s.status === 'waiting') text = 'Ván đã tạo, chờ worker bắt đầu.';
   if (s.turn && s.status === 'running') {
@@ -208,6 +242,9 @@ function TurnLine({ s, teamName }: { s: RoomSnapshot; teamName: (id: string | nu
   }
   if (s.status === 'finished') text = `Ván kết thúc sau ${s.result?.plies ?? s.history.length} nước.`;
   if (s.status === 'failed') text = 'Ván không chạy được. BTC xem chi tiết ở trang quản trị.';
+  // Đang xem lại giữa chừng: không báo trước diễn biến/kết quả phía sau.
+  if (replay.available && !replay.atEnd)
+    text = `Đang xem lại: nước ${replay.cursor}/${replay.total}${replay.live ? ' · ván vẫn đang diễn ra' : ''}`;
   return (
     <p
       aria-live="polite"
@@ -226,7 +263,7 @@ function ResultCard({ s, teamName }: { s: RoomSnapshot; teamName: (id: string | 
   const r = s.result;
   return (
     <Card className="border-accent/50">
-      <CardHeader title="Kết quả" subtitle={END_REASON[r.reason]} />
+      <CardHeader title={s.match ? 'Kết quả ván vừa xong' : 'Kết quả'} subtitle={END_REASON[r.reason]} />
       <p className="text-xl font-extrabold text-ink">
         {r.winner ? `${teamName(r.winnerTeamId)} thắng` : 'Hòa'}
       </p>

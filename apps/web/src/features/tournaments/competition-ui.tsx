@@ -2,6 +2,7 @@
 // Trạng thái luôn có nhãn chữ, không chỉ phân biệt bằng màu.
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Alert, Badge, EmptyState, Select, Spinner, Table, cn, type BadgeTone } from '@arena/ui';
 import type { BracketView, LevelView, PairingView, StandingRowView, StandingsView } from '@arena/contracts';
 import { api } from '../../lib/api';
@@ -79,6 +80,14 @@ export function PairingLine({ p, compact = false }: { p: PairingView; compact?: 
           (p.confirmed ? <Badge tone="success">Đã chốt</Badge> : <Badge tone="blue">Kết quả tạm</Badge>)}
         {p.source === 'simulation' && <Badge tone="warning">Mô phỏng</Badge>}
         {p.openAppeals > 0 && <Badge tone="danger">{p.openAppeals} khiếu nại mở</Badge>}
+        {p.roomId && (
+          <Link
+            to={`/rooms/${p.roomId}`}
+            className="text-xs font-semibold text-accent underline-offset-4 hover:underline focus-visible:shadow-focus focus-visible:outline-none"
+          >
+            Xem phòng
+          </Link>
+        )}
       </div>
     </div>
   );
@@ -92,31 +101,24 @@ export function StandingsPanel({ tournamentId, levels }: { tournamentId: string;
       api<StandingsView>(`/tournaments/${tournamentId}/standings${level ? `?level=${level}` : ''}`),
     refetchInterval: 10_000,
   });
-  if (!levels.length) {
-    return (
-      <EmptyState
-        icon="≡"
-        title="Chưa có kế hoạch sơ loại"
-        description="BTC chưa lập các mức sơ loại cho giải này."
-      />
-    );
-  }
   const s = q.data;
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="w-full max-w-xs">
-          <Select
-            label="Mức sơ loại"
-            value={level || (s?.level ? String(s.level.ord) : undefined)}
-            onValueChange={setLevel}
-            options={levels.map((l) => ({
-              value: String(l.ord),
-              label: `${l.name} — ${LEVEL_STATUS[l.status].label}`,
-            }))}
-          />
-        </div>
-        {s?.level && (
+        {levels.length > 0 && (
+          <div className="w-full max-w-xs">
+            <Select
+              label="Mức sơ loại"
+              value={level || (s?.level ? String(s.level.ord) : undefined)}
+              onValueChange={setLevel}
+              options={levels.map((l) => ({
+                value: String(l.ord),
+                label: `${l.name} — ${LEVEL_STATUS[l.status].label}`,
+              }))}
+            />
+          </div>
+        )}
+        {s?.level && !s.preview && (
           <p className="text-sm text-ink-muted">
             Vòng {s.level.roundsPlayed}/{s.level.rounds} · chọn {s.level.teamTarget} đội ·{' '}
             {s.provisional ? 'điểm tạm (chưa xác nhận hết)' : 'điểm đã xác nhận'}
@@ -134,6 +136,16 @@ export function StandingsPanel({ tournamentId, levels }: { tournamentId: string;
           {(q.error as Error).message}
         </Alert>
       )}
+      {s?.preview && (
+        <Alert
+          tone="info"
+          title={`Danh sách đội dự kiến tham gia${s.level ? ` ${s.level.name}` : ''} (${s.rows.length} đội)`}
+        >
+          {levels.length === 0
+            ? 'BTC chưa lập kế hoạch các mức sơ loại. Đây là các đội đã được duyệt của giải.'
+            : 'Mức này chưa khóa bot. Danh sách được chốt khi BTC bấm "Khóa bot và mở mức"; đội rút hoặc chưa được duyệt sẽ không vào mức.'}
+        </Alert>
+      )}
       {s && (
         <Table
           label="Bảng xếp hạng sơ loại"
@@ -141,8 +153,12 @@ export function StandingsPanel({ tournamentId, levels }: { tournamentId: string;
           rowKey={(r) => r.teamId}
           empty={
             <EmptyState
-              title="Mức này chưa có đội tham gia"
-              description="Đội được đưa vào khi BTC khóa bot của mức."
+              title={s.preview ? 'Chưa có đội đủ điều kiện' : 'Mức này chưa có đội tham gia'}
+              description={
+                s.preview
+                  ? 'Đội cần được BTC duyệt (hoặc mức trước cần chốt) mới có tên ở đây.'
+                  : 'Đội được đưa vào khi BTC khóa bot của mức.'
+              }
             />
           }
           caption="Thứ tự: điểm (thắng 3, hòa 1, thua 0, nghỉ 3) → điểm trung bình đối thủ → hiệu số ván. Bằng hoàn toàn thì cùng hạng."
@@ -150,7 +166,7 @@ export function StandingsPanel({ tournamentId, levels }: { tournamentId: string;
             {
               key: 'rank',
               header: '#',
-              cell: (r) => <span className="font-mono font-bold">{r.rank}</span>,
+              cell: (r) => <span className="font-mono font-bold">{s.preview ? '—' : r.rank}</span>,
               className: 'w-12',
             },
             { key: 'name', header: 'Đội', cell: (r) => <span className="font-semibold">{r.name}</span> },

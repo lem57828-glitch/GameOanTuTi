@@ -19,6 +19,7 @@ const snapshot: RoomSnapshot = {
   job: null,
   serverTime: '2026-10-20T08:00:00.000Z',
   deadline: null,
+  match: null,
 };
 const event: RoomEvent = {
   eventId: 'event_test',

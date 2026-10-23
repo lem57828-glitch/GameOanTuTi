@@ -505,13 +505,98 @@ export function buildOpenApi() {
     security: auth,
     responses: notImpl,
   });
+  // ---- TV4: trận nhiều hiệp theo cặp đấu, chọn kín bot/quân thứ 10
+  r.registerPath({
+    method: 'get',
+    path: '/admin/tournaments/{id}/matches/summary',
+    tags: ['rooms-matches'],
+    security: auth,
+    description: 'Số phòng của các cặp đang chờ thi: chưa mở / đang chọn / đang thi / tạm dừng / đã xong.',
+    request: { params: idParam },
+    responses: {
+      200: json(
+        data(
+          z.object({
+            pending: z.number().int(),
+            notOpened: z.number().int(),
+            selecting: z.number().int(),
+            running: z.number().int(),
+            paused: z.number().int(),
+            completed: z.number().int(),
+          }),
+        ),
+      ),
+    },
+  });
   r.registerPath({
     method: 'post',
     path: '/rooms/{id}/choices',
     tags: ['rooms-matches'],
     security: auth,
+    description:
+      'Đội trưởng chọn kín bot (+ quân thứ 10 ở loại trực tiếp) cho hiệp đang chọn; ready=true để sẵn sàng.',
+    request: { params: idParam, body: { content: { 'application/json': { schema: C.MatchChoiceRequest } } } },
+    responses: {
+      201: json(data(C.MyMatchSelection)),
+      403: error('Không phải đội trưởng của đội trong phòng / bot ngoài bộ đã khóa'),
+      409: error('Hiệp đã khóa lựa chọn'),
+    },
+  });
+  r.registerPath({
+    method: 'get',
+    path: '/rooms/{id}/my-selection',
+    tags: ['rooms-matches'],
+    security: auth,
+    description: 'Bot được phép và lựa chọn hiện tại của chính đội mình; không trả lựa chọn của đối thủ.',
     request: { params: idParam },
-    responses: notImpl,
+    responses: { 200: json(data(C.MyMatchSelection.nullable())) },
+  });
+  r.registerPath({
+    method: 'post',
+    path: '/admin/tournaments/{id}/matches/open',
+    tags: ['rooms-matches'],
+    security: auth,
+    description: 'BTC mở phòng + trận cho mọi cặp đang chờ thi của giải (cặp đã có trận được bỏ qua).',
+    request: { params: idParam },
+    responses: { 201: json(data(z.object({ opened: z.number().int(), skipped: z.number().int() }))) },
+  });
+  r.registerPath({
+    method: 'post',
+    path: '/admin/tournaments/{id}/matches/force-lock',
+    tags: ['rooms-matches'],
+    security: auth,
+    request: {
+      params: idParam,
+      ...{ body: { content: { 'application/json': { schema: z.object({ reason: z.string().min(3) }) } } } },
+    },
+    responses: { 201: json(data(z.object({ locked: z.number().int() }))) },
+  });
+  r.registerPath({
+    method: 'post',
+    path: '/admin/matches/{id}/force-lock',
+    tags: ['rooms-matches'],
+    security: auth,
+    description: 'Khóa ngay lựa chọn hiệp đang chọn; đội chưa chọn dùng lựa chọn dự phòng.',
+    request: {
+      params: idParam,
+      ...{ body: { content: { 'application/json': { schema: z.object({ reason: z.string().min(3) }) } } } },
+    },
+    responses: { 201: json(data(C.MatchView.nullable())), 409: error('Trận không ở bước chọn') },
+  });
+  r.registerPath({
+    method: 'post',
+    path: '/admin/matches/{id}/rerun-game',
+    tags: ['rooms-matches'],
+    security: auth,
+    description: 'Chạy lại hiệp lỗi, giữ nguyên bot, quân thứ 10, màu, tung xu và seed.',
+    request: {
+      params: idParam,
+      ...{ body: { content: { 'application/json': { schema: z.object({ reason: z.string().min(3) }) } } } },
+    },
+    responses: {
+      201: json(data(z.object({ roomId: C.Id, gameId: C.Id }))),
+      409: error('Trận không tạm dừng vì ván lỗi'),
+    },
   });
 
   return new OpenApiGeneratorV3(r.definitions).generateDocument({

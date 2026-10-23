@@ -1,7 +1,16 @@
 # rooms-matches (TV4)
 
-Owner: TV4. Du lieu: Room, Match, Game, GameChoice, GameResult, GameEvent.
+Owner: TV4. Dữ liệu: Room, Match, MatchSelection, Game, GameChoice, GameResult, GameEvent.
 
-Interface hien co: list, snapshot, gameEvents, createDemoGame; room.join/leave, room.snapshot/event. Module khac chi goi service cong khai, khong import repository. Controller kiem tra HTTP/quyen, service nghiep vu, repository truy cap Prisma.
+- Phòng/snapshot/sự kiện trực tiếp: `rooms.service.ts`, `rooms.gateway.ts` (room.join/leave → room.snapshot/event), ván demo `POST /demo/games`.
+- Trận nhiều hiệp theo cặp TV3: `matches.service.ts` (máy trạng thái chọn kín → khóa → tung xu → chạy → hiệp sau/kết thúc), `matches.controller.ts`, `matches.repository.ts`. Chi tiết: [docs/TV4_MATCHES.md](../../../../../docs/TV4_MATCHES.md).
 
-Viec sau M0: Phong chinh thuc, lua chon bot/quan kin, ready/deadline, replay dieu khien, MatchCompleted. Endpoint chua lam tra 501 FEATURE_NOT_IMPLEMENTED kem owner; khong gia thanh cong. Contracts nam o packages/contracts. Xem docs/TEAM.md va docs/DECISIONS.md truoc khi them luat chinh thuc.
+Interface dùng của module khác:
+
+- TV3: `CompetitionService.pairAssignments/assignment/attachMatch/format/gamesNeeded/recordResult`.
+- TV2: `BotsRunnerService.botsForMatch/botLabels/createGameJob/kick`.
+- TV1: `AccountsTeamsService.team/teamNames`.
+
+Không import repository của module khác.
+
+Chưa làm: thông báo cho đội, chat phòng, replay điều khiển, bỏ cuộc/offline. `POST /rooms` (phòng ngoài cặp đấu) vẫn trả 501.
