@@ -65,6 +65,9 @@ export const PHASES: Array<{ phase: KnockoutPhase; title: string }> = [
 const ACTIVE_LEVEL = ['locked', 'running', 'cutting'];
 const ELIGIBLE_TEAM = ['approved', 'locked'];
 const MAX_PLIES = 200;
+/** Chưa có phòng đấu (TV4) nên kết quả không tự đến; nói rõ để BTC không chờ vô ích. */
+const WAITING_HINT =
+  'Kết quả không tự đến vì phòng đấu (TV4) chưa được nối. Trọng tài nhập kết quả từng cặp ở danh sách bên dưới, hoặc bấm "Mô phỏng" khi đang bật chế độ demo.';
 
 interface CutState {
   seed: number;
@@ -1228,18 +1231,14 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
       const list = ctx.pairings.filter((p) => p.levelId === active.id);
       if (active.status === 'cutting') {
         const waiting = list.filter((p) => p.kind === 'tiebreak' && p.status === 'scheduled').length;
-        return step(
-          'results',
-          `Chờ ${waiting} cặp tranh suất ranh giới`,
-          'Nhập kết quả hoặc chạy mô phỏng các cặp tranh suất.',
-        );
+        return step('results', `Chờ ${waiting} cặp tranh suất ranh giới`, WAITING_HINT);
       }
       const swiss = list.filter((p) => p.kind === 'swiss' || p.kind === 'bye');
       const played = swiss.reduce((m, p) => Math.max(m, p.round), 0);
       const last = swiss.filter((p) => p.round === played);
       const waiting = last.filter((p) => p.status === 'scheduled').length;
       if (played && waiting)
-        return step('results', `Chờ kết quả ${waiting} cặp vòng ${played}`, 'Vòng đang thi.');
+        return step('results', `Chờ kết quả ${waiting} cặp vòng ${played}`, WAITING_HINT);
       if (played && last.some((p) => !p.confirmed)) {
         const appeals = last.reduce((n, p) => n + (ctx.appeals.get(p.id) ?? 0), 0);
         return step(
@@ -1261,7 +1260,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
         const waiting = ctx.pairings.filter(
           (p) => p.kind === 'knockout' && p.phase === r.phase && p.status === 'scheduled',
         ).length;
-        return step('results', `Chờ kết quả ${waiting} cặp ${title}`, 'Vòng đang thi.');
+        return step('results', `Chờ kết quả ${waiting} cặp ${title}`, WAITING_HINT);
       }
       if (r.status === 'finished') {
         const appeals = ctx.pairings
