@@ -18,4 +18,10 @@ describe('bot runtime configuration', () => {
   it('rejects misspelled runtime modes instead of silently using another runtime', () => {
     expect(() => loadConfig({ ...demo, BOT_SANDBOX_MODE: 'local' })).toThrow('BOT_SANDBOX_MODE');
   });
+  it('runs the real flow in development without enabling demo, and still requires containers', () => {
+    expect(loadConfig({ ...demo, DEMO_MODE: 'false' }).sandboxMode).toBe('docker');
+    expect(() => loadConfig({ ...demo, DEMO_MODE: 'false', BOT_SANDBOX_MODE: 'trusted-local' })).toThrow(
+      'container',
+    );
+  });
 });

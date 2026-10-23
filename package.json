@@ -8,6 +8,17 @@
     "node": ">=24.0.0 <25"
   },
   "scripts": {
+    "env:init": "node scripts/init-profiles.mjs",
+    "dev:demo": "node scripts/runtime.mjs demo dev",
+    "dev:official": "node scripts/runtime.mjs official dev",
+    "worker:demo": "node scripts/runtime.mjs demo worker",
+    "worker:official": "node scripts/runtime.mjs official worker",
+    "start:official": "node scripts/runtime.mjs official start",
+    "db:migrate:demo": "node scripts/runtime.mjs demo migrate",
+    "db:migrate:official": "node scripts/runtime.mjs official migrate",
+    "db:seed:demo": "node scripts/runtime.mjs demo seed",
+    "admin:create:official": "node scripts/runtime.mjs official bootstrap-admin",
+    "test:profiles": "node --test scripts/runtime-profile.test.mjs",
     "dev": "pnpm --filter @arena/game-engine... build && pnpm --parallel --filter @arena/api --filter @arena/web dev",
     "dev:worker": "pnpm --filter @arena/worker dev",
     "build": "pnpm -r build",

@@ -36,7 +36,7 @@ export class SessionController {
   @Delete('session')
   @HttpCode(200)
   logout(@Res({ passthrough: true }) res: Response) {
-    clearSessionCookie(res, this.cfg.env === 'production');
+    clearSessionCookie(res, this.cfg.env === 'production', this.cfg.sessionCookieName);
     return ok({ user: null });
   }
 
@@ -63,6 +63,7 @@ export class SessionController {
       res,
       encodeSession({ sub: accountId, demo: true, iat: Date.now() }, this.cfg.sessionSecret),
       false,
+      this.cfg.sessionCookieName,
     );
     await this.audit.record({ actorId: accountId, action: 'dev.session.login', requestId: req.requestId });
     return ok({ user });
@@ -96,6 +97,7 @@ export class SessionController {
         this.cfg.sessionSecret,
       ),
       this.cfg.env === 'production',
+      this.cfg.sessionCookieName,
     );
     await this.audit.record({
       actorId: accountId,

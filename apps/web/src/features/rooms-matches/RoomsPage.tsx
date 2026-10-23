@@ -17,7 +17,7 @@ export function RoomsPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Phòng đấu</p>
         <h1 className="mt-1 text-2xl font-extrabold text-ink sm:text-3xl">Danh sách phòng</h1>
         <p className="mt-2 max-w-2xl text-sm text-ink-muted">
-          Khách xem được mọi phòng công khai. Ở M0 chỉ có phòng mẫu chạy bot mô phỏng.
+          Theo dõi trực tiếp hoặc xem lại các ván đấu trong phòng công khai, không cần đăng nhập.
         </p>
       </header>
       {q.isLoading && <Spinner label="Đang tải danh sách phòng" />}

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Patch, Post, Req } from '@nestjs/common';
 import {
   CreateTournamentRequest,
   UpdateTournamentRequest,
@@ -11,10 +11,15 @@ import {
 import { Roles, CurrentUser } from '../../core/auth/guards.js';
 import { ok, parse, type ArenaRequest } from '../../core/http.js';
 import { TournamentsService } from './tournaments.service.js';
+import { APP_CONFIG, type AppConfig } from '../../core/config.js';
+import { forbidden } from '../../core/errors.js';
 
 @Controller()
 export class TournamentsController {
-  constructor(private readonly tournaments: TournamentsService) {}
+  constructor(
+    private readonly tournaments: TournamentsService,
+    @Inject(APP_CONFIG) private readonly cfg: AppConfig,
+  ) {}
 
   @Get('tournaments/current')
   async current() {
@@ -30,7 +35,9 @@ export class TournamentsController {
   @Post('admin/tournaments')
   @Roles('admin')
   async create(@CurrentUser() user: SessionUser, @Body() body: unknown, @Req() req: ArenaRequest) {
-    return ok(await this.tournaments.create(user.id, parse(CreateTournamentRequest, body), req.requestId));
+    const input = parse(CreateTournamentRequest, body);
+    if (input.isDemo && !this.cfg.demoMode) throw forbidden('Không tạo giải mẫu ở chế độ chính thức.');
+    return ok(await this.tournaments.create(user.id, input, req.requestId));
   }
 
   @Patch('admin/tournaments/:id')

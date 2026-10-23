@@ -7,6 +7,13 @@ import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { STANDARD_RULESET, STANDARD_RULESET_ID, countPieces, simulate } from '@arena/game-engine';
 
+if (
+  process.env.ARENA_PROFILE === 'official' ||
+  process.env.NODE_ENV === 'production' ||
+  (process.env.NODE_ENV !== 'test' && process.env.DEMO_MODE !== 'true')
+)
+  throw new Error('Seed chỉ dành cho demo/test. Không tạo dữ liệu mẫu trong bản chính thức.');
+
 const prisma = new PrismaClient();
 // Chạy seed với cwd = apps/api (pnpm db:seed).
 const SAMPLE_BOTS = join(process.cwd(), 'prisma', 'sample-bots');

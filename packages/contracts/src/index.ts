@@ -7,6 +7,7 @@ export * from './tournaments.js';
 export * from './rooms.js';
 export * from './events.js';
 export * from './system.js';
+export * from './runtime.js';
 
 /** Bản zod mà contracts dùng. Bên dùng CommonJS (API) phải lấy z từ đây để tránh nạp hai bản zod (ESM/CJS). */
 export { z } from 'zod';

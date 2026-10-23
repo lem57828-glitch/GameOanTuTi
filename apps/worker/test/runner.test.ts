@@ -16,10 +16,10 @@ const request: GameRequest = {
   },
   limits: { cpuMsPerMove: 200, wallMsPerMove: 1000, startupMs: 3000, maxPlies: 120, maxErrorsPerGame: 3 },
 };
-it('refuses the simulation worker in production or without demo mode', () => {
+it('refuses demo in production but permits container workers for the real flow', () => {
   const env = { DATABASE_URL: 'postgresql://test', REDIS_URL: 'redis://localhost' };
-  expect(() => loadConfig({ ...env, NODE_ENV: 'production', DEMO_MODE: 'true' })).toThrow(/M0/);
-  expect(() => loadConfig({ ...env, NODE_ENV: 'test', DEMO_MODE: 'false' })).toThrow(/M0/);
+  expect(() => loadConfig({ ...env, NODE_ENV: 'production', DEMO_MODE: 'true' })).toThrow(/DEMO_MODE/);
+  expect(loadConfig({ ...env, NODE_ENV: 'test', DEMO_MODE: 'false' }).sandboxMode).toBe('docker');
 });
 it('reproduces identical moves and result from persisted seed and choices', async () => {
   const runner = new SimulatedRunner(async () => 'greedy');

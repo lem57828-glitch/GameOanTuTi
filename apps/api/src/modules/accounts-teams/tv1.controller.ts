@@ -27,7 +27,7 @@ import {
   type SessionUser,
 } from '@arena/contracts';
 import { APP_CONFIG, type AppConfig } from '../../core/config.js';
-import { Authenticated, CurrentUser, Roles } from '../../core/auth/guards.js';
+import { Authenticated, CurrentUser, DemoOnly, Roles } from '../../core/auth/guards.js';
 import { clearSessionCookie } from '../../core/auth/session-codec.js';
 import { forbidden, notFound } from '../../core/errors.js';
 import { ok, parse, type ArenaRequest } from '../../core/http.js';
@@ -64,7 +64,7 @@ export class Tv1Controller {
   @Get('auth/options') options() {
     return ok({
       emailDomains: this.cfg.emailDomains,
-      localMailbox: this.cfg.env !== 'production' && this.cfg.mailTransport === 'local',
+      localMailbox: this.cfg.demoMode && this.cfg.env !== 'production' && this.cfg.mailTransport === 'local',
     });
   }
   @Post('auth/forgot-password')
@@ -116,7 +116,7 @@ export class Tv1Controller {
     this.limiter.check(`password:${user.id}`);
     const input = parse(ChangePasswordRequest, body);
     const result = await this.identity.changePassword(user.id, input.currentPassword, input.password);
-    clearSessionCookie(res, this.cfg.env === 'production');
+    clearSessionCookie(res, this.cfg.env === 'production', this.cfg.sessionCookieName);
     return ok(result);
   }
   @Post('teams/mine/captain')
@@ -165,6 +165,7 @@ export class Tv1Controller {
     return ok({ message: 'Đã đánh dấu đã đọc.' });
   }
   @Get('dev/mailbox')
+  @DemoOnly()
   @Authenticated()
   async mailbox(@CurrentUser() user: SessionUser) {
     if (this.cfg.env === 'production' || this.cfg.mailTransport !== 'local')

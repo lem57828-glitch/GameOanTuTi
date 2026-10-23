@@ -1,5 +1,6 @@
 // Cấu hình đọc từ biến môi trường, kiểm tra một lần lúc khởi động. Không ghi cứng cổng/địa chỉ trong code.
 import { z } from 'zod';
+import { assertRuntimeProfile } from '@arena/contracts';
 
 const Env = z.object({
   EMAIL_ALLOWED_DOMAINS: z
@@ -22,6 +23,11 @@ const Env = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  SESSION_COOKIE_NAME: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .optional(),
+  SERVE_WEB: z.enum(['true', 'false']).default('false'),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
   API_PORT: z.coerce.number().int().positive().default(3100),
@@ -53,6 +59,8 @@ export interface AppConfig {
   webOrigins: string[];
   demoMode: boolean;
   sessionSecret: string;
+  sessionCookieName?: string;
+  serveWeb?: boolean;
   queuePrefix: string;
   outboxPollMs: number;
   jobRecoveryMs: number;
@@ -60,6 +68,7 @@ export interface AppConfig {
 }
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
+  assertRuntimeProfile(source);
   const parsed = Env.safeParse(source);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
@@ -77,6 +86,11 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   if (e.NODE_ENV === 'production' && e.MAIL_TRANSPORT === 'local')
     throw new Error('Production yêu cầu MAIL_TRANSPORT=smtp.');
   if (e.MAIL_TRANSPORT === 'smtp' && !e.SMTP_HOST) throw new Error('SMTP_HOST là bắt buộc.');
+  if (
+    source.ARENA_PROFILE === 'official' &&
+    (e.MAIL_TRANSPORT !== 'smtp' || !e.SMTP_USER?.trim() || !e.SMTP_PASSWORD?.trim())
+  )
+    throw new Error('Official yêu cầu SMTP thật: điền SMTP_USER và SMTP_PASSWORD trong .env.official.');
   return {
     emailDomains: e.EMAIL_ALLOWED_DOMAINS.split(',')
       .map((d) => d.trim().replace(/^@/, '').toLowerCase())
@@ -97,6 +111,10 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       .filter(Boolean),
     demoMode: demoRequested,
     sessionSecret: e.SESSION_SECRET,
+    sessionCookieName:
+      e.SESSION_COOKIE_NAME ??
+      (source.ARENA_PROFILE ? `arena_${source.ARENA_PROFILE}_session` : 'arena_session'),
+    serveWeb: e.SERVE_WEB === 'true',
     queuePrefix: e.QUEUE_PREFIX,
     outboxPollMs: e.OUTBOX_POLL_MS,
     jobRecoveryMs: e.JOB_RECOVERY_MS,

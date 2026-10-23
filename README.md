@@ -1,5 +1,16 @@
 # Bot Arena
 
+## Demo và chính thức
+
+Dùng chung code, tách dữ liệu và cấu hình. Chạy `pnpm env:init` để tạo `.env.demo` và `.env.official` riêng, sau đó làm theo [hướng dẫn thiết lập và tạo BTC thật](docs/DEMO_VA_CHINH_THUC.md).
+
+- `pnpm dev:demo`: web + API + worker demo.
+- `pnpm dev:official`: web + API + worker với tài khoản/thể thức thật, không bật công cụ demo.
+- `pnpm start:official`: bản build production, phục vụ web và API cùng cổng, kèm worker.
+- `pnpm db:migrate:demo` / `pnpm db:migrate:official`: migration riêng từng schema.
+
+Các lệnh và `.env` trong phần dưới là cách chạy cũ, giữ để tương thích. Không chạy đồng thời cách cũ và profile nếu trùng cổng. Không cần mở thêm worker khi dùng `dev:demo` hoặc `dev:official`.
+
 Website thi bot cờ Búa – Bao – Kéo: frontend React, API NestJS, PostgreSQL, Redis/BullMQ và worker chạy bot Python riêng. Bàn cờ 9×9, mỗi bên 10 quân; mọi ván mới dùng engine chuẩn.
 
 ## Chạy hằng ngày
