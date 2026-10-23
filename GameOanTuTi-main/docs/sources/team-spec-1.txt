@@ -1,0 +1,32 @@
+Vấn đề đặt tên đội. Có thể cho đội đặt tên nhưng nhỡ trùng nhau thì sao ?? tìm hiểu cơ chế khi mà đặt tên nó sẽ hiện là trùng.
+Thống nhất ngôn ngữ: Python. Vì mấy đứa đang học python .. đỡ ph cài them trình chấm
+
+
+
+
+Vòng Swiss
+Chọn từ khoảng 1000 đội -> 32 đội
+Chia thành 4 mức
+500
+200
+100
+32
+(nếu số đội mà nhỏ hơn 1000 đội thì mình sẽ giảm bớt mức đi)
+
+
+Trước khi tổ chức giải đấu thì thông báo trên page trước 2 tuần cho sinh viên lập đội kết nối bạn bè (số thành viên từ 2 đến 4 người)
+
+
+Sau đó đến hết hạn 2 tuần thì khóa thành lập đội và khóa nộp bot. BTC xem xem là có tổng là bao nhiêu đội để chia thành các mức như tôi ghi ở trên (khi sinh viên thành lập được đội xong thì sẽ biết được luật chơi cụ thể mình ghi trong web còn trước đó thì chỉ biết là lập trình ra một con bot cơ bản để chơi trò oan tu ti ) 
+
+
+Sau khi khóa thành lập đội thì hôm sau sẽ công bố mức đầu tiên là 500 người. Mỗi mức tiếp theo sẽ cách nhau 1 ngày chuẩn bị và thí sinh có thể đổi bot hoặc không. 
+Sẽ nộp bot vào 18h ngày và đến 20h sẽ công bố kết quả (các đội được chọn sẽ là đội có số điểm cao nhất, sẽ cho đấu random 3-5 trận, đảm bảo không đội nào trùng gặp nhau, sau 1 ngày cho điểm đội về = 0. Trong khoảng từ 18h - 20h thì khóa không cho sửa bot.
+* Cơ chế tính điểm. Thắng 3d, Hòa 1d, Thua 0d
+* Giao diện của vòng 1: 
+   * Bảng xếp hạng sẽ có số điểm (ctct thống nhất giao diện của bxh với toàn bộ vòng cho đến vòng chọn 4) (đến 20h đó có thể để bxh là những đội được chọn thì màu xanh, còn loại thì màu đỏ). 
+   * Nộp bot. 
+
+
+* Cơ chế xếp đội thì để ban đầu là ngẫu nhiên xong các đội gần điểm nhau thì đấu với nhau (này chưa rõ cần bàn thêm)
+Hòa 32 đội thì sao.

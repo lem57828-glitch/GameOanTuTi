@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply m-0 bg-bg font-sans text-ink antialiased;
+  }
+  * {
+    min-width: 0;
+  }
+  a,
+  button {
+    -webkit-tap-highlight-color: transparent;
+  }
+  a:focus-visible,
+  button:focus-visible {
+    outline: 2px solid rgb(var(--c-accent));
+    outline-offset: 4px;
+  }
+  ::selection {
+    background: rgb(var(--c-accent) / 0.3);
+  }
+}

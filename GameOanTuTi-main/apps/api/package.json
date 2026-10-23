@@ -1,0 +1,52 @@
+{
+  "name": "@arena/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist/main.js",
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "pnpm clean && tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json && concurrently -k -n tsc,api \"tsc -p tsconfig.build.json --watch --preserveWatchOutput\" \"node --env-file-if-exists=../../.env --watch-path=dist dist/main.js\"",
+    "start": "node --env-file-if-exists=../../.env dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --dir test/unit",
+    "test:integration": "dotenv -e ../../.env -- vitest run --dir test/integration",
+    "db:generate": "prisma generate",
+    "db:migrate": "dotenv -e ../../.env -- prisma migrate deploy",
+    "db:migrate:dev": "dotenv -e ../../.env -- prisma migrate dev",
+    "db:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "db:reset": "dotenv -e ../../.env -- tsx prisma/reset.ts"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@arena/contracts": "workspace:*",
+    "@arena/game-engine": "workspace:*",
+    "@asteasolutions/zod-to-openapi": "7.3.0",
+    "@nestjs/common": "11.0.11",
+    "@nestjs/core": "11.0.11",
+    "@nestjs/platform-express": "11.0.11",
+    "@nestjs/platform-socket.io": "11.0.11",
+    "@nestjs/websockets": "11.0.11",
+    "@prisma/client": "6.4.1",
+    "bullmq": "5.41.7",
+    "ioredis": "5.5.0",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.1",
+    "socket.io": "4.8.1",
+    "zod": "3.24.2"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.0",
+    "@types/node": "22.13.5",
+    "concurrently": "9.1.2",
+    "prisma": "6.4.1",
+    "socket.io-client": "4.8.1",
+    "tsx": "4.19.3",
+    "typescript": "5.8.2",
+    "vitest": "3.0.6",
+    "dotenv-cli": "8.0.0"
+  }
+}

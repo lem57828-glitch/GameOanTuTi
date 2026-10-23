@@ -1,0 +1,20 @@
+node_modules/
+dist/
+coverage/
+*.log
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+# Dữ liệu cá nhân / bản cũ: không commit, không xóa
+data/
+deploy-snapshot/
+# Word tạo tệp khóa tạm khi đang mở tài liệu
+docs/~$*
+playwright-report/
+test-results/
+.tools/
+
+.idea/
+.pnpm-store/
+apps/api/src/generated/
