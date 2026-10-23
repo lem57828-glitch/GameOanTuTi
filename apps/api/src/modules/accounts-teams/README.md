@@ -1,7 +1,11 @@
 # accounts-teams (TV1)
 
-Owner: TV1. Du lieu: Account, Team, Membership.
+Sở hữu Account, Team, Membership, AuthToken, RegistrationCode, TeamInvitation, Notification, EmailMessage và Publication. Đã triển khai đăng ký email @vnu.edu.vn bằng mã 6 chữ số có hạn 120 giây (chỉ tạo tài khoản sau khi mã hợp lệ), khôi phục/đổi mật khẩu, hồ sơ, phân quyền, đội 2–4 người khi chốt, tham gia bằng mã, rời/chuyển đội trưởng/loại thành viên, thông báo/email và nội dung BTC. Chat được loại khỏi phạm vi theo yêu cầu người dùng.
 
-Interface hien co: sessionUser, demoAccounts, teamNames; session/dev-session, teams/mine. Module khac chi goi service cong khai, khong import repository. Controller kiem tra HTTP/quyen, service nghiep vu, repository truy cap Prisma.
+HTTP controller kiểm tra schema/quyền. SessionUser được dựng lại từ DB, đối chiếu sessionVersion để thu hồi phiên. Thay đổi thành viên dùng transaction và row lock; khóa ngoại membership theo tài khoản/giải ngăn tham gia trùng. Deadline sử dụng thời gian server.
 
-Viec sau M0: Dang nhap/xac minh that, lap doi, moi/duyet thanh vien, profile/thong bao. Endpoint chua lam tra 501 FEATURE_NOT_IMPLEMENTED kem owner; khong gia thanh cong. Contracts nam o packages/contracts. Xem docs/TEAM.md va docs/DECISIONS.md truoc khi them luat chinh thuc.
+Module khác sử dụng AccountsTeamsService (sessionUser, team, teamNames) hoặc NotificationsService (deliver, team), không truy cập repository trực tiếp. Request contracts ở packages/contracts/src/accounts.ts.
+
+Hướng dẫn chạy thử, cấu hình SMTP, API, phạm vi và kiểm thử: [TV1_IMPLEMENTATION](../../../../../docs/TV1_IMPLEMENTATION.md).
+
+Đã bỏ lời mời tham gia qua email, tạo mã mới và tự Chốt đội hình của đội trưởng. Các API tương ứng đã gỡ bỏ; dữ liệu lời mời cũ chỉ giữ làm lịch sử, lời mời đang chờ bị hủy.

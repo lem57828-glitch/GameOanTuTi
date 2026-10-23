@@ -160,4 +160,6 @@ Báo cáo đo thật và giới hạn workload: [benchmark](docs/TV2_BENCHMARK_2
 - [Cấu hình và công bố lịch giải](docs/TV3_CONFIGURATION.md)
 - [Các quyết định còn chờ chốt](docs/DECISIONS.md)
 
-Đăng nhập thật, quản lý đội đầy đủ, ghép giải chính thức, lựa chọn kín, giao diện replay và khiếu nại còn cần các module tương ứng. Bản demo không đồng nghĩa toàn bộ hệ thống đã sẵn sàng tổ chức giải chính thức.
+ghép giải chính thức, lựa chọn kín, giao diện replay và khiếu nại còn cần các module tương ứng. Bản demo không đồng nghĩa toàn bộ hệ thống đã sẵn sàng tổ chức giải chính thức.
+
+TV1 đã có tài khoản, xác minh/khôi phục mật khẩu, hồ sơ, quản lý đội 2–4 người, thông báo/email và nội dung BTC; xem [hướng dẫn TV1](docs/TV1_IMPLEMENTATION.md).

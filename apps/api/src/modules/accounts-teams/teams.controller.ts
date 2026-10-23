@@ -1,12 +1,13 @@
-import { Controller, Get, Param, Post } from '@nestjs/common';
-import type { SessionUser } from '@arena/contracts';
+import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { CreateTeamRequest, JoinTeamRequest, type SessionUser } from '@arena/contracts';
 import { Authenticated, CurrentUser } from '../../core/auth/guards.js';
-import { notImplemented } from '../../core/errors.js';
-import { ok } from '../../core/http.js';
+import { RateLimiter } from '../../core/rate-limit.js';
+import { ok, parse, type ArenaRequest } from '../../core/http.js';
 import { AccountsTeamsService } from './accounts-teams.service.js';
 
 @Controller('teams')
 export class TeamsController {
+  private readonly limiter = new RateLimiter(20, 60_000);
   constructor(private readonly accounts: AccountsTeamsService) {}
 
   /** Đội của người dùng trong giải hiện tại; `team: null` khi chưa có đội. */
@@ -16,17 +17,20 @@ export class TeamsController {
     return ok({ team: user.teamId ? await this.accounts.team(user.teamId) : null });
   }
 
-  // ---- Chưa làm ở M0 (TV1).
+  // Lập đội và tham gia đội bằng mã.
 
   @Post()
   @Authenticated()
-  create() {
-    notImplemented('Lập đội', 'TV1');
+  async create(@CurrentUser() user: SessionUser, @Body() body: unknown, @Req() req: ArenaRequest) {
+    this.limiter.check(`team:${user.id}:${req.ip}`);
+    return ok({ team: await this.accounts.createTeam(user, parse(CreateTeamRequest, body)) });
   }
 
-  @Post(':id/members')
+  @Post('join')
   @Authenticated()
-  invite(@Param('id') _id: string) {
-    notImplemented('Mời/duyệt thành viên đội', 'TV1');
+  async join(@CurrentUser() user: SessionUser, @Body() body: unknown, @Req() req: ArenaRequest) {
+    this.limiter.check(`team:${user.id}:${req.ip}`);
+    const { code } = parse(JoinTeamRequest, body);
+    return ok({ team: await this.accounts.joinTeam(user, code) });
   }
 }
