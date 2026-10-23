@@ -269,6 +269,17 @@ except (SyntaxError, ValueError) as e:
     });
   }
 
+  /** Thành viên đội (hoặc BTC) xóa một phiên bản bot không dùng nữa. Bot mô phỏng của hệ thống không xóa được. */
+  async deleteBot(user: SessionUser, botId: string): Promise<{ id: string; testRuns: number }> {
+    const bot = await this.repo.findBotVersion(botId);
+    if (!bot) throw notFound('Phiên bản bot');
+    if (user.role !== 'admin' && bot.teamId !== user.teamId) throw forbidden('Bạn chỉ có thể xóa bot của đội mình.');
+    if (bot.isDemo) throw forbidden('Bot mô phỏng của hệ thống không xóa được.');
+    const { testRuns } = await this.repo.deleteBotVersion(bot.id, bot.teamId);
+    this.log.log(`Đã xóa Bot v${bot.version} của đội ${bot.teamId} (${testRuns} lượt đấu thử) theo yêu cầu của ${user.id}`);
+    return { id: bot.id, testRuns };
+  }
+
   async saveSelection(user: SessionUser, stageId: string, raw: unknown, lock = false) {
     const input = parse(BotSelectionInput, raw);
     const staff = user.role === 'admin' || user.role === 'referee';

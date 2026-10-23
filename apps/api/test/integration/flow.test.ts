@@ -173,6 +173,48 @@ it('enforces roles, origin, validation and explicit placeholders', async () => {
   expect((await todo.json()).error.code).toBe('FEATURE_NOT_IMPLEMENTED');
 });
 
+it('lets a team delete unused bot versions but keeps demo bots and bots already in a stage selection', async () => {
+  const sel = { teamId: 'team_alpha', stageId: 'stage_demo_1' };
+  const before = await prisma.botStageSelection.findUnique({ where: { teamId_stageId: sel } });
+  const mk = (id: string, version: number) =>
+    prisma.botVersion.create({
+      data: { id, teamId: 'team_alpha', version, label: id, sourceHash: id.padEnd(64, '0'), sourceCode: 'def make_move(s): pass', rulesetId: 'standard-32-4', status: 'valid' },
+    });
+  const free = await mk(`bot_del_${randomUUID().slice(0, 8)}`, 9001);
+  const used = await mk(`bot_keep_${randomUUID().slice(0, 8)}`, 9002);
+  await prisma.botTestRun.create({ data: { botVersionId: free.id, opponentType: 'demo', opponentTarget: 'random' } });
+  await prisma.botStageSelection.upsert({
+    where: { teamId_stageId: sel },
+    update: { botVersionIds: [...(before?.botVersionIds ?? []), used.id] },
+    create: { ...sel, botVersionIds: [used.id] },
+  });
+  try {
+    let login = await request('/dev/session', 'POST', { accountId: 'acc_chi' });
+    cookie = login.headers.get('set-cookie')!.split(';')[0]!;
+    expect((await request(`/bots/${free.id}`, 'DELETE')).status).toBe(403); // đội khác
+    login = await request('/dev/session', 'POST', { accountId: 'acc_an' });
+    cookie = login.headers.get('set-cookie')!.split(';')[0]!;
+    expect((await request('/bots/bot_alpha_1', 'DELETE')).status).toBe(403); // bot mô phỏng
+    const kept = await request(`/bots/${used.id}`, 'DELETE');
+    expect(kept.status).toBe(409);
+    expect((await kept.json()).error.code).toBe('CONFLICT');
+    const gone = await request(`/bots/${free.id}`, 'DELETE');
+    expect(gone.status).toBe(200);
+    expect((await gone.json()).data).toEqual({ id: free.id, testRuns: 1 });
+    expect(await prisma.botVersion.findUnique({ where: { id: free.id } })).toBeNull();
+    expect(await prisma.botTestRun.count({ where: { botVersionId: free.id } })).toBe(0);
+    expect((await request(`/bots/${free.id}`, 'DELETE')).status).toBe(404);
+  } finally {
+    if (before) await prisma.botStageSelection.update({ where: { teamId_stageId: sel }, data: { botVersionIds: before.botVersionIds } });
+    else await prisma.botStageSelection.deleteMany({ where: sel });
+    await prisma.botTestRun.deleteMany({ where: { botVersionId: { in: [free.id, used.id] } } });
+    await prisma.botVersion.deleteMany({ where: { id: { in: [free.id, used.id] } } });
+    // Các test sau dùng phiên BTC.
+    const admin = await request('/dev/session', 'POST', { accountId: 'acc_admin' });
+    cookie = admin.headers.get('set-cookie')!.split(';')[0]!;
+  }
+});
+
 it('creates exactly one game/job/outbox for simultaneous identical requests; reads never enqueue', async () => {
   const requestKey = `integration:${randomUUID()}`;
   const results = await Promise.all([

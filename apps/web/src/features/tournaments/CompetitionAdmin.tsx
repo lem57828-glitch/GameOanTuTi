@@ -18,6 +18,7 @@ import {
 } from '@arena/ui';
 import type { AppealView, CompetitionView, LevelView, PairingView, TournamentView } from '@arena/contracts';
 import { api } from '../../lib/api';
+import { PlanEditor } from './PlanEditor';
 import { useSession } from '../../lib/session';
 import { usePublicHealth } from '../../lib/health';
 import {
@@ -48,8 +49,6 @@ export function CompetitionAdmin() {
   const { toast } = useToast();
   const [selected, setSelected] = useState('');
   const [reason, setReason] = useState('Điều hành theo lịch thi');
-  const [targets, setTargets] = useState('');
-  const [rounds, setRounds] = useState('3');
   const [scope, setScope] = useState<'level' | 'qualifier'>('level');
   const [demoCount, setDemoCount] = useState('38');
   const [entry, setEntry] = useState<PairingView | null>(null);
@@ -269,63 +268,27 @@ export function CompetitionAdmin() {
                     : `Gợi ý theo ${c.eligibleTeams} đội: ${c.suggestedTargets.join(' → ')}`
                 }
               />
-              <div className="grid gap-4 md:grid-cols-3">
-                <Input
-                  label="Số đội đi tiếp mỗi mức (giảm dần, mức cuối 32)"
-                  placeholder={(c.levels.length
-                    ? c.levels.map((l) => l.teamTarget)
-                    : c.suggestedTargets
-                  ).join(', ')}
-                  hint="Để trống: dùng giá trị gợi ý trong ô (kế hoạch hiện tại hoặc gợi ý theo số đội)."
-                  value={targets}
-                  onChange={(e) => setTargets(e.target.value)}
-                />
-                <Input
-                  label="Số vòng Swiss mỗi mức (đề xuất 3–5)"
-                  value={rounds}
-                  onChange={(e) => setRounds(e.target.value)}
-                  hint="Một số cho mọi mức, hoặc danh sách cách nhau dấu phẩy."
-                />
-                <Select
-                  label="Tránh tái đấu"
-                  value={scope}
-                  onValueChange={(v) => setScope(v as 'level' | 'qualifier')}
-                  options={[
-                    { value: 'level', label: 'Trong từng mức' },
-                    { value: 'qualifier', label: 'Toàn bộ sơ loại' },
-                  ]}
-                />
-              </div>
-              <div className="mt-4">
-                <Button
-                  loading={act.isPending}
-                  onClick={() => {
-                    const fallback = c.levels.length ? c.levels.map((l) => l.teamTarget) : c.suggestedTargets;
-                    const t = (targets.trim() ? targets : fallback.join(','))
-                      .split(/[,\s→]+/)
-                      .filter(Boolean)
-                      .map(Number);
-                    const r = rounds
-                      .split(/[,\s]+/)
-                      .filter(Boolean)
-                      .map(Number);
-                    run('/qualifier/plan', 'Đã lập kế hoạch các mức', {
-                      targets: t,
-                      rounds: r.length === 1 ? r[0] : r,
-                      avoidRematch: scope,
-                      reason,
-                    });
-                  }}
-                >
-                  {c.levels.length ? 'Thay kế hoạch' : 'Lưu kế hoạch'}
-                </Button>
-                {c.levels.length > 0 && (
-                  <p className="mt-2 text-xs text-ink-muted">
-                    Thay kế hoạch xóa các mức cũ (kể cả mốc khóa bot/công bố đã đặt) và tạo mức mới; đội và
-                    bot giữ nguyên.
-                  </p>
-                )}
-              </div>
+              <PlanEditor
+                key={`${tid}:${currentPlan}`}
+                levels={c.levels}
+                suggested={c.suggestedTargets}
+                eligibleTeams={c.eligibleTeams}
+                busy={act.isPending}
+                extra={
+                  <Select
+                    label="Tránh tái đấu"
+                    value={scope}
+                    onValueChange={(v) => setScope(v as 'level' | 'qualifier')}
+                    options={[
+                      { value: 'level', label: 'Trong từng mức' },
+                      { value: 'qualifier', label: 'Toàn bộ sơ loại' },
+                    ]}
+                  />
+                }
+                onSubmit={(plan) =>
+                  run('/qualifier/plan', 'Đã lập kế hoạch các mức', { ...plan, avoidRematch: scope, reason })
+                }
+              />
             </Card>
           )}
 
