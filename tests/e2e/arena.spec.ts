@@ -106,6 +106,10 @@ test('admin creates a real queued simulation; spectators reload and reconnect wi
       .toBe('finished');
     const first = (await (await room.request.get(`/api/v1/rooms/${data.roomId}`)).json()).data;
     await room.reload();
+    // Vào phòng không tự chạy: đứng ở nước 0, chưa lộ kết quả; tua tới nước cuối mới hiện kết quả.
+    await expect(room.getByText(/^Nước 0\/\d+$/)).toBeVisible();
+    await expect(room.getByRole('heading', { name: 'Kết quả', exact: true })).toHaveCount(0);
+    await room.getByRole('button', { name: 'Tới nước cuối' }).click();
     await expect(room.getByRole('heading', { name: 'Kết quả', exact: true })).toBeVisible();
     await spectator.setOffline(true);
     await expect(room.getByText('Đang mất kết nối trực tiếp')).toBeVisible();

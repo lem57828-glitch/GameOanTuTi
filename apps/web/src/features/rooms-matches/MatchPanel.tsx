@@ -75,7 +75,9 @@ export function MatchPanel({ s, onChanged }: { s: RoomSnapshot; onChanged: () =>
             ? `${m.winnerTeamId === teamId('a') ? name('a') : name('b')} thắng trận`
             : 'Bằng điểm — BTC phân định theo thể lệ'}
           <span className="block text-xs font-normal text-ink-muted">
-            Kết quả đã chuyển cho BTC, chờ xác nhận/chốt vòng.
+            {m.pauseReason
+              ? 'Kết quả trận này không được tính (xem lý do bên dưới).'
+              : 'Kết quả đã chuyển cho BTC, chờ xác nhận/chốt vòng.'}
           </span>
         </p>
       )}
