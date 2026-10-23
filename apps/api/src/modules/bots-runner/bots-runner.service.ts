@@ -285,6 +285,32 @@ except (SyntaxError, ValueError) as e:
     const row = await this.repo.selection(teamId, stageId);
     return row ? BotSelectionView.parse({ ...row, updatedAt: row.updatedAt.toISOString() }) : null;
   }
+  /**
+   * TV4: bot một đội được dùng trong trận. Có bộ bot đã khóa của giai đoạn thì chỉ dùng bộ đó;
+   * chưa khóa thì chỉ chế độ demo cho dùng mọi bot hợp lệ của đội (giải thật: đội phải khóa bộ bot trước).
+   */
+  async botsForMatch(
+    teamId: string,
+    stageId: string | null,
+  ): Promise<{ locked: boolean; bots: Array<{ id: string; label: string; version: number }> }> {
+    const valid = (await this.repo.listBots(teamId)).filter((b) => b.status === 'valid');
+    const sel = stageId ? await this.repo.selection(teamId, stageId) : null;
+    const pick = (b: { id: string; label: string; version: number }) => ({
+      id: b.id,
+      label: b.label,
+      version: b.version,
+    });
+    if (sel?.locked)
+      return { locked: true, bots: valid.filter((b) => sel.botVersionIds.includes(b.id)).map(pick) };
+    return { locked: false, bots: this.cfg.demoMode ? valid.map(pick) : [] };
+  }
+
+  /** Nhãn hiển thị của các bot (để công bố lựa chọn đã khóa trong phòng). */
+  async botLabels(ids: string[]): Promise<Map<string, string>> {
+    const rows = await this.repo.botLabels(ids);
+    return new Map(rows.map((b) => [b.id, `v${b.version} · ${b.label}`]));
+  }
+
   async lockedBotIds(teamId: string, stageId: string): Promise<string[]> {
     const row = await this.repo.selection(teamId, stageId);
     if (!row?.locked) throw validationError('Bộ bot chưa khóa.');

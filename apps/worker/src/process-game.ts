@@ -191,10 +191,7 @@ export class GameProcessor {
           where: { id: job.roomId, currentGameId: request.gameId },
           data: { status: 'finished' },
         });
-        await tx.match.updateMany({
-          where: { games: { some: { id: request.gameId } } },
-          data: { status: 'finished' },
-        });
+        // Trạng thái trận (nhiều hiệp) do TV4 điều phối; worker chỉ ghi kết quả của ván.
         await tx.gameJob.update({
           where: { id: job.id },
           data: { status: 'succeeded', leaseOwner: null, leaseUntil: null, lastError: null },

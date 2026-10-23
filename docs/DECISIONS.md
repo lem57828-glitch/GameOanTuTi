@@ -33,4 +33,13 @@ Cây nhị phân 32 đội, ba lượt 32 → 16 → 8 → 4, cặp đấu có p
 
 Chi tiết và chỗ sửa: [TV3_COMPETITION.md](TV3_COMPETITION.md).
 
+**Cập nhật 24/10/2026 (TV4):** điều phối trận dùng **giá trị đề xuất**, chưa phải luật chốt:
+
+- **Q08:** hết giờ mà đội chưa chọn thì dùng lựa chọn hiệp trước của đội; chưa có hiệp trước thì dùng bot đầu tiên trong bộ, quân thứ 10 là Bao. Lựa chọn này được đánh dấu `auto`. Không có bot hợp lệ thì trận tạm dừng chờ BTC.
+- **Thời gian chọn:** mỗi hiệp (kể cả hiệp 1) đều 600 giây, đặt bằng `MATCH_SELECT_SECONDS`.
+- **Q06:** sơ loại và tranh suất dùng bố trí chuẩn 3–4–3 (quân thứ 10 cố định là Bao).
+- **Q07:** ô xuất phát của quân thứ 10 theo engine chuẩn `standard-32-4` của TV2.
+
+Chi tiết: [TV4_MATCHES.md](TV4_MATCHES.md).
+
 Không tự chọn mặc định cho các câu hỏi khác để biến demo thành giải thật. Thay đổi ruleset/hợp đồng phải có test và đồng thuận của module liên quan.

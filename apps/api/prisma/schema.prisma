@@ -329,19 +329,56 @@ model Room {
   teamAId       String
   teamBId       String
   currentGameId String?
+  /// Phòng của một cặp đấu TV3 (dùng xuyên suốt các hiệp, hiệp phụ và lần chạy lại). null = phòng mẫu.
+  pairingId     String?  @unique
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   matches       Match[]
 }
 
 model Match {
-  id        String   @id @default(cuid())
-  roomId    String
-  pairId    String? // PairAssignment của TV3 (chưa có ở M0)
-  status    String   @default("open")
-  createdAt DateTime @default(now())
-  room      Room     @relation(fields: [roomId], references: [id])
-  games     Game[]
+  id          String           @id @default(cuid())
+  roomId      String
+  pairId      String? // Pairing của TV3
+  /// open (trận demo 1 ván) | selecting | running | paused | completed | cancelled
+  status      String           @default("open")
+  kind        String           @default("demo") // demo | swiss | tiebreak | knockout
+  stageId     String?
+  teamAId     String?
+  teamBId     String?
+  scoreA      Int              @default(0)
+  scoreB      Int              @default(0)
+  /// Kết quả từng ván/hiệp theo góc nhìn đội A: "a" | "b" | null (hòa).
+  outcomes    Json?
+  /// Số thứ tự hiệp đang chọn/đang chạy (1-based).
+  currentNo   Int              @default(0)
+  deadlineAt  DateTime?
+  pauseReason String?
+  completedAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @default(now()) @updatedAt
+  room        Room             @relation(fields: [roomId], references: [id])
+  games       Game[]
+  selections  MatchSelection[]
+
+  @@index([status])
+}
+
+/// Lựa chọn kín của một đội cho một hiệp: bot trong bộ đã khóa và loại quân thứ 10.
+/// Không công bố cho khán giả/đối thủ trước khi khóa; khóa rồi thì không đổi.
+model MatchSelection {
+  matchId      String
+  gameNo       Int
+  teamId       String
+  botVersionId String
+  extraType    String   @default("PAPER")
+  ready        Boolean  @default(false)
+  /// Do hệ thống chọn khi hết giờ (đề xuất Q08: dùng lại lựa chọn hiệp trước).
+  auto         Boolean  @default(false)
+  updatedAt    DateTime @default(now()) @updatedAt
+  match        Match    @relation(fields: [matchId], references: [id])
+
+  @@id([matchId, gameNo, teamId])
 }
 
 model Game {

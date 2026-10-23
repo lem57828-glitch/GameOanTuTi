@@ -152,12 +152,37 @@ export function CompetitionAdmin() {
           {c.next.label}
         </Button>
       );
-    if (a === 'results' && health.data?.demoMode && isAdmin)
+    if (a === 'results') {
+      const unopened = c.pending.filter((p) => !p.roomId).length;
+      const opened = c.pending.length - unopened;
       return (
-        <Button loading={busy} onClick={() => run('/demo/simulate', 'Đã mô phỏng các cặp đang chờ')}>
-          Mô phỏng kết quả các cặp đang chờ
-        </Button>
+        <>
+          {isAdmin && unopened > 0 && (
+            <Button loading={busy} onClick={() => run('/matches/open', 'Đã mở phòng thi đấu')}>
+              Mở phòng thi đấu cho {unopened} cặp
+            </Button>
+          )}
+          {opened > 0 && (
+            <Button
+              variant="secondary"
+              loading={busy}
+              onClick={() => run('/matches/force-lock', 'Đã khóa lựa chọn các phòng đang chọn')}
+            >
+              Khóa lựa chọn ngay ({opened} phòng)
+            </Button>
+          )}
+          {health.data?.demoMode && isAdmin && unopened > 0 && (
+            <Button
+              variant="secondary"
+              loading={busy}
+              onClick={() => run('/demo/simulate', 'Đã mô phỏng các cặp chưa mở phòng')}
+            >
+              Mô phỏng các cặp chưa mở phòng
+            </Button>
+          )}
+        </>
       );
+    }
     return null;
   };
 

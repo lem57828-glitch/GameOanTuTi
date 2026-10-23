@@ -136,7 +136,7 @@ test('khách xem bảng xếp hạng/nhánh đấu; BTC thấy bảng điều h�
     data: { pairingId: 'x', body: 'Không đăng nhập thì không gửi được' },
   });
   expect(forbidden.status()).toBe(401);
-  await page.goto('/login');
+  await page.goto('/demo-login');
   await page.getByRole('button', { name: 'Đăng nhập bằng BTC Demo', exact: true }).click();
   await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByText('Bước tiếp theo')).toBeVisible();

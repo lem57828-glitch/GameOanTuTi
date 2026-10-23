@@ -2,6 +2,7 @@
 // Trạng thái luôn có nhãn chữ, không chỉ phân biệt bằng màu.
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Alert, Badge, EmptyState, Select, Spinner, Table, cn, type BadgeTone } from '@arena/ui';
 import type { BracketView, LevelView, PairingView, StandingRowView, StandingsView } from '@arena/contracts';
 import { api } from '../../lib/api';
@@ -79,6 +80,14 @@ export function PairingLine({ p, compact = false }: { p: PairingView; compact?: 
           (p.confirmed ? <Badge tone="success">Đã chốt</Badge> : <Badge tone="blue">Kết quả tạm</Badge>)}
         {p.source === 'simulation' && <Badge tone="warning">Mô phỏng</Badge>}
         {p.openAppeals > 0 && <Badge tone="danger">{p.openAppeals} khiếu nại mở</Badge>}
+        {p.roomId && (
+          <Link
+            to={`/rooms/${p.roomId}`}
+            className="text-xs font-semibold text-accent underline-offset-4 hover:underline focus-visible:shadow-focus focus-visible:outline-none"
+          >
+            Xem phòng
+          </Link>
+        )}
       </div>
     </div>
   );

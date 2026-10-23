@@ -7,6 +7,7 @@ import { CoinToss } from '../../components/CoinToss';
 import { usePublicHealth } from '../../lib/health';
 import { useSession } from '../../lib/session';
 import { END_REASON, JOB_STATUS, ROOM_STATUS } from './labels';
+import { MatchPanel } from './MatchPanel';
 import { useRoomStream, type ConnectionState } from './useRoomStream';
 
 const CONN: Record<ConnectionState, { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {
@@ -65,7 +66,13 @@ export function RoomPage() {
   const sideOf = (teamId: string): Side | null =>
     s.coinResult ? (s.coinResult.blueTeamId === teamId ? 'blue' : 'pink') : null;
   const last = s.history.at(-1) ?? null;
-  const status = ROOM_STATUS[s.status];
+  // Trong trận nhiều hiệp, trạng thái phòng giữa các hiệp là bước chọn kín, không phải chờ worker.
+  const status =
+    s.match?.status === 'selecting'
+      ? { label: 'Chờ hai đội chọn', tone: 'warning' as const }
+      : s.match?.status === 'paused'
+        ? { label: 'Tạm dừng', tone: 'danger' as const }
+        : ROOM_STATUS[s.status];
   const workerDown = health.data && !health.data.workerAlive;
   const conn = CONN[connection];
 
@@ -83,7 +90,9 @@ export function RoomPage() {
             <Badge tone={status.tone} dot>
               {status.label}
             </Badge>
-            {s.isDemo && <Badge tone="warning">Dữ liệu mô phỏng — ruleset {s.rulesetId ?? 'demo'}</Badge>}
+            {s.isDemo && (
+              <Badge tone="warning">Dữ liệu mô phỏng{s.rulesetId ? ` — ruleset ${s.rulesetId}` : ''}</Badge>
+            )}
             <span aria-live="polite">
               <Badge tone={conn.tone} dot>
                 {conn.label}
@@ -111,6 +120,8 @@ export function RoomPage() {
           <code className="font-mono">pnpm dev:worker</code>).
         </Alert>
       )}
+
+      {s.match && <MatchPanel s={s} onChanged={() => void resync()} />}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <Card className="p-3 sm:p-5">
@@ -226,7 +237,7 @@ function ResultCard({ s, teamName }: { s: RoomSnapshot; teamName: (id: string | 
   const r = s.result;
   return (
     <Card className="border-accent/50">
-      <CardHeader title="Kết quả" subtitle={END_REASON[r.reason]} />
+      <CardHeader title={s.match ? 'Kết quả ván vừa xong' : 'Kết quả'} subtitle={END_REASON[r.reason]} />
       <p className="text-xl font-extrabold text-ink">
         {r.winner ? `${teamName(r.winnerTeamId)} thắng` : 'Hòa'}
       </p>

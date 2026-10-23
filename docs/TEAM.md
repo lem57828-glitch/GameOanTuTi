@@ -18,7 +18,7 @@ TV3 đã có:
 - [Cấu hình và duyệt lịch giải](TV3_CONFIGURATION.md).
 - [Điều hành thi đấu](TV3_COMPETITION.md): sơ loại chia mức + Swiss, tranh suất, cây 32 → 4, chốt vòng, khiếu nại.
 
-Kết quả trận hiện đến từ nhập tay hoặc mô phỏng demo. TV4 nối phòng đấu vào `pairAssignments`/`recordResult`.
+TV4 đã nối phòng đấu ([TV4_MATCHES.md](TV4_MATCHES.md)): phòng theo cặp, chọn kín bot/quân thứ 10, khóa khi sẵn sàng/hết giờ, tung xu từng hiệp, worker chạy, kết quả trận tự chuyển cho TV3 (`recordResult` nguồn `match`). Nhập tay và mô phỏng demo vẫn dùng được.
 
 1. Cả nhóm chạy README và kiểm tra `pnpm check` trước khi tách nhánh.
 2. Chốt contracts trước khi ghép module: TV1 cung cấp SessionUser/team; TV2 nhận GameRequest/trả GameResult; TV3 cung cấp PairAssignment; TV4 phát MatchCompleted.

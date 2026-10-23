@@ -288,4 +288,11 @@ export class BotsRunnerRepository {
       data,
     });
   }
+
+  botLabels(ids: string[]) {
+    return this.prisma.botVersion.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, label: true, version: true },
+    });
+  }
 }

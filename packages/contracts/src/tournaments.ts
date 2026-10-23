@@ -184,6 +184,8 @@ export const PairingView = z.object({
   resultVersion: Count,
   confirmed: z.boolean(),
   openAppeals: Count,
+  /** Phòng thi đấu của cặp (TV4) khi đã mở trận; null nếu chưa mở hoặc kết quả nhập tay/mô phỏng. */
+  roomId: Id.nullable(),
   updatedAt: IsoDateTime,
 });
 export type PairingView = z.infer<typeof PairingView>;

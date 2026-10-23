@@ -19,6 +19,7 @@ import { conflict, forbidden, notFound } from '../../core/errors.js';
 import { PrismaService, isUniqueViolation } from '../../core/prisma.service.js';
 import { AccountsTeamsService } from '../accounts-teams/accounts-teams.service.js';
 import { BotsRunnerService, DEMO_LIMITS, toJobView } from '../bots-runner/bots-runner.service.js';
+import { MatchesService } from './matches.service.js';
 import { RoomsRepository } from './rooms.repository.js';
 import { buildSnapshot, streamIdOf } from './snapshot.js';
 
@@ -48,6 +49,7 @@ export class RoomsService {
     private readonly accounts: AccountsTeamsService,
     private readonly bots: BotsRunnerService,
     private readonly audit: AuditService,
+    private readonly matches: MatchesService,
   ) {}
 
   async list(): Promise<RoomListItem[]> {
@@ -70,6 +72,12 @@ export class RoomsService {
 
   /** Chỉ đọc. Xem phòng, tải lại trang hay reconnect KHÔNG tạo ván, tung xu hay enqueue job. */
   async snapshot(roomId: string): Promise<RoomSnapshot> {
+    const base = await this.boardSnapshot(roomId);
+    // Trận nhiều hiệp (TV4): điểm, các hiệp, trạng thái chọn kín — không lộ lựa chọn chưa khóa.
+    return { ...base, match: await this.matches.viewOfRoom(roomId) };
+  }
+
+  private async boardSnapshot(roomId: string): Promise<RoomSnapshot> {
     return this.prisma.$transaction(
       async (tx) => {
         const room = await this.repo.findRoom(roomId, tx);
