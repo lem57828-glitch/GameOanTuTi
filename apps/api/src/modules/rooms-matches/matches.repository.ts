@@ -56,7 +56,7 @@ export class MatchesRepository {
   }
 
   statuses(ids: string[]) {
-    return this.prisma.match.findMany({ where: { id: { in: ids } }, select: { id: true, status: true } });
+    return this.prisma.match.findMany({ where: { id: { in: ids } }, select: { id: true, status: true, currentNo: true } });
   }
 
   selecting(roomIds?: string[]) {

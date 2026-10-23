@@ -547,7 +547,16 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
     const ids = pairs.map((p) => p.matchId).filter((x): x is string => !!x);
     const matches = await this.repo.statuses(ids);
     const count = (st: string) => matches.filter((m) => m.status === st).length;
+    // Mỗi trận nhiều hiệp: các phòng trong cùng vòng có thể đang ở hiệp khác nhau.
+    const byGame = new Map<number, { no: number; selecting: number; running: number }>();
+    for (const m of matches) {
+      if (m.status !== 'selecting' && m.status !== 'running') continue;
+      const g = byGame.get(m.currentNo) ?? { no: m.currentNo, selecting: 0, running: 0 };
+      g[m.status] += 1;
+      byGame.set(m.currentNo, g);
+    }
     return {
+      byGame: [...byGame.values()].sort((a, b) => a.no - b.no),
       pending: pairs.length,
       notOpened: pairs.length - ids.length,
       selecting: count('selecting'),
