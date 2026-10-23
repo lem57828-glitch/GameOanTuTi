@@ -165,8 +165,8 @@ it('enforces roles, origin, validation and explicit placeholders', async () => {
   expect(invalid.status).toBe(400);
   expect((await invalid.json()).error.requestId).toBeTruthy();
   const todo = await request('/bots', 'POST', {});
-  expect(todo.status).toBe(501);
-  expect((await todo.json()).error.code).toBe('FEATURE_NOT_IMPLEMENTED');
+  expect(todo.status).toBe(400);
+  expect((await todo.json()).error.code).toBe('VALIDATION_ERROR');
 });
 
 it('creates exactly one game/job/outbox for simultaneous identical requests; reads never enqueue', async () => {

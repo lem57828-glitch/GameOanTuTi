@@ -1,3 +1,12 @@
+import { beforeAll, afterAll } from 'vitest';
+const previousMode = process.env.BOT_SANDBOX_MODE;
+beforeAll(() => {
+  process.env.BOT_SANDBOX_MODE = 'trusted-local';
+});
+afterAll(() => {
+  if (previousMode === undefined) delete process.env.BOT_SANDBOX_MODE;
+  else process.env.BOT_SANDBOX_MODE = previousMode;
+});
 import { describe, expect, it } from 'vitest';
 import type { GameRequest } from '@arena/contracts';
 import { PythonBotProcess } from '../src/runner/python-process.js';
@@ -130,5 +139,56 @@ def make_move(state):
     expect(outcome).toBeDefined();
     expect(outcome.plies).toBeGreaterThan(0);
     expect(movesRecorded.length).toBe(outcome.plies);
+  });
+  it('drains stderr without blocking a valid move', async () => {
+    const proc = new PythonBotProcess({
+      sourceCode:
+        'import sys\ndef make_move(state):\n    sys.stderr.write("x" * 200000)\n    sys.stderr.flush()\n    return state["legal_moves"][0]',
+    });
+    try {
+      await proc.start();
+      const move = await proc.requestMove({
+        my_side: 'blue',
+        turn: 1,
+        ply: 0,
+        board: {},
+        pieces_left: { blue: 10, pink: 10 },
+        legal_moves: [{ from: 'A2', to: 'B2', capture: null }],
+        last_move: null,
+      });
+      expect(move).toEqual({ from: 'A2', to: 'B2' });
+    } finally {
+      proc.terminate();
+    }
+  });
+  it('awards the opponent a win when bot import fails', async () => {
+    const runner = new SandboxGameRunner(async (id) =>
+      id === 'broken'
+        ? { isDemo: false, sourceCode: 'raise RuntimeError("import failed")' }
+        : { isDemo: true, demoPolicy: 'random' },
+    );
+    const result = await runner.run(
+      {
+        contractVersion: 1,
+        requestKey: 'startup-failure',
+        gameId: 'game_test',
+        choices: {
+          blue: { botVersionId: 'broken', extraType: 'PAPER' },
+          pink: { botVersionId: 'demo', extraType: 'PAPER' },
+        },
+        rulesetId: 'standard-32-4',
+        seed: 1,
+        limits: {
+          cpuMsPerMove: 200,
+          wallMsPerMove: 1000,
+          startupMs: 3000,
+          maxPlies: 200,
+          maxErrorsPerGame: 3,
+        },
+      },
+      async () => {},
+    );
+    expect(result).toMatchObject({ winner: 'pink', reason: 'crash', plies: 0 });
+    expect(result.logs).toContain('import failed');
   });
 });

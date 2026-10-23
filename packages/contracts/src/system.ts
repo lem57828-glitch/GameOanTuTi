@@ -10,6 +10,9 @@ export const ServiceHealth = z.object({
     alive: z.boolean(),
     lastSeenAt: IsoDateTime.nullable(),
     workerId: z.string().nullable(),
+    workers: z
+      .array(z.object({ workerId: z.string(), at: IsoDateTime, concurrency: z.number().int().positive() }))
+      .optional(),
   }),
   queue: z
     .object({ waiting: z.number().int(), active: z.number().int(), failed: z.number().int() })

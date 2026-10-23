@@ -129,6 +129,8 @@ export class GameProcessor {
       let leaseUntil = Date.now() + this.d.leaseMs;
 
       const outcome = await this.d.runner.run(request, async (move) => {
+        if (Date.now() > leaseUntil - this.d.leaseMs / 2)
+          leaseUntil = await this.renewLease(job.id, attemptNo);
         const prev = storedByPly.get(move.ply);
         if (prev) {
           if (JSON.stringify(prev) !== JSON.stringify(move))
@@ -199,7 +201,7 @@ export class GameProcessor {
         });
         await tx.runAttempt.update({
           where: { id: run.id },
-          data: { status: 'succeeded', finishedAt: new Date() },
+          data: { status: 'succeeded', finishedAt: new Date(), diagnostics: outcome.logs },
         });
         return result;
       });

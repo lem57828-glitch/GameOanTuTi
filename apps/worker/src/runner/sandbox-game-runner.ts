@@ -38,13 +38,20 @@ export class SandboxGameRunner implements GameRunner {
     ]);
 
     if (!blueInfo) {
-      throw new PermanentRunError(`Không tìm thấy thông tin bot của bên Xanh (${request.choices.blue.botVersionId}).`);
+      throw new PermanentRunError(
+        `Không tìm thấy thông tin bot của bên Xanh (${request.choices.blue.botVersionId}).`,
+      );
     }
     if (!pinkInfo) {
-      throw new PermanentRunError(`Không tìm thấy thông tin bot của bên Hồng (${request.choices.pink.botVersionId}).`);
+      throw new PermanentRunError(
+        `Không tìm thấy thông tin bot của bên Hồng (${request.choices.pink.botVersionId}).`,
+      );
     }
 
+    for (const info of [blueInfo, pinkInfo])
+      if (!info.isDemo && !info.sourceCode) throw new PermanentRunError('Bot thật thiếu snapshot mã nguồn.');
     const rand = rng(request.seed);
+    const diagnostics: string[] = [];
     const pythonProcesses: Partial<Record<Side, PythonBotProcess>> = {};
 
     try {
@@ -58,8 +65,25 @@ export class SandboxGameRunner implements GameRunner {
             sourceCode: info.sourceCode,
             startupMs: request.limits.startupMs,
             wallMsPerMove: request.limits.wallMsPerMove,
+            cpuMsPerMove: request.limits.cpuMsPerMove,
+            seed: request.seed + (side === 'pink' ? 1 : 0),
+            maxRuntimeMs:
+              30_000 + request.limits.startupMs + request.limits.maxPlies * request.limits.wallMsPerMove,
           });
-          await proc.start();
+          try {
+            await proc.start();
+          } catch (err) {
+            if (err instanceof PythonProcessError && err.type === 'SANDBOX_UNAVAILABLE')
+              throw new PermanentRunError(err.message);
+            return {
+              winner: otherSide(side),
+              reason:
+                err instanceof PythonProcessError && err.type === 'STARTUP_TIMEOUT' ? 'timeout' : 'crash',
+              plies: 0,
+              piecesLeft: countPieces(rules.setup),
+              logs: `${side}: ${(err as Error).message}`,
+            };
+          }
           pythonProcesses[side] = proc;
         }
       }
@@ -88,14 +112,15 @@ export class SandboxGameRunner implements GameRunner {
 
         // A. Lấy nước đi từ Bot Python trong Sandbox
         if (proc) {
-          const pyState = toPythonState(rules, state, side);
+          const pyState = { ...toPythonState(rules, state, side), seed: request.seed };
           try {
             chosenMove = await proc.requestMove(pyState, request.limits.wallMsPerMove);
-          } catch (err: any) {
+          } catch (err) {
             const opp = otherSide(side);
             const reason: GameEndReason =
               err instanceof PythonProcessError && err.type === 'MOVE_TIMEOUT' ? 'timeout' : 'crash';
             return {
+              logs: `${side}: ${(err as Error).message}`,
               winner: opp,
               reason,
               plies: state.ply,
@@ -104,7 +129,10 @@ export class SandboxGameRunner implements GameRunner {
           }
         } else {
           // B. Lấy nước đi từ Bot Mô Phỏng (Demo Policy)
-          const policyKey = currentInfo.demoPolicy && DEMO_POLICIES[currentInfo.demoPolicy] ? currentInfo.demoPolicy : 'random';
+          const policyKey =
+            currentInfo.demoPolicy && DEMO_POLICIES[currentInfo.demoPolicy]
+              ? currentInfo.demoPolicy
+              : 'random';
           const policy = DEMO_POLICIES[policyKey]!;
           chosenMove = policy(rules, state, rand);
         }
@@ -114,10 +142,14 @@ export class SandboxGameRunner implements GameRunner {
 
         if (!isLegal) {
           errorsCount[side]++;
+          diagnostics.push(
+            `${side}: Nước không hợp lệ ${JSON.stringify(chosenMove).slice(0, 200)}; lỗi ${errorsCount[side]}/${maxErrors}.`,
+          );
           if (errorsCount[side] >= maxErrors) {
             return {
               winner: otherSide(side),
               reason: 'errors',
+              logs: diagnostics.join('\n'),
               plies: state.ply,
               piecesLeft: countPieces(state.board),
             };
@@ -134,6 +166,7 @@ export class SandboxGameRunner implements GameRunner {
         // E. Kiểm tra kết thúc ván cờ
         if (out.end) {
           return {
+            logs: diagnostics.join('\n') || undefined,
             winner: out.end.winner,
             reason: out.end.reason,
             plies: state.ply,

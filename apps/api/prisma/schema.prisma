@@ -45,6 +45,7 @@ model Team {
   tournament   Tournament   @relation(fields: [tournamentId], references: [id])
   members      Membership[]
   botVersions  BotVersion[]
+  botSelections BotStageSelection[]
 
   @@unique([tournamentId, nameKey])
 }
@@ -69,9 +70,14 @@ model BotVersion {
   version    Int
   label      String
   sourceHash String // sha256 nội dung mã đã lưu; phiên bản bất biến
+  githubRepo String?
+  commitSha String?
+  sourcePath String?
   sourceCode String? // Toàn văn mã nguồn bot Python được lưu bất biến
   submittedById String? // ID người nộp
   duplicateOfId String? // ID của bot bị trùng lặp mã nguồn (nếu có)
+  validationOwner String?
+  validationLeaseUntil DateTime?
   validationLog String? // Nhật ký kiểm tra tính hợp lệ sơ bộ
   rulesetId  String
   status     String   @default("pending") // pending | valid | invalid
@@ -83,6 +89,8 @@ model BotVersion {
   testRuns   BotTestRun[]
 
   @@unique([teamId, version])
+  @@index([sourceHash])
+  @@index([status, createdAt])
 }
 
 /// TV2 - Gói việc 4: Lưu kết quả đấu thử (Practice Match) trong Sandbox
@@ -91,6 +99,16 @@ model BotTestRun {
   botVersionId   String
   mySide         String      @default("blue") // blue | pink
   opponentType   String      // demo | bot
+  extraType      String      @default("PAPER")
+  opponentExtraType String    @default("PAPER")
+  seed           Int         @default(0)
+  rulesetId      String      @default("standard-32-4")
+  initialBoard   Json?
+  maxPlies       Int         @default(200)
+  attempts       Int         @default(0)
+  leaseOwner     String?
+  leaseUntil     DateTime?
+  updatedAt      DateTime    @updatedAt
   opponentTarget String      // random, greedy, rusher hoặc botVersionId
   status         String      @default("queued") // queued | running | succeeded | failed
   winner         String?     // blue | pink | null
@@ -104,6 +122,19 @@ model BotTestRun {
   createdAt      DateTime    @default(now())
   finishedAt     DateTime?
   botVersion     BotVersion  @relation(fields: [botVersionId], references: [id])
+  @@index([status, updatedAt])
+}
+
+model BotStageSelection {
+  teamId String
+  stageId String
+  team Team @relation(fields: [teamId], references: [id])
+  stage Stage @relation(fields: [stageId], references: [id])
+  botVersionIds String[]
+  locked Boolean @default(false)
+  freezeAt DateTime?
+  updatedAt DateTime @updatedAt
+  @@id([teamId, stageId])
 }
 
 /// Một job logic cho mỗi requestKey. RunAttempt là từng lần thực thi (retry).
@@ -135,6 +166,7 @@ model RunAttempt {
   job        GameJob   @relation(fields: [jobId], references: [id])
 
   @@unique([jobId, attemptNo])
+  diagnostics String?
 }
 
 // ============================================================ TV3 — tournaments
@@ -170,6 +202,8 @@ model Stage {
   endsAt       DateTime?
   lockAt       DateTime?
   tournament   Tournament @relation(fields: [tournamentId], references: [id])
+
+  botSelections BotStageSelection[]
 
   @@unique([tournamentId, ord])
 }

@@ -48,12 +48,12 @@ describe('BotsRunnerService — Gói việc 1 (Quản lý phiên bản & Nộp b
     demo: true,
   };
 
-  it('validatePythonSource phát hiện hàm make_move và cảnh báo module nguy hiểm', () => {
+  it('validatePythonSource phát hiện hàm make_move và kiểm tra AST', async () => {
     const validCode = `
 def make_move(state):
     return {"from": "A1", "to": "A2"}
 `;
-    const res1 = service.validatePythonSource(validCode);
+    const res1 = await service.validatePythonSource(validCode);
     expect(res1.valid).toBe(true);
     expect(res1.log).toContain('hợp lệ');
 
@@ -61,7 +61,7 @@ def make_move(state):
 def compute():
     return 42
 `;
-    const res2 = service.validatePythonSource(invalidCode);
+    const res2 = await service.validatePythonSource(invalidCode);
     expect(res2.valid).toBe(false);
     expect(res2.log).toContain('thiếu định nghĩa hàm "def make_move(state)"');
 
@@ -72,11 +72,12 @@ import subprocess
 def make_move(state):
     return {}
 `;
-    const res3 = service.validatePythonSource(riskyCode);
+    const res3 = await service.validatePythonSource(riskyCode);
     expect(res3.valid).toBe(true);
-    expect(res3.log).toContain('Cảnh báo kiểm tra tĩnh');
-    expect(res3.log).toContain('socket');
-    expect(res3.log).toContain('subprocess');
+    expect(res3.log).toContain('hợp lệ');
+    expect((await service.validatePythonSource('# def make_move(state): pass')).valid).toBe(false);
+    expect((await service.validatePythonSource('def make_move(state) broken')).valid).toBe(false);
+    expect((await service.validatePythonSource('def make_move(): pass')).valid).toBe(false);
   });
 
   it('submitBot từ chối khi thí sinh nộp bot cho đội khác', async () => {
@@ -102,6 +103,7 @@ def make_move(state):
     const code = 'def make_move(state):\n    return {"action": "stay"}';
     mockRepo.createBotVersion.mockImplementationOnce((data) => ({
       ...data,
+      version: 2,
       id: 'bot_new_2',
       createdAt: new Date(),
     }));
@@ -117,7 +119,6 @@ def make_move(state):
     expect(result.duplicateOfId).toBe('bot_orig');
     expect(mockRepo.createBotVersion).toHaveBeenCalledWith(
       expect.objectContaining({
-        version: 2,
         teamId: 'team_alpha',
         submittedById: 'user_1',
         duplicateOfId: 'bot_orig',

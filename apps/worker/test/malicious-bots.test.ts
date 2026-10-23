@@ -1,3 +1,12 @@
+import { beforeAll, afterAll } from 'vitest';
+const previousMode = process.env.BOT_SANDBOX_MODE;
+beforeAll(() => {
+  process.env.BOT_SANDBOX_MODE = 'trusted-local';
+});
+afterAll(() => {
+  if (previousMode === undefined) delete process.env.BOT_SANDBOX_MODE;
+  else process.env.BOT_SANDBOX_MODE = previousMode;
+});
 import { describe, expect, it } from 'vitest';
 import type { GameRequest } from '@arena/contracts';
 import { PythonBotProcess } from '../src/runner/python-process.js';

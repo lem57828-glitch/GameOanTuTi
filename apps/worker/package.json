@@ -11,7 +11,9 @@
     "start": "node --env-file-if-exists=../../.env dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "db:generate": "prisma generate --schema ../api/prisma/schema.prisma"
+    "db:generate": "prisma generate --schema ../api/prisma/schema.prisma",
+    "benchmark": "tsx --env-file=../../.env src/benchmark.ts",
+    "test:container": "vitest run test/container-isolation.test.ts"
   },
   "dependencies": {
     "@arena/contracts": "workspace:*",
