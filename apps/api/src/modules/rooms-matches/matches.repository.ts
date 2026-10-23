@@ -46,6 +46,19 @@ export class MatchesRepository {
     });
   }
 
+  /** Trận đã xong của cặp đấu nhưng chưa bàn giao kết quả cho TV3. */
+  unreported() {
+    return this.prisma.match.findMany({
+      where: { status: 'completed', reportedAt: null, pairId: { not: null } },
+      select: { id: true },
+      take: 100,
+    });
+  }
+
+  statuses(ids: string[]) {
+    return this.prisma.match.findMany({ where: { id: { in: ids } }, select: { id: true, status: true } });
+  }
+
   selecting(roomIds?: string[]) {
     return this.prisma.match.findMany({
       where: { status: 'selecting', ...(roomIds ? { roomId: { in: roomIds } } : {}) },

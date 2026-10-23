@@ -34,6 +34,15 @@ Nối cặp đấu của TV3 với worker chạy bot của TV2. Mỗi cặp có 
 - **Khiếu nại được chấp nhận và cho thi lại** (TV3): TV3 gỡ trận cũ khỏi cặp. BTC bấm mở phòng lại, và trận mới được tạo **trong cùng phòng**; lịch sử trận cũ vẫn giữ.
 - Xem phòng, tải lại hay mất kết nối **không** tạo ván, không tung lại xu.
 
+## Độ bền
+
+- **Gửi bù kết quả:** trận xong được ghi `completedAt`; khi TV3 nhận kết quả thì ghi `reportedAt`. Nếu tiến trình dừng giữa hai bước này, bộ hẹn giờ (2 giây) tìm trận `completed` mà `reportedAt` còn trống và gửi lại.
+  - Chỉ gửi khi cặp vẫn chờ kết quả và vẫn gắn với chính trận đó.
+  - TV3 từ chối (ví dụ cặp đã có kết quả nhập tay) thì ghi lý do vào `pauseReason`, không gửi lặp.
+- **Trận mồ côi:** "Bắt đầu lại phần thi đấu", thi lại vòng, hay khiếu nại cho thi lại đều làm cặp không còn gắn với trận cũ. Trước mỗi bước xử lý, trận kiểm tra lại cặp; không còn hiệu lực thì tự **hủy** (`cancelled`), không chạy ván vô ích.
+- **Gộp xử lý:** worker báo tín hiệu ở mỗi nước. Trận chỉ được xử lý khi ván mới nhất đã xong hoặc lỗi; mỗi trận tại một thời điểm chỉ có một lần xử lý, yêu cầu đến sau được gộp lại. Nhờ vậy không cạn kết nối database khi nhiều phòng thi cùng lúc.
+- **Bảng điều hành:** `GET admin/tournaments/:id/matches/summary` trả số phòng chưa mở / đang chọn / đang thi / tạm dừng / đã xong. Nút "Khóa lựa chọn ngay" chỉ đếm phòng đang chọn.
+
 ## Bộ bot dùng trong trận
 
 Lấy qua `BotsRunnerService.botsForMatch(teamId, stageId)` (TV2):
@@ -57,7 +66,7 @@ Socket không đổi: `room.join` → `room.snapshot` / `room.event`. Khi trạn
 
 ## Dữ liệu
 
-Migration `20261024090000_match_orchestration`:
+Migration `20261024090000_match_orchestration` và `20261024150000_match_reported_at` (cột `Match.reportedAt`):
 
 - `Match` thêm `kind`, `stageId`, `teamAId/BId`, `scoreA/B`, `outcomes`, `currentNo`, `deadlineAt`, `pauseReason`, `completedAt`.
 - Bảng mới `MatchSelection` (khóa: trận, hiệp, đội).

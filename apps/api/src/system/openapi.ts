@@ -507,6 +507,28 @@ export function buildOpenApi() {
   });
   // ---- TV4: trận nhiều hiệp theo cặp đấu, chọn kín bot/quân thứ 10
   r.registerPath({
+    method: 'get',
+    path: '/admin/tournaments/{id}/matches/summary',
+    tags: ['rooms-matches'],
+    security: auth,
+    description: 'Số phòng của các cặp đang chờ thi: chưa mở / đang chọn / đang thi / tạm dừng / đã xong.',
+    request: { params: idParam },
+    responses: {
+      200: json(
+        data(
+          z.object({
+            pending: z.number().int(),
+            notOpened: z.number().int(),
+            selecting: z.number().int(),
+            running: z.number().int(),
+            paused: z.number().int(),
+            completed: z.number().int(),
+          }),
+        ),
+      ),
+    },
+  });
+  r.registerPath({
     method: 'post',
     path: '/rooms/{id}/choices',
     tags: ['rooms-matches'],

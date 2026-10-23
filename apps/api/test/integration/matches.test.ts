@@ -120,7 +120,17 @@ afterAll(async () => {
   await queue.close();
   redis.disconnect();
   const pairings = await prisma.pairing.findMany({ where: { tournamentId: tid }, select: { id: true } });
-  const roomIds = pairings.map((p) => pairingRoomId(p.id));
+  // Đặt lại phần thi đấu đã xóa cặp → tìm trận theo giai đoạn của giải để dọn đủ phòng/trận.
+  const stageIds = (await prisma.stage.findMany({ where: { tournamentId: tid }, select: { id: true } })).map(
+    (x) => x.id,
+  );
+  const byStage = await prisma.match.findMany({
+    where: { stageId: { in: stageIds } },
+    select: { roomId: true },
+  });
+  const roomIds = [
+    ...new Set([...pairings.map((p) => pairingRoomId(p.id)), ...byStage.map((m) => m.roomId)]),
+  ];
   const games = await prisma.game.findMany({ where: { roomId: { in: roomIds } }, select: { id: true } });
   const gameIds = games.map((g) => g.id);
   const jobs = await prisma.gameJob.findMany({ where: { roomId: { in: roomIds } }, select: { id: true } });
@@ -275,4 +285,74 @@ it('loại trực tiếp: 5 hiệp (+2 khi hòa) có quân thứ 10, tung xu t�
   expect(matches).toHaveLength(2);
   expect(new Set(matches.map((m) => m.roomId)).size).toBe(1);
   expect((await call(null, `/rooms/${pairingRoomId(real.id)}`)).data.match.matchId).toBe(matches[1]!.id);
+}, 240_000);
+
+it('gửi bù kết quả trận bị mất giữa chừng; đặt lại phần thi đấu thì trận cũ tự hủy; tóm tắt phòng đúng trạng thái', async () => {
+  // Trận mở lại sau khiếu nại (test trước) chạy xong và về TV3.
+  const real = await prisma.pairing.findFirstOrThrow({
+    where: { tournamentId: tid, phase: 'r32', matchId: { not: null } },
+  });
+  await waitFor(
+    async () => (await prisma.pairing.findUniqueOrThrow({ where: { id: real.id } })).status === 'done',
+    180_000,
+    'trận mở lại có kết quả',
+  );
+  const match = await prisma.match.findFirstOrThrow({ where: { id: real.matchId! } });
+  expect(match.reportedAt).not.toBeNull();
+
+  // Giả lập tiến trình dừng ngay sau khi trận xong, trước khi gửi kết quả cho TV3.
+  await prisma.pairing.update({
+    where: { id: real.id },
+    data: {
+      status: 'scheduled',
+      result: null,
+      winnerTeamId: null,
+      scoreA: 0,
+      scoreB: 0,
+      games: [],
+      decidedBy: null,
+      source: null,
+    },
+  });
+  // Khi chưa gửi, vòng loại trực tiếp vẫn đang thi (chưa có cặp nào báo xong).
+  await prisma.bracketRound.updateMany({ where: { tournamentId: tid, phase: 'r32' }, data: { status: 'running' } });
+  await prisma.match.update({ where: { id: match.id }, data: { reportedAt: null, pauseReason: null } });
+  await waitFor(
+    async () => (await prisma.pairing.findUniqueOrThrow({ where: { id: real.id } })).source === 'match',
+    20_000,
+    'gửi bù kết quả',
+  );
+  const resent = await prisma.pairing.findUniqueOrThrow({ where: { id: real.id } });
+  expect(resent.status).toBe('done');
+  expect(resent.games).toEqual(match.outcomes);
+
+  // Thi lại → mở trận mới (đang chọn) → BTC đặt lại phần thi đấu: trận không còn cặp đấu phải tự hủy.
+  const appeal = await prisma.appeal.create({
+    data: {
+      pairingId: real.id,
+      teamId: real.teamAId!,
+      accountId: 'acc_an',
+      body: 'Yêu cầu thi lại để kiểm thử hủy trận.',
+    },
+  });
+  await call('acc_referee', `/admin/appeals/${appeal.id}/decision`, 'POST', {
+    decision: 'accept',
+    action: 'rerun',
+    reason: 'Kiểm thử',
+  });
+  await call('acc_admin', `/admin/tournaments/${tid}/matches/open`, 'POST');
+  const summary = (await call('acc_referee', `/admin/tournaments/${tid}/matches/summary`)).data;
+  expect(summary).toMatchObject({ pending: 1, notOpened: 0 });
+  expect(summary.selecting + summary.running).toBe(1);
+  const fresh = await prisma.match.findFirstOrThrow({
+    where: { pairId: real.id },
+    orderBy: { createdAt: 'desc' },
+  });
+  await prisma.appeal.deleteMany({ where: { pairingId: real.id } });
+  await call('acc_admin', `/admin/tournaments/${tid}/competition/reset`, 'POST', reason);
+  await waitFor(
+    async () => (await prisma.match.findUniqueOrThrow({ where: { id: fresh.id } })).status === 'cancelled',
+    20_000,
+    'trận mồ côi bị hủy',
+  );
 }, 240_000);

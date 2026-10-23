@@ -355,6 +355,8 @@ model Match {
   deadlineAt  DateTime?
   pauseReason String?
   completedAt DateTime?
+  /// Đã gửi kết quả trận cho TV3 (recordResult). null + completed = cần gửi bù (vd. tiến trình dừng giữa chừng).
+  reportedAt  DateTime?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @default(now()) @updatedAt
   room        Room             @relation(fields: [roomId], references: [id])

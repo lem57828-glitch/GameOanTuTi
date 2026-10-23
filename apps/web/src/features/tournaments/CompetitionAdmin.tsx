@@ -31,6 +31,14 @@ import {
 import { APPEAL_STATUS, TextArea } from './MyPairings';
 
 type Outcome = 'a' | 'b' | null;
+type RoomsSummary = {
+  pending: number;
+  notOpened: number;
+  selecting: number;
+  running: number;
+  paused: number;
+  completed: number;
+};
 
 export function CompetitionAdmin() {
   const { user } = useSession();
@@ -60,6 +68,13 @@ export function CompetitionAdmin() {
     refetchInterval: 5000,
   });
   const c = view.data;
+  // Trạng thái thật của các phòng (TV4): chỉ phòng "đang chọn" mới bị nút khóa ảnh hưởng.
+  const rooms = useQuery({
+    queryKey: ['competition', tid, 'rooms'],
+    queryFn: () => api<RoomsSummary>(`/admin/tournaments/${tid}/matches/summary`),
+    enabled: !!tid && c?.next.action === 'results',
+    refetchInterval: 3000,
+  });
 
   const act = useMutation({
     mutationFn: ({ path, json }: { path: string; json?: unknown; label: string }) =>
@@ -153,22 +168,29 @@ export function CompetitionAdmin() {
         </Button>
       );
     if (a === 'results') {
-      const unopened = c.pending.filter((p) => !p.roomId).length;
-      const opened = c.pending.length - unopened;
+      const r = rooms.data;
+      const unopened = r?.notOpened ?? c.pending.filter((p) => !p.roomId).length;
       return (
         <>
+          {r && r.pending - r.notOpened > 0 && (
+            <p className="w-full text-sm text-ink-muted">
+              {r.pending - r.notOpened} phòng: {r.selecting} đang chọn bot · {r.running} đang thi
+              {r.paused ? ` · ${r.paused} tạm dừng (vào phòng để xử lý)` : ''}
+              {r.completed ? ` · ${r.completed} đã xong, đang gửi kết quả` : ''}
+            </p>
+          )}
           {isAdmin && unopened > 0 && (
             <Button loading={busy} onClick={() => run('/matches/open', 'Đã mở phòng thi đấu')}>
               Mở phòng thi đấu cho {unopened} cặp
             </Button>
           )}
-          {opened > 0 && (
+          {(r?.selecting ?? 0) > 0 && (
             <Button
               variant="secondary"
               loading={busy}
               onClick={() => run('/matches/force-lock', 'Đã khóa lựa chọn các phòng đang chọn')}
             >
-              Khóa lựa chọn ngay ({opened} phòng)
+              Khóa lựa chọn ngay ({r!.selecting} phòng đang chọn)
             </Button>
           )}
           {health.data?.demoMode && isAdmin && unopened > 0 && (

@@ -39,6 +39,12 @@ export class MatchesController {
 
   // ---- BTC / trọng tài
 
+  @Get('admin/tournaments/:id/matches/summary')
+  @Roles('admin', 'referee')
+  async summary(@Param('id') id: string) {
+    return ok(await this.matches.summary(parse(Id, id)));
+  }
+
   @Post('admin/tournaments/:id/matches/open')
   @Roles('admin')
   async open(@Param('id') id: string, @CurrentUser() user: SessionUser, @Req() req: ArenaRequest) {

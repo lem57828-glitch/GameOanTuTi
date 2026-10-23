@@ -56,6 +56,9 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
   private timer: NodeJS.Timeout | null = null;
   private readonly listeners: Array<(roomId: string) => void> = [];
   private ticking = false;
+  private readonly inFlight = new Set<string>();
+  private readonly again = new Set<string>();
+  private readonly roomChecks = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -93,6 +96,11 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
     try {
       for (const m of await this.repo.due(now))
         await this.advance(m.id).catch((e: Error) => this.log.warn(`Trận ${m.id}: ${e.message}`));
+      // Trận đã xong nhưng chưa bàn giao được cho TV3 (vd. tiến trình dừng giữa chừng): gửi bù.
+      for (const m of await this.repo.unreported())
+        await this.report(m.id).catch((e: Error) =>
+          this.log.warn(`Gửi bù kết quả trận ${m.id}: ${e.message}`),
+        );
     } finally {
       this.ticking = false;
     }
@@ -315,7 +323,26 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
 
   /** Một bước của máy trạng thái trận. An toàn khi gọi lặp hoặc gọi đồng thời (khóa hàng Match). */
   async advance(matchId: string): Promise<void> {
-    let complete: { pairId: string; outcomes: Outcome[] } | null = null;
+    // Một trận chỉ có một lần xử lý tại một thời điểm; yêu cầu đến trong lúc đó được gộp thành MỘT lần chạy tiếp.
+    // Tránh hàng trăm transaction chờ khóa cùng một hàng Match (cạn pool kết nối khi worker báo tín hiệu dồn dập).
+    if (this.inFlight.has(matchId)) {
+      this.again.add(matchId);
+      return;
+    }
+    this.inFlight.add(matchId);
+    try {
+      do {
+        this.again.delete(matchId);
+        await this.advanceOnce(matchId);
+      } while (this.again.has(matchId));
+    } finally {
+      this.inFlight.delete(matchId);
+    }
+  }
+
+  private async advanceOnce(matchId: string): Promise<void> {
+    if (await this.cancelIfStale(matchId)) return;
+    let complete = false;
     let roomId: string | null = null;
     let kicked = false;
     await this.prisma.$transaction(
@@ -429,39 +456,120 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
             },
           });
           await tx.room.update({ where: { id: m.roomId }, data: { status: 'finished' } });
-          if (m.pairId) complete = { pairId: m.pairId, outcomes };
+          complete = !!m.pairId;
         }
       },
       { timeout: 30_000 },
     );
     if (kicked) this.bots.kick();
-    if (complete) {
-      const c = complete as { pairId: string; outcomes: Outcome[] };
-      try {
-        // TV4 → TV3 (MatchCompleted): TV3 tính kết quả theo thể thức và chờ BTC/trọng tài chốt.
-        await this.competition.recordResult(
-          c.pairId,
-          c.outcomes,
-          'match',
-          { id: null },
-          'Kết quả trận từ phòng đấu',
-        );
-      } catch (e) {
-        const message = e instanceof AppError ? e.message : 'Lỗi khi gửi kết quả';
-        this.log.warn(`Không ghi được kết quả cặp ${c.pairId}: ${message}`);
-        await this.prisma.match.update({
-          where: { id: matchId },
-          data: { pauseReason: `Trận xong nhưng TV3 chưa nhận kết quả: ${message}` },
-        });
-      }
-    }
+    // Bàn giao sau khi commit; nếu tiến trình dừng ngay đây, bộ hẹn giờ sẽ gửi bù (reportedAt vẫn null).
+    if (complete) await this.report(matchId);
     if (roomId) this.notify(roomId);
+  }
+
+  /**
+   * TV4 → TV3 (MatchCompleted): gửi danh sách ván/hiệp của trận đã xong cho TV3. Idempotent: chỉ gửi khi cặp vẫn
+   * chờ kết quả và vẫn gắn với chính trận này; xong (hoặc không còn gì để gửi) thì đánh dấu reportedAt.
+   */
+  async report(matchId: string): Promise<void> {
+    const m = await this.repo.find(matchId);
+    if (!m || m.status !== 'completed' || m.reportedAt || !m.pairId) return;
+    const mark = (pauseReason?: string) =>
+      this.prisma.match.update({
+        where: { id: m.id },
+        data: { reportedAt: new Date(), ...(pauseReason ? { pauseReason } : {}) },
+      });
+    let a: Awaited<ReturnType<CompetitionService['assignment']>>;
+    try {
+      a = await this.competition.assignment(m.pairId);
+    } catch (e) {
+      if (e instanceof AppError && e.code === 'NOT_FOUND') {
+        await mark('Cặp đấu không còn tồn tại (giải đã được đặt lại); kết quả trận không được tính.');
+        return;
+      }
+      throw e;
+    }
+    if (a.matchId !== m.id || a.status !== 'scheduled') {
+      // Cặp đã có kết quả khác (nhập tay) hoặc đã gắn trận mới (thi lại): trận này không còn là nguồn kết quả.
+      await mark();
+      return;
+    }
+    try {
+      await this.competition.recordResult(
+        m.pairId,
+        outcomesOf(m),
+        'match',
+        { id: null },
+        'Kết quả trận từ phòng đấu',
+      );
+      await mark();
+    } catch (e) {
+      if (!(e instanceof AppError)) throw e; // lỗi tạm thời (DB...): để lần sau gửi lại
+      this.log.warn(`TV3 từ chối kết quả trận ${m.id}: ${e.message}`);
+      await mark(`Trận xong nhưng TV3 không nhận kết quả: ${e.message}. BTC nhập kết quả thủ công.`);
+    }
+    this.notify(m.roomId);
+  }
+
+  /**
+   * Cặp đấu đã bị xóa (đặt lại phần thi đấu) hoặc đã gắn trận khác (thi lại vòng/khiếu nại) → hủy trận này để không
+   * chạy ván vô ích và không tranh kết quả với trận mới. Trả true nếu đã hủy / không cần xử lý tiếp.
+   */
+  private async cancelIfStale(matchId: string): Promise<boolean> {
+    const m = await this.repo.find(matchId);
+    if (!m || !m.pairId || !['selecting', 'running', 'paused'].includes(m.status)) return false;
+    let stale = false;
+    try {
+      const a = await this.competition.assignment(m.pairId);
+      stale = a.matchId !== m.id;
+    } catch (e) {
+      if (!(e instanceof AppError && e.code === 'NOT_FOUND')) throw e;
+      stale = true;
+    }
+    if (!stale) return false;
+    await this.prisma.match.updateMany({
+      where: { id: m.id, status: { in: ['selecting', 'running', 'paused'] } },
+      data: {
+        status: 'cancelled',
+        deadlineAt: null,
+        reportedAt: new Date(),
+        pauseReason: 'Cặp đấu đã được đặt lại hoặc thi lại; trận này không còn hiệu lực.',
+      },
+    });
+    this.log.log(`Hủy trận ${m.id}: cặp đấu không còn gắn với trận.`);
+    this.notify(m.roomId);
+    return true;
+  }
+
+  /** Tóm tắt các phòng của cặp đang chờ thi trong giải (cho bảng điều hành BTC). */
+  async summary(tournamentId: string) {
+    const pairs = await this.competition.pairAssignments(tournamentId);
+    const ids = pairs.map((p) => p.matchId).filter((x): x is string => !!x);
+    const matches = await this.repo.statuses(ids);
+    const count = (st: string) => matches.filter((m) => m.status === st).length;
+    return {
+      pending: pairs.length,
+      notOpened: pairs.length - ids.length,
+      selecting: count('selecting'),
+      running: count('running'),
+      paused: count('paused'),
+      completed: count('completed'),
+    };
   }
 
   /** Tín hiệu từ worker cho một phòng: thử chuyển trạng thái trận đang chạy trong phòng đó. */
   async advanceRoom(roomId: string): Promise<void> {
-    const m = await this.repo.latestOfRoom(roomId);
-    if (m && m.status === 'running') await this.advance(m.id);
+    if (this.roomChecks.has(roomId)) return;
+    this.roomChecks.add(roomId);
+    try {
+      const m = await this.repo.latestOfRoom(roomId);
+      if (!m || m.status !== 'running') return;
+      // Worker báo tín hiệu ở MỖI nước; chỉ xử lý khi ván mới nhất đã xong hoặc lỗi.
+      const last = m.games.at(-1);
+      if (last && (last.status === 'finished' || last.status === 'failed')) await this.advance(m.id);
+    } finally {
+      this.roomChecks.delete(roomId);
+    }
   }
 
   // ================================================================== xem
