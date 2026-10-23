@@ -145,7 +145,7 @@ export function MyBotsPage() {
         <Card>
           <CardHeader
             title="Phiên bản đã nộp"
-            subtitle="Mỗi phiên bản bất biến, định danh bằng mã băm SHA-256 chống sửa đổi."
+            subtitle="Mỗi phiên bản là bất biến: muốn sửa, nộp phiên bản mới."
           />
           <Table
             label="Danh sách phiên bản bot"
@@ -175,13 +175,6 @@ export function MyBotsPage() {
                   <Badge tone={STATUS[b.status].tone} dot>
                     {STATUS[b.status].label}
                   </Badge>
-                ),
-              },
-              {
-                key: 'hash',
-                header: 'Mã băm SHA-256',
-                cell: (b) => (
-                  <span className="font-mono text-xs text-ink-muted">{b.sourceHash.slice(0, 14)}…</span>
                 ),
               },
               {
@@ -248,8 +241,6 @@ export function MyBotsPage() {
               </dd>
               <dt className="text-ink-muted">Tạo lúc:</dt>
               <dd>{new Date(selectedBot.createdAt).toLocaleString('vi-VN')}</dd>
-              <dt className="text-ink-muted">SHA-256 đầy đủ:</dt>
-              <dd className="break-all font-mono text-xs text-accent">{selectedBot.sourceHash}</dd>
             </dl>
 
             {sourceQuery.isLoading && <Spinner label="Đang tải mã nguồn..." />}
