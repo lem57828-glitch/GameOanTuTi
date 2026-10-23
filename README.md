@@ -26,6 +26,21 @@ Giữ cả hai terminal chạy trong lúc sử dụng. Worker xử lý cả bot 
 
 Nếu cổng báo đang được sử dụng, dừng bản chạy cũ trước khi mở thêm. Cổng thực tế đọc từ `WEB_PORT` và `API_PORT` trong `.env`.
 
+## Cập nhật sau khi pull hoặc merge
+
+Dừng API/worker cũ, bật database và Redis, rồi chạy ở thư mục gốc:
+
+```powershell
+pnpm install --frozen-lockfile
+pnpm db:generate
+pnpm db:migrate
+pnpm --filter @arena/game-engine... build
+```
+
+Sau đó mở lại `pnpm dev` và `pnpm dev:worker`. Không cần reset database. Chỉ generate Prisma Client không tạo bảng/cột trong database; thiếu migration có thể khiến đăng ký/gửi mã xác minh hoặc nộp bot báo 500.
+
+Mã đăng ký qua email thật cần `MAIL_TRANSPORT=smtp` và cấu hình SMTP hợp lệ. `MAIL_TRANSPORT=local` chỉ lưu thư để kiểm thử, không gửi ra hộp thư.
+
 ## Cài đặt lần đầu
 
 Cần Node.js **24.x** (bản ghim trong `.nvmrc`), pnpm **9.15.4**, Python **>=3.10**, PostgreSQL và Redis. Để chạy bot trong môi trường cách ly, cần Docker hoặc Podman với Linux containers.
