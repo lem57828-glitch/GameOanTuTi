@@ -2,7 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useRef } from 'react';
 import { Alert, Badge, Button, Card, CardHeader, Dialog, EmptyState, Input, Spinner, Table } from '@arena/ui';
-import type { BotSourceDetail, BotVersion, TestRunDetail } from '@arena/contracts';
+import type { BotSourceDetail, BotVersion, PieceType, TestRunDetail } from '@arena/contracts';
 import { api } from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { TestRunReplay } from './TestRunReplay';
@@ -33,6 +33,7 @@ export function MyBotsPage() {
   // State cho Đấu thử (TV2 - Gói việc 4)
   const [testRunBot, setTestRunBot] = useState<BotVersion | null>(null);
   const [opponentPolicy, setOpponentPolicy] = useState('greedy');
+  const [extraType, setExtraType] = useState<PieceType>('PAPER');
   const [activeTestRunId, setActiveTestRunId] = useState<string | null>(null);
 
   const testRunQuery = useQuery({
@@ -54,6 +55,7 @@ export function MyBotsPage() {
           opponentType: 'demo',
           opponentTarget: opponentPolicy,
           mySide: 'blue',
+          extraType,
         },
       }),
     onSuccess: (data) => {
@@ -415,6 +417,23 @@ export function MyBotsPage() {
                     <option value="greedy">Bot Tham ăn (Greedy - ưu tiên ăn quân)</option>
                     <option value="rusher">Bot Lao đích (Rusher - phi thẳng về đích)</option>
                   </select>
+                </div>
+
+                <div>
+                  <label htmlFor="practice-extra-piece" className="text-sm font-semibold text-ink">
+                    Quân thứ 10 của đội bạn:
+                  </label>
+                  <select
+                    id="practice-extra-piece"
+                    className="mt-1 w-full rounded border border-line bg-surface p-2 text-sm text-ink"
+                    value={extraType}
+                    onChange={(e) => setExtraType(e.target.value as PieceType)}
+                  >
+                    <option value="ROCK">Búa — 4 Búa, 3 Bao, 3 Kéo</option>
+                    <option value="PAPER">Bao — 3 Búa, 4 Bao, 3 Kéo</option>
+                    <option value="SCISSORS">Kéo — 3 Búa, 3 Bao, 4 Kéo</option>
+                  </select>
+                  <p className="mt-1 text-xs text-ink-muted">Đối thủ mẫu giữ quân thứ 10 là Bao.</p>
                 </div>
 
                 <div className="rounded border border-line bg-surface-2 p-3 text-xs text-ink-muted">
