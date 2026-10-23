@@ -1,6 +1,6 @@
 import { REGISTRATION_CODE_TTL_SECONDS } from '@arena/contracts';
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { ProfileUpdateRequest, CompleteRegistrationRequest, z } from '@arena/contracts';
 import { APP_CONFIG, type AppConfig } from '../../core/config.js';
@@ -12,6 +12,7 @@ import { MailService } from './mail.service.js';
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
 @Injectable()
 export class IdentityService {
+  private readonly log = new Logger('Identity');
   constructor(
     private readonly db: PrismaService,
     private readonly mail: MailService,
@@ -67,6 +68,19 @@ export class IdentityService {
       );
     } catch (error) {
       if (error instanceof AppError) throw error;
+      // Log a stable diagnostic without exposing the email, OTP, credentials or SQL parameters.
+      const code =
+        error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+          ? error.code
+          : error instanceof Error && /^SMTP_[A-Z_]+$/.test(error.message)
+            ? error.message
+            : 'UNKNOWN';
+      this.log.error(
+        `Registration code failed (${code}). ` +
+          (code === 'P2021' || code === 'P2022'
+            ? 'Database schema is outdated; run pnpm db:migrate and restart the API.'
+            : 'Check database availability and SMTP configuration.'),
+      );
       throw new AppError(
         'INTERNAL_ERROR',
         'Không gửi được mã xác minh. Vui lòng thử lại sau hoặc liên hệ BTC.',
