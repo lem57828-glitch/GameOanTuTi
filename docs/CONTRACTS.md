@@ -16,6 +16,7 @@ Prefix `/api/v1`. Thành công `{ data, meta? }`; lỗi `{ error: { code, messag
 | GET dev/accounts / POST dev/session | Chỉ development/test + DEMO_MODE; body accountId                                                   |
 | GET teams/mine                      | Sinh viên xem đội của mình                                                                         |
 | GET bots?teamId=                    | Sinh viên chỉ đội mình; BTC/trọng tài xem các đội; không có source                                 |
+| DELETE bots/:id                     | Thành viên đội (hoặc BTC) xóa phiên bản kèm lượt đấu thử; bot mô phỏng 403; bot đã vào bộ bot/trận chính thức 409 |
 | GET tournaments/current             | Giải hiện tại và danh sách stage công khai                                                         |
 | GET rooms / rooms/:id               | Danh sách phòng / RoomSnapshot công khai                                                           |
 | GET games/:id/events?afterSeq=0     | Replay sự kiện bền vững, seq tăng dần                                                              |

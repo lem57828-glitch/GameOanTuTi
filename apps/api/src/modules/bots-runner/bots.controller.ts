@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
 
 import { Id, z, type SessionUser } from '@arena/contracts';
 import { Authenticated, CurrentUser, Roles } from '../../core/auth/guards.js';
@@ -84,6 +84,13 @@ export class BotsController {
   async source(@CurrentUser() user: SessionUser, @Param('id') id: string) {
     const detail = await this.bots.getBotSource(user, parse(Id, id));
     return ok(detail);
+  }
+
+  /** Xóa một phiên bản bot không dùng nữa (kèm các lượt đấu thử). Bot đã thi đấu chính thức được giữ lại. */
+  @Delete('bots/:id')
+  @Authenticated()
+  async remove(@CurrentUser() user: SessionUser, @Param('id') id: string) {
+    return ok(await this.bots.deleteBot(user, parse(Id, id)));
   }
 
   // ---- Đấu thử trong sandbox (TV2 - Gói việc 4)

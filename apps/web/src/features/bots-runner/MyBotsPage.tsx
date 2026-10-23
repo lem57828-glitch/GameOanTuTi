@@ -30,6 +30,17 @@ export function MyBotsPage() {
     enabled: !!selectedBot,
   });
 
+  // Xóa phiên bản không dùng nữa: hỏi xác nhận; máy chủ từ chối nếu bot đã vào bộ bot/thi đấu chính thức.
+  const [deleteBot, setDeleteBot] = useState<BotVersion | null>(null);
+  const deleteMutation = useMutation({
+    mutationFn: (botId: string) => api<{ id: string; testRuns: number }>(`/bots/${botId}`, { method: 'DELETE' }),
+    onSuccess: (_, botId) => {
+      setDeleteBot(null);
+      if (selectedBot?.id === botId) setSelectedBot(null);
+      void queryClient.invalidateQueries({ queryKey: ['bots'] });
+    },
+  });
+
   // State cho Đấu thử (TV2 - Gói việc 4)
   const [testRunBot, setTestRunBot] = useState<BotVersion | null>(null);
   const [opponentPolicy, setOpponentPolicy] = useState('greedy');
@@ -218,6 +229,17 @@ export function MyBotsPage() {
                     >
                       Chi tiết & Code
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => {
+                        deleteMutation.reset();
+                        setDeleteBot(b);
+                      }}
+                      aria-label={`Xóa v${b.version}`}
+                    >
+                      Xóa
+                    </Button>
                   </div>
                 ),
               },
@@ -286,6 +308,40 @@ export function MyBotsPage() {
             )}
           </div>
         )}
+      </Dialog>
+
+      {/* Dialog xác nhận xóa phiên bản bot */}
+      <Dialog
+        open={!!deleteBot}
+        onOpenChange={(o) => !o && setDeleteBot(null)}
+        title={deleteBot ? `Xóa phiên bản v${deleteBot.version} — ${deleteBot.label}?` : ''}
+        description="Mã nguồn và các lượt đấu thử của phiên bản này bị xóa vĩnh viễn, không khôi phục được."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDeleteBot(null)}>
+              Hủy
+            </Button>
+            <Button
+              variant="danger"
+              loading={deleteMutation.isPending}
+              onClick={() => deleteBot && deleteMutation.mutate(deleteBot.id)}
+            >
+              Xóa vĩnh viễn
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3 text-sm">
+          <p className="text-ink-muted">
+            Bot đã được chọn vào bộ bot của một giai đoạn hoặc đã thi đấu chính thức sẽ không xóa được (giữ lại để xem
+            lại ván và giải quyết kháng nghị). Nên tải hoặc sao chép mã trước nếu còn cần.
+          </p>
+          {deleteMutation.error && (
+            <Alert tone="error" title="Không xóa được">
+              {(deleteMutation.error as Error).message}
+            </Alert>
+          )}
+        </div>
       </Dialog>
 
       {/* Dialog nộp phiên bản bot mới */}
