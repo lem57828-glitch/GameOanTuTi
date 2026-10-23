@@ -2,10 +2,14 @@
 // Không xóa dữ liệu nào — xóa sạch chỉ có trong `pnpm db:reset` (prisma/reset.ts), cần xác nhận rõ.
 // Tất cả bản ghi gắn isDemo = true; không dùng để kết luận hệ thống đủ điều kiện tổ chức thi thật.
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { STANDARD_RULESET, STANDARD_RULESET_ID, countPieces, simulate } from '@arena/game-engine';
 
 const prisma = new PrismaClient();
+// Chạy seed với cwd = apps/api (pnpm db:seed).
+const SAMPLE_BOTS = join(process.cwd(), 'prisma', 'sample-bots');
 
 const TOURNAMENT = 'tour_demo';
 const ACCOUNTS = [
@@ -140,10 +144,13 @@ async function main(): Promise<void> {
       },
     });
   }
+  await seedPythonBots();
   await prisma.room.upsert({ where: { id: ROOM.id }, update: {}, create: { ...ROOM, isDemo: true } });
 
   await seedFinishedGame();
-  console.log('Seed xong: 7 tài khoản mẫu, 2 đội, 4 phiên bản bot, 1 phòng, 1 ván mẫu đã kết thúc.');
+  console.log(
+    'Seed xong: 7 tài khoản mẫu, 2 đội, 6 phiên bản bot (2 bot Python có mã nguồn), 1 phòng, 1 ván mẫu đã kết thúc.',
+  );
 }
 
 /** Một ván mẫu đã chạy xong (job, lần thử, sự kiện, kết quả) để các trang có dữ liệu ngay sau khi seed. */
@@ -286,6 +293,55 @@ async function seedFinishedGame(): Promise<void> {
       data: { currentGameId: SEED_GAME.id, status: 'finished' },
     });
   });
+}
+
+/**
+ * Bot Python mẫu CÓ MÃ NGUỒN cho đội Alpha/Beta, để đăng nhập thí sinh mẫu là xem, chạy thử và "sửa"
+ * (nộp phiên bản mới từ mã cũ) được ngay. Mã nằm ở prisma/sample-bots/*.py. Đây là bot thật chạy trong sandbox
+ * (isDemo = false), khác bot mô phỏng dựng sẵn trong engine. Chỉ tạo khi chưa có; không đè phiên bản đội đã nộp.
+ */
+async function seedPythonBots(): Promise<void> {
+  const samples = [
+    {
+      id: 'bot_alpha_py',
+      teamId: 'team_alpha',
+      file: 'tham_an.py',
+      label: 'Alpha — Python mẫu "Tham ăn"',
+      submittedById: 'acc_an',
+    },
+    {
+      id: 'bot_beta_py',
+      teamId: 'team_beta',
+      file: 'than_trong.py',
+      label: 'Beta — Python mẫu "Thận trọng"',
+      submittedById: 'acc_chi',
+    },
+  ];
+  for (const b of samples) {
+    if (await prisma.botVersion.findUnique({ where: { id: b.id } })) continue;
+    // Chuẩn hóa xuống dòng kiểu Unix để mã băm giống nhau trên mọi máy.
+    const sourceCode = readFileSync(join(SAMPLE_BOTS, b.file), 'utf8').split('\r\n').join('\n');
+    const last = await prisma.botVersion.findFirst({
+      where: { teamId: b.teamId },
+      orderBy: { version: 'desc' },
+    });
+    await prisma.botVersion.create({
+      data: {
+        id: b.id,
+        teamId: b.teamId,
+        version: (last?.version ?? 0) + 1,
+        label: b.label,
+        sourceCode,
+        sourceHash: sha256(sourceCode.trim()),
+        submittedById: b.submittedById,
+        rulesetId: STANDARD_RULESET_ID,
+        status: 'valid',
+        validationLog:
+          'Bot mẫu của hệ thống (seed): đã chạy thử trọn một ván với engine chuẩn, không có nước sai.',
+        isDemo: false,
+      },
+    });
+  }
 }
 
 main()

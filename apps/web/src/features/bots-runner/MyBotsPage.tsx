@@ -102,6 +102,17 @@ export function MyBotsPage() {
     reader.readAsText(file);
   };
 
+  /** "Sửa" bot: phiên bản bất biến nên mở form nộp phiên bản MỚI, điền sẵn mã của phiên bản đang xem. */
+  const handleEditAsNew = () => {
+    if (!selectedBot || !sourceQuery.data) return;
+    setSubmitTeamId(selectedBot.teamId);
+    setLabel(`${selectedBot.label} (sửa từ v${selectedBot.version})`);
+    setSourceCode(sourceQuery.data.sourceCode);
+    setSelectedBot(null);
+    setSubmitError(null);
+    setSubmitOpen(true);
+  };
+
   const handleOpenSubmit = () => {
     if (!user?.teamId && !staff) {
       alert('Bạn cần tham gia hoặc tạo một đội để có thể nộp bot.');
@@ -269,6 +280,9 @@ export function MyBotsPage() {
                     >
                       Sao chép mã
                     </Button>
+                    <Button size="sm" variant="secondary" onClick={handleEditAsNew}>
+                      Sửa thành phiên bản mới
+                    </Button>
                   </div>
                   <pre className="max-h-72 overflow-auto rounded border border-line bg-surface p-3 font-mono text-xs text-ink">
                     {sourceQuery.data.sourceCode}
@@ -352,7 +366,7 @@ export function MyBotsPage() {
               </div>
             </div>
             <textarea
-              className="h-48 w-full rounded border border-line bg-surface p-3 font-mono text-xs text-ink focus:border-accent focus:outline-none"
+              className="h-80 w-full rounded border border-line bg-surface p-3 font-mono text-xs text-ink focus:border-accent focus:outline-none"
               placeholder={`# Nhập hoặc dán code Python vào đây\ndef make_move(state):\n    # Viết logic chiến thuật của bạn tại đây\n    return {"from": "A1", "to": "B2"}`}
               value={sourceCode}
               onChange={(e) => setSourceCode(e.target.value)}
