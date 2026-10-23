@@ -42,7 +42,9 @@ export interface Replay {
   setSpeed: (ms: number) => void;
 }
 
-export function useReplay(s: RoomSnapshot | null): Replay {
+export type ReplaySource = Pick<RoomSnapshot, 'streamId' | 'history' | 'status' | 'initialBoard' | 'board'>;
+
+export function useReplay(s: ReplaySource | null): Replay {
   const streamId = s?.streamId ?? null;
   const history = useMemo(() => s?.history ?? [], [s?.history]);
   const total = history.length;

@@ -5,6 +5,7 @@ import { Alert, Badge, Button, Card, CardHeader, Dialog, EmptyState, Input, Spin
 import type { BotSourceDetail, BotVersion, TestRunDetail } from '@arena/contracts';
 import { api } from '../../lib/api';
 import { useSession } from '../../lib/session';
+import { TestRunReplay } from './TestRunReplay';
 
 const STATUS: Record<BotVersion['status'], { label: string; tone: 'neutral' | 'success' | 'danger' }> = {
   pending: { label: 'Chờ kiểm thử', tone: 'neutral' },
@@ -386,6 +387,7 @@ export function MyBotsPage() {
           }
         }}
         title={testRunBot ? `Đấu thử: ${testRunBot.label} (v${testRunBot.version})` : 'Đấu thử'}
+        className="max-w-3xl"
         description="Chạy một ván đấu thử nghiệm độc lập trong Sandbox Worker mà không tính điểm giải đấu."
       >
         {testRunBot && (
@@ -492,11 +494,12 @@ export function MyBotsPage() {
                           )}
                         </div>
 
+                        <TestRunReplay key={testRunQuery.data.id} run={testRunQuery.data} />
+
                         {testRunQuery.data.events && testRunQuery.data.events.length > 0 && (
                           <div>
                             <span className="text-xs font-semibold text-ink-muted">
-                              Nhật ký diễn biến ván đấu ({testRunQuery.data.events.length} sự kiện bàn giao
-                              TV4):
+                              Nhật ký diễn biến ván đấu ({testRunQuery.data.events.length} sự kiện):
                             </span>
                             <div className="mt-1 max-h-48 overflow-auto rounded border border-line bg-surface p-2 font-mono text-xs text-ink">
                               {testRunQuery.data.events.map((ev) => (
