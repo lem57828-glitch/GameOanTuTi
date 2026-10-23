@@ -1,0 +1,33 @@
+{
+  "measuredAt": "2026-10-23T08:28:40.043Z",
+  "hostname": "Jiddy",
+  "cpu": "AMD Ryzen 7 5800H with Radeon Graphics         ",
+  "logicalCpus": 16,
+  "hostRamBytes": 16487870464,
+  "runtime": "C:/Users/Admin/AppData/Local/Programs/Podman/podman.exe",
+  "image": "docker.io/library/python:3.12",
+  "mode": "docker",
+  "workload": "Two persistent greedy Python bots, full standard rules, independent extra types. Runner-only measurement; excludes queue/database/network. No multi-machine extrapolation.",
+  "results": [
+    {
+      "concurrency": 1,
+      "samples": 4,
+      "maxPlies": 200,
+      "plies": 344,
+      "elapsedMs": 9403.4688,
+      "meanMs": 2350.84305,
+      "p95Ms": 2977.6348,
+      "gamesPerMinute": 25.522496549358465
+    },
+    {
+      "concurrency": 2,
+      "samples": 4,
+      "maxPlies": 200,
+      "plies": 344,
+      "elapsedMs": 4611.7384999999995,
+      "meanMs": 2286.94465,
+      "p95Ms": 2432.2605000000003,
+      "gamesPerMinute": 52.041112044839494
+    }
+  ]
+}

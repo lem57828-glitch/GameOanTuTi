@@ -1,5 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { fetchGithubSource } from './github-source.js';
+import { eligibleForCompetition, submissionMethod } from './submission-policy.js';
 import { createStandardBoard, STANDARD_RULESET_ID, STANDARD_LIMITS } from '@arena/game-engine';
 // TV2 — interface công khai của module bot & runner: phiên bản bot, job chạy ván, hàng đợi, sức khỏe worker.
 import { execFile } from 'node:child_process';
@@ -95,6 +96,7 @@ export class BotsRunnerService implements OnApplicationBootstrap, OnModuleDestro
         sourceHash: b.sourceHash,
         rulesetId: b.rulesetId,
         status: BotVersionStatus.parse(b.status),
+        submissionMethod: submissionMethod(b),
         duplicateOfId: b.duplicateOfId,
         createdAt: b.createdAt.toISOString(),
       }),
@@ -232,6 +234,7 @@ except (SyntaxError, ValueError) as e:
       sourceHash: bot.sourceHash,
       rulesetId: bot.rulesetId,
       status: BotVersionStatus.parse(bot.status),
+      submissionMethod: submissionMethod(bot),
       duplicateOfId: bot.duplicateOfId,
       createdAt: bot.createdAt.toISOString(),
     });
@@ -273,10 +276,13 @@ except (SyntaxError, ValueError) as e:
   async deleteBot(user: SessionUser, botId: string): Promise<{ id: string; testRuns: number }> {
     const bot = await this.repo.findBotVersion(botId);
     if (!bot) throw notFound('Phiên bản bot');
-    if (user.role !== 'admin' && bot.teamId !== user.teamId) throw forbidden('Bạn chỉ có thể xóa bot của đội mình.');
+    if (user.role !== 'admin' && bot.teamId !== user.teamId)
+      throw forbidden('Bạn chỉ có thể xóa bot của đội mình.');
     if (bot.isDemo) throw forbidden('Bot mô phỏng của hệ thống không xóa được.');
     const { testRuns } = await this.repo.deleteBotVersion(bot.id, bot.teamId);
-    this.log.log(`Đã xóa Bot v${bot.version} của đội ${bot.teamId} (${testRuns} lượt đấu thử) theo yêu cầu của ${user.id}`);
+    this.log.log(
+      `Đã xóa Bot v${bot.version} của đội ${bot.teamId} (${testRuns} lượt đấu thử) theo yêu cầu của ${user.id}`,
+    );
     return { id: bot.id, testRuns };
   }
 
@@ -288,7 +294,7 @@ except (SyntaxError, ValueError) as e:
     if (!staff && (user.teamId !== team.id || team.captainId !== user.id))
       throw forbidden('Chỉ đội trưởng được chọn bộ bot.');
     if (lock && !staff) throw forbidden('Chỉ BTC được chốt bộ bot sớm.');
-    const row = await this.repo.saveSelection(team.id, stageId, input.botVersionIds, lock);
+    const row = await this.repo.saveSelection(team.id, stageId, input.botVersionIds, lock, this.cfg.demoMode);
     return BotSelectionView.parse({ ...row, updatedAt: row.updatedAt.toISOString() });
   }
   async selection(user: SessionUser, teamId: string, stageId: string) {
@@ -304,7 +310,9 @@ except (SyntaxError, ValueError) as e:
     teamId: string,
     stageId: string | null,
   ): Promise<{ locked: boolean; bots: Array<{ id: string; label: string; version: number }> }> {
-    const valid = (await this.repo.listBots(teamId)).filter((b) => b.status === 'valid');
+    const valid = (await this.repo.listBots(teamId)).filter(
+      (b) => b.status === 'valid' && eligibleForCompetition(b, this.cfg.demoMode),
+    );
     const sel = stageId ? await this.repo.selection(teamId, stageId) : null;
     const pick = (b: { id: string; label: string; version: number }) => ({
       id: b.id,
@@ -325,6 +333,13 @@ except (SyntaxError, ValueError) as e:
   async lockedBotIds(teamId: string, stageId: string): Promise<string[]> {
     const row = await this.repo.selection(teamId, stageId);
     if (!row?.locked) throw validationError('Bộ bot chưa khóa.');
+    const eligible = (await this.repo.listBots(teamId)).filter(
+      (bot) => bot.status === 'valid' && eligibleForCompetition(bot, this.cfg.demoMode),
+    );
+    if (row.botVersionIds.some((id) => !eligible.some((bot) => bot.id === id)))
+      throw validationError(
+        'Bộ bot đã khóa có phiên bản không đủ điều kiện. Hãy dùng bot GitHub hợp lệ cho thi chính thức.',
+      );
     return row.botVersionIds;
   }
   async diagnostics(user: SessionUser, gameId: string) {

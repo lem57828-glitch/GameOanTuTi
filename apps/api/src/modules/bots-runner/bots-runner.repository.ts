@@ -2,6 +2,7 @@ import { conflict, forbidden, notFound, validationError } from '../../core/error
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService, type Tx } from '../../core/prisma.service.js';
+import { eligibleForCompetition } from './submission-policy.js';
 
 @Injectable()
 export class BotsRunnerRepository {
@@ -32,7 +33,8 @@ export class BotsRunnerRepository {
       ]);
       if (choices || selections)
         throw conflict('Bot đã thi đấu trong giải nên được giữ lại để xem lại ván và giải quyết kháng nghị.');
-      if (stages) throw conflict('Bot đang nằm trong bộ bot đã chọn cho một giai đoạn. Bỏ bot khỏi bộ trước khi xóa.');
+      if (stages)
+        throw conflict('Bot đang nằm trong bộ bot đã chọn cho một giai đoạn. Bỏ bot khỏi bộ trước khi xóa.');
       const runs = await tx.botTestRun.deleteMany({ where: { botVersionId: id } });
       await tx.botVersion.delete({ where: { id } });
       return { testRuns: runs.count };
@@ -92,7 +94,13 @@ export class BotsRunnerRepository {
     });
   }
 
-  async saveSelection(teamId: string, stageId: string, botVersionIds: string[], lock: boolean) {
+  async saveSelection(
+    teamId: string,
+    stageId: string,
+    botVersionIds: string[],
+    lock: boolean,
+    demoMode = false,
+  ) {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Stage" WHERE id = ${stageId} FOR UPDATE`;
       const stage = await tx.stage.findUnique({ where: { id: stageId } });
@@ -102,13 +110,12 @@ export class BotsRunnerRepository {
       const current = await tx.botStageSelection.findUnique({
         where: { teamId_stageId: { teamId, stageId } },
       });
-      if (
+      const frozen = Boolean(
         current?.locked ||
-        (current?.freezeAt && current.freezeAt <= new Date()) ||
-        (stage.lockAt && stage.lockAt <= new Date())
-      ) {
-        if (current && current.botVersionIds.join('|') === botVersionIds.join('|'))
-          return { ...current, locked: true };
+          (current?.freezeAt && current.freezeAt <= new Date()) ||
+          (stage.lockAt && stage.lockAt <= new Date()),
+      );
+      if (frozen && (!current || current.botVersionIds.join('|') !== botVersionIds.join('|'))) {
         throw conflict('Bộ bot của giai đoạn đã khóa.');
       }
       if (stage.kind === 'qualifier' && botVersionIds.length !== 1)
@@ -117,6 +124,11 @@ export class BotsRunnerRepository {
         where: { id: { in: botVersionIds }, teamId, status: 'valid' },
       });
       if (bots.length !== botVersionIds.length) throw validationError('Chỉ chọn bot hợp lệ thuộc đội.');
+      if (bots.some((bot) => !eligibleForCompetition(bot, demoMode)))
+        throw validationError(
+          'Thi chính thức phải dùng bot nộp qua GitHub với commit SHA cố định. Bot tải file/dán code chỉ dùng tập luyện.',
+        );
+      if (frozen && current) return { ...current, locked: true };
       return tx.botStageSelection.upsert({
         where: { teamId_stageId: { teamId, stageId } },
         create: { teamId, stageId, botVersionIds, locked: lock, freezeAt: stage.lockAt },
