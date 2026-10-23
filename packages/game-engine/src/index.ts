@@ -3,12 +3,29 @@
 //
 // TV2 — Gói việc 2: Bàn cờ 9x9, 10 quân xuất phát (chuẩn hóa quân thứ 10),
 // luật lặp thế cờ 3 lần (threefold repetition), luật 200 nước, và chuẩn hóa dữ liệu cho bot Python.
-import type { Board, MoveRecord, PieceType, Side } from '@arena/contracts';
+import {
+  Board as BoardSchema,
+  PieceType as PieceTypeSchema,
+  type Board,
+  type MoveRecord,
+  type PieceType,
+  type Side,
+} from '@arena/contracts';
 
 export const DEMO_RULESET_ID = 'demo-ottv2-0';
 export const STANDARD_RULESET_ID = 'standard-32-4';
 export const COLS = 'ABCDEFGHI';
 export const SIZE = 9;
+export const STANDARD_MAX_PLIES = 200;
+export const STANDARD_LIMITS = {
+  cpuMsPerMove: 200,
+  wallMsPerMove: 1000,
+  startupMs: 3000,
+  maxPlies: STANDARD_MAX_PLIES,
+  maxErrorsPerGame: 3,
+} as const;
+const copyBoard = (board: Board): Board =>
+  Object.fromEntries(Object.entries(board).map(([sq, piece]) => [sq, { ...piece }]));
 
 export interface Ruleset {
   id: string;
@@ -35,10 +52,9 @@ export function parseSquare(s: string): [number, number] | null {
  *   + Khối trung tâm 2x2: B2, C2, B3, C3 (4 ô chứa quân tùy chọn thứ 10)
  * - Phe Hồng: Đối xứng tâm qua ô E5 (Hàng 9, Cột I, và Khối trung tâm G7, H7, G8, H8)
  */
-export function createStandardBoard(
-  blueExtra: PieceType = 'PAPER',
-  pinkExtra: PieceType = 'PAPER',
-): Board {
+export function createStandardBoard(blueExtra: PieceType = 'PAPER', pinkExtra: PieceType = 'PAPER'): Board {
+  PieceTypeSchema.parse(blueExtra);
+  PieceTypeSchema.parse(pinkExtra);
   const board: Board = {};
 
   // Hàm phụ trợ gán 10 quân cho một bên
@@ -149,6 +165,7 @@ export interface GameState {
   ply: number;
   maxPlies: number;
   history: MoveRecord[];
+  end?: GameEnd | null;
   /** Bộ đếm tần suất xuất hiện của các thế cờ để phát hiện lặp lại lần thứ 3 (Threefold Repetition). */
   repetitionHistory?: string[];
 }
@@ -178,7 +195,13 @@ export function getBoardSignature(board: Board, toMove: Side): string {
 }
 
 export function newGame(rules: Ruleset, maxPlies = 200): GameState {
-  const initBoard = { ...rules.setup };
+  if (
+    !Number.isInteger(maxPlies) ||
+    maxPlies < 1 ||
+    maxPlies > (rules.id === STANDARD_RULESET_ID ? STANDARD_MAX_PLIES : 2000)
+  )
+    throw new Error('Giới hạn nước không hợp lệ.');
+  const initBoard = copyBoard(BoardSchema.parse(rules.setup));
   const sig = getBoardSignature(initBoard, 'blue');
   return {
     rulesetId: rules.id,
@@ -187,6 +210,7 @@ export function newGame(rules: Ruleset, maxPlies = 200): GameState {
     ply: 0,
     maxPlies,
     history: [],
+    end: null,
     repetitionHistory: [sig],
   };
 }
@@ -234,10 +258,11 @@ export function applyMove(
   state: GameState,
   move: { from: string; to: string },
 ): { state: GameState; end: GameEnd | null; record: MoveRecord } {
+  if (state.end) throw new Error('Ván đã kết thúc, không thể đi thêm.');
   const legal = legalMoves(rules, state).find((m) => m.from === move.from && m.to === move.to);
   if (!legal) throw new Error(`Nước không hợp lệ: ${move.from}-${move.to}`);
   const side = state.toMove;
-  const board = { ...state.board };
+  const board = copyBoard(state.board);
   const piece = board[legal.from]!;
   delete board[legal.from];
   board[legal.to] = piece;
@@ -265,7 +290,9 @@ export function applyMove(
     repetitionHistory: repHistory,
   };
 
-  return { state: next, end: checkEnd(rules, next, side), record };
+  const end = checkEnd(rules, next, side);
+  next.end = end;
+  return { state: next, end, record };
 }
 
 /**
@@ -325,6 +352,12 @@ export function replay(
 // ---------------------------------------------------------------- Giao diện chuẩn cho Bot Python (TV2)
 
 export interface PythonBotState {
+  seed?: number;
+  protocol_version?: 1;
+  ruleset_id?: string;
+  board_size?: number;
+  goals?: Record<Side, string>;
+  max_plies?: number;
   my_side: Side;
   turn: number;
   ply: number;
@@ -340,13 +373,18 @@ export interface PythonBotState {
  */
 export function toPythonState(rules: Ruleset, state: GameState, side: Side = state.toMove): PythonBotState {
   return {
+    protocol_version: 1,
+    ruleset_id: rules.id,
+    board_size: SIZE,
+    goals: { ...rules.goals },
+    max_plies: state.maxPlies,
     my_side: side,
     turn: Math.floor(state.ply / 2) + 1,
     ply: state.ply,
-    board: { ...state.board },
+    board: copyBoard(state.board),
     pieces_left: countPieces(state.board),
     legal_moves: legalMoves(rules, state, side),
-    last_move: state.history[state.history.length - 1] ?? null,
+    last_move: state.history.length ? { ...state.history[state.history.length - 1]! } : null,
   };
 }
 

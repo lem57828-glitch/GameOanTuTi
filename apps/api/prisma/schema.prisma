@@ -27,6 +27,11 @@ model Account {
   role         Role         @default(student)
   status       String       @default("active") // active | disabled
   // Đăng nhập thật (TV1, sau M0). Tài khoản mẫu không có mật khẩu.
+  studentId    String?      @unique
+  className    String?
+  faculty      String?
+  emailVerifiedAt DateTime?
+  sessionVersion Int @default(0)
   passwordHash String?
   isDemo       Boolean      @default(false)
   createdAt    DateTime     @default(now())
@@ -34,6 +39,7 @@ model Account {
 }
 
 model Team {
+  joinCode     String       @unique @default(dbgenerated("upper(substr(md5((random())::text), 1, 10))"))
   id           String       @id @default(cuid())
   tournamentId String
   name         String
@@ -45,6 +51,7 @@ model Team {
   tournament   Tournament   @relation(fields: [tournamentId], references: [id])
   members      Membership[]
   botVersions  BotVersion[]
+  botSelections BotStageSelection[]
 
   @@unique([tournamentId, nameKey])
 }
@@ -69,9 +76,14 @@ model BotVersion {
   version    Int
   label      String
   sourceHash String // sha256 nội dung mã đã lưu; phiên bản bất biến
+  githubRepo String?
+  commitSha String?
+  sourcePath String?
   sourceCode String? // Toàn văn mã nguồn bot Python được lưu bất biến
   submittedById String? // ID người nộp
   duplicateOfId String? // ID của bot bị trùng lặp mã nguồn (nếu có)
+  validationOwner String?
+  validationLeaseUntil DateTime?
   validationLog String? // Nhật ký kiểm tra tính hợp lệ sơ bộ
   rulesetId  String
   status     String   @default("pending") // pending | valid | invalid
@@ -83,6 +95,8 @@ model BotVersion {
   testRuns   BotTestRun[]
 
   @@unique([teamId, version])
+  @@index([sourceHash])
+  @@index([status, createdAt])
 }
 
 /// TV2 - Gói việc 4: Lưu kết quả đấu thử (Practice Match) trong Sandbox
@@ -91,6 +105,16 @@ model BotTestRun {
   botVersionId   String
   mySide         String      @default("blue") // blue | pink
   opponentType   String      // demo | bot
+  extraType      String      @default("PAPER")
+  opponentExtraType String    @default("PAPER")
+  seed           Int         @default(0)
+  rulesetId      String      @default("standard-32-4")
+  initialBoard   Json?
+  maxPlies       Int         @default(200)
+  attempts       Int         @default(0)
+  leaseOwner     String?
+  leaseUntil     DateTime?
+  updatedAt      DateTime    @updatedAt
   opponentTarget String      // random, greedy, rusher hoặc botVersionId
   status         String      @default("queued") // queued | running | succeeded | failed
   winner         String?     // blue | pink | null
@@ -104,6 +128,19 @@ model BotTestRun {
   createdAt      DateTime    @default(now())
   finishedAt     DateTime?
   botVersion     BotVersion  @relation(fields: [botVersionId], references: [id])
+  @@index([status, updatedAt])
+}
+
+model BotStageSelection {
+  teamId String
+  stageId String
+  team Team @relation(fields: [teamId], references: [id])
+  stage Stage @relation(fields: [stageId], references: [id])
+  botVersionIds String[]
+  locked Boolean @default(false)
+  freezeAt DateTime?
+  updatedAt DateTime @updatedAt
+  @@id([teamId, stageId])
 }
 
 /// Một job logic cho mỗi requestKey. RunAttempt là từng lần thực thi (retry).
@@ -135,6 +172,7 @@ model RunAttempt {
   job        GameJob   @relation(fields: [jobId], references: [id])
 
   @@unique([jobId, attemptNo])
+  diagnostics String?
 }
 
 // ============================================================ TV3 — tournaments
@@ -176,6 +214,8 @@ model Stage {
   endsAt       DateTime?
   lockAt       DateTime?
   tournament   Tournament @relation(fields: [tournamentId], references: [id])
+
+  botSelections BotStageSelection[]
 
   @@unique([tournamentId, ord])
 }
@@ -403,4 +443,84 @@ model OutboxEvent {
   dispatchedAt DateTime?
 
   @@index([status, availableAt])
+}
+
+model AuthToken {
+  id String @id @default(cuid())
+  accountId String
+  kind String
+  tokenHash String @unique
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([accountId, kind])
+}
+
+model TeamInvitation {
+  id String @id @default(cuid())
+  teamId String
+  email String
+  invitedBy String
+  status String @default("pending")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@unique([teamId, email])
+  @@index([email, status])
+}
+
+model Notification {
+  id String @id @default(cuid())
+  accountId String
+  sourceKey String
+  title String
+  body String
+  href String?
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([accountId, sourceKey])
+  @@index([accountId, createdAt])
+}
+
+model EmailMessage {
+  id String @id @default(cuid())
+  to String
+  subject String
+  text String
+  dedupeKey String @unique
+  status String @default("pending")
+  attempts Int @default(0)
+  lastError String?
+  availableAt DateTime @default(now())
+  sentAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([status, availableAt])
+}
+
+model Publication {
+  id String @id @default(cuid())
+  title String
+  body String
+  kind String @default("announcement")
+  linkUrl String?
+  published Boolean @default(false)
+  authorId String
+  revision Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model NotificationCursor {
+  name String @id
+  at DateTime
+  lastId String @default("")
+}
+
+model RegistrationCode {
+  email String @id
+  codeHash String
+  nonce String
+  attempts Int @default(0)
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
 }

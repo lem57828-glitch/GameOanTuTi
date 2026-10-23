@@ -4,6 +4,7 @@ import { z } from 'zod';
 const Env = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DEMO_MODE: z.enum(['true', 'false']).default('false'),
+  BOT_SANDBOX_MODE: z.enum(['docker', 'trusted-local']).default('docker'),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
   QUEUE_PREFIX: z.string().min(1).default('arena'),
@@ -28,11 +29,15 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env) {
     );
   }
   const e = parsed.data;
-  if (e.NODE_ENV === 'production' || e.DEMO_MODE !== 'true') {
-    throw new Error('Worker M0 chỉ chạy mô phỏng trong development/test với DEMO_MODE=true.');
+  if (
+    (e.NODE_ENV === 'production' && (e.DEMO_MODE === 'true' || e.BOT_SANDBOX_MODE !== 'docker')) ||
+    (e.NODE_ENV !== 'production' && e.DEMO_MODE !== 'true')
+  ) {
+    throw new Error('Worker: production cần DEMO_MODE=false và container; demo M0 cần DEMO_MODE=true.');
   }
   return {
     env: e.NODE_ENV,
+    sandboxMode: e.BOT_SANDBOX_MODE,
     databaseUrl: e.DATABASE_URL,
     redisUrl: e.REDIS_URL,
     queuePrefix: e.QUEUE_PREFIX,

@@ -1,83 +1,81 @@
-// TV2 — Gói việc 5: Script đo lường tải & Benchmark Worker Sandbox
 import { performance } from 'node:perf_hooks';
-import type { GameRequest } from '@arena/contracts';
+import { cpus, hostname, totalmem } from 'node:os';
+import { writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { STANDARD_LIMITS, STANDARD_RULESET_ID } from '@arena/game-engine';
 import { SandboxGameRunner } from './runner/sandbox-game-runner.js';
 
-async function runBenchmark(numMatches = 5) {
-  console.log('================================================================');
-  console.log('   BẮT ĐẦU BENCHMARK NĂNG LỰC XỬ LÝ WORKER SANDBOX (TV2)');
-  console.log(`   Số lượng ván đấu mô phỏng: ${numMatches} ván`);
-  console.log('================================================================\n');
-
-  // Khởi tạo Runner với 2 bot Python thực tế
-  const samplePythonBot = `
-def make_move(state):
-    moves = state["legal_moves"]
-    for m in moves:
-        if m.get("capture"):
-            return m
+const samples = Number(process.env.BENCHMARK_SAMPLES ?? 4);
+if (!Number.isInteger(samples) || samples < 2 || samples > 100)
+  throw new Error('BENCHMARK_SAMPLES must be 2..100');
+const bot = `def make_move(state):
+    moves = state['legal_moves']
+    for move in moves:
+        if move.get('capture'): return move
     return moves[0]
 `;
-
-  const runner = new SandboxGameRunner(async (_id) => ({
-    isDemo: false,
-    sourceCode: samplePythonBot,
-  }));
-
-  let totalPlies = 0;
-  const matchTimes: number[] = [];
-
-  const overallStart = performance.now();
-
-  for (let i = 1; i <= numMatches; i++) {
-    const request: GameRequest = {
-      contractVersion: 1,
-      requestKey: `benchmark-req-${i}`,
-      gameId: `benchmark-game-${i}`,
-      choices: {
-        blue: { botVersionId: `bot_bench_blue_${i}`, extraType: 'PAPER' },
-        pink: { botVersionId: `bot_bench_pink_${i}`, extraType: 'PAPER' },
-      },
-      rulesetId: 'standard-32-4',
-      seed: 1000 + i,
-      limits: {
-        cpuMsPerMove: 200,
-        wallMsPerMove: 1000,
-        startupMs: 3000,
-        maxPlies: 60, // Giới hạn 60 nước mỗi ván
-        maxErrorsPerGame: 3,
-      },
-    };
-
-    const matchStart = performance.now();
-    let pliesInMatch = 0;
-
-    const outcome = await runner.run(request, async () => {
-      pliesInMatch++;
-    });
-
-    const matchDuration = performance.now() - matchStart;
-    matchTimes.push(matchDuration);
-    totalPlies += outcome.plies;
-
-    console.log(
-      `[Ván ${i}/${numMatches}] Hoàn thành: ${outcome.plies} nước | Thời gian: ${matchDuration.toFixed(1)}ms | Lý do: ${outcome.reason} | Thắng: ${outcome.winner ?? 'Hòa'}`,
-    );
-  }
-
-  const overallDuration = performance.now() - overallStart;
-  const avgMatchTime = matchTimes.reduce((a, b) => a + b, 0) / matchTimes.length;
-  const avgTimePerPly = overallDuration / totalPlies;
-  const matchesPerMinute = (60000 / avgMatchTime).toFixed(1);
-
-  console.log('\n================== KẾT QUẢ BENCHMARK ==================');
-  console.log(`• Tổng thời gian thực thi: ${(overallDuration / 1000).toFixed(2)}s`);
-  console.log(`• Tổng số nước đi đã xử lý: ${totalPlies} nước`);
-  console.log(`• Thời gian trung bình / ván: ${avgMatchTime.toFixed(1)}ms`);
-  console.log(`• Độ trễ trung bình / nước đi (Latency per move): ${avgTimePerPly.toFixed(2)}ms`);
-  console.log(`• Năng lực 1 Worker: ~${matchesPerMinute} ván/phút (với 1 luồng concurrency)`);
-  console.log(`• Năng lực CỤM 4 LAPTOP (x4 Throughput): ~${(Number(matchesPerMinute) * 4).toFixed(0)} ván/phút`);
-  console.log('========================================================\n');
+const runner = new SandboxGameRunner(async () => ({ isDemo: false, sourceCode: bot }));
+const results = [];
+for (const concurrency of [1, 2]) {
+  let cursor = 0;
+  let plies = 0;
+  const durations: number[] = [];
+  const start = performance.now();
+  await Promise.all(
+    Array.from({ length: concurrency }, async () => {
+      for (;;) {
+        const i = cursor++;
+        if (i >= samples) break;
+        const began = performance.now();
+        const result = await runner.run(
+          {
+            contractVersion: 1,
+            requestKey: `bench:${concurrency}:${i}`,
+            gameId: `bench-${i}`,
+            rulesetId: STANDARD_RULESET_ID,
+            choices: {
+              blue: { botVersionId: 'bench-blue', extraType: 'PAPER' },
+              pink: { botVersionId: 'bench-pink', extraType: 'SCISSORS' },
+            },
+            seed: 1000 + i,
+            limits: STANDARD_LIMITS,
+          },
+          async () => {},
+        );
+        if (['crash', 'timeout', 'errors'].includes(result.reason))
+          throw new Error(`Benchmark bot failed: ${result.reason}: ${result.logs}`);
+        plies += result.plies;
+        durations.push(performance.now() - began);
+      }
+    }),
+  );
+  const elapsedMs = performance.now() - start;
+  durations.sort((a, b) => a - b);
+  results.push({
+    concurrency,
+    samples,
+    maxPlies: STANDARD_LIMITS.maxPlies,
+    plies,
+    elapsedMs,
+    meanMs: durations.reduce((a, b) => a + b, 0) / samples,
+    p95Ms: durations[Math.ceil(samples * 0.95) - 1],
+    gamesPerMinute: (samples * 60000) / elapsedMs,
+  });
 }
-
-void runBenchmark(3);
+const report = {
+  measuredAt: new Date().toISOString(),
+  hostname: hostname(),
+  cpu: cpus()[0]?.model,
+  logicalCpus: cpus().length,
+  hostRamBytes: totalmem(),
+  runtime: process.env.BOT_CONTAINER_CMD ?? 'docker',
+  image: process.env.BOT_SANDBOX_IMAGE ?? 'python:3.13-slim',
+  mode: process.env.BOT_SANDBOX_MODE ?? 'docker',
+  workload:
+    'Two persistent greedy Python bots, full standard rules, independent extra types. Runner-only measurement; excludes queue/database/network. No multi-machine extrapolation.',
+  results,
+};
+const output = resolve(process.env.BENCHMARK_OUTPUT ?? 'benchmark-report.json');
+await writeFile(output, JSON.stringify(report, null, 2));
+console.log(JSON.stringify(report, null, 2));
+console.log(`Saved ${output}`);

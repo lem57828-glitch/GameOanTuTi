@@ -1,4 +1,6 @@
-# Hợp đồng M0
+# Hợp đồng Bot Arena
+
+TV2 hiện hành: [API/engine/sandbox và checklist nghiệm thu](TV2_ACCEPTANCE.md).
 
 Nguồn chuẩn: `packages/contracts/src`. Schema Zod được dùng để kiểm tra dữ liệu lúc chạy; OpenAPI sinh tại `/api/v1/openapi.json`. Thay đổi hợp đồng phải cập nhật đồng thời producer, consumer, tài liệu và test.
 
@@ -29,8 +31,8 @@ API cấu hình giải sau M0: xem [TV3_CONFIGURATION.md](TV3_CONFIGURATION.md).
 - SessionUser: id, displayName, role, teamId (theo giải hiện tại).
 - BotVersion: id, teamId, version, label, sourceHash, rulesetId, status, createdAt; không gửi source.
 - PairAssignment: pairId, stageId, teamAId, teamBId, kind, lockAt; hợp đồng TV3 → TV4. Bảng `Pairing` của TV3 là nguồn cặp đấu; TV4 lấy cặp chờ thi qua `CompetitionService.pairAssignments` và trả kết quả bằng `recordResult` (danh sách ván/hiệp). Schemas thi đấu (PairingView, StandingsView, BracketView, CompetitionView, AppealView, các request) nằm trong `packages/contracts/src/tournaments.ts`; API ở [TV3_COMPETITION.md](TV3_COMPETITION.md).
-- GameRequest v1: requestKey, gameId, choices.blue/pink (botVersionId, extraType), rulesetId, seed, limits. cpuMsPerMove/wallMsPerMove/startupMs tính bằng ms; maxPlies/maxErrorsPerGame là số lượng. Chỉ là hạn mức mô phỏng, chưa phải sandbox.
-- BullMQ QueueJobData chỉ chứa jobId và requestKey; request đầy đủ đọc lại từ PostgreSQL. QueueAdapter che việc enqueue/state/requeue/counts; GameRunner che việc thực thi.
+- GameRequest v1: requestKey, gameId, choices.blue/pink (botVersionId, extraType), rulesetId, seed, limits. cpuMsPerMove/wallMsPerMove/startupMs tính bằng ms; maxPlies/maxErrorsPerGame là số lượng. Ván mới dùng chuẩn `standard-32-4`; `stageId` bắt buộc khi tạo ván chính thức và bot phải thuộc bộ đã khóa.
+- BullMQ QueueJobData chứa jobId, requestKey và kind (`game`, `test_run`, `validate_bot`); request đầy đủ đọc lại từ PostgreSQL. QueueAdapter che việc enqueue/state/requeue/counts; GameRunner che việc thực thi.
 - GameResult: requestKey, gameId, attemptId, winner/null, reason, plies, piecesLeft, rulesetId, resultVersion, replayRef. Kết quả phòng công khai là projection ngắn hơn.
 
 ## Socket

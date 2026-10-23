@@ -3,7 +3,7 @@
 // Tất cả bản ghi gắn isDemo = true; không dùng để kết luận hệ thống đủ điều kiện tổ chức thi thật.
 import { createHash } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
-import { DEMO_RULESET, DEMO_RULESET_ID, countPieces, simulate } from '@arena/game-engine';
+import { STANDARD_RULESET, STANDARD_RULESET_ID, countPieces, simulate } from '@arena/game-engine';
 
 const prisma = new PrismaClient();
 
@@ -134,7 +134,7 @@ async function main(): Promise<void> {
       update: {},
       create: {
         ...b,
-        rulesetId: DEMO_RULESET_ID,
+        rulesetId: STANDARD_RULESET_ID,
         sourceHash: sha256(`demo-bot:${b.id}:${b.demoPolicy ?? 'none'}`),
         isDemo: true,
       },
@@ -152,7 +152,7 @@ async function seedFinishedGame(): Promise<void> {
   const blue = BOTS[1]!; // Alpha v2 (greedy)
   const pink = BOTS[2]!; // Beta v1 (rusher)
   const sim = simulate(
-    DEMO_RULESET,
+    STANDARD_RULESET,
     { blue: blue.demoPolicy!, pink: pink.demoPolicy! },
     SEED_GAME.seed,
     SEED_GAME.maxPlies,
@@ -173,10 +173,10 @@ async function seedFinishedGame(): Promise<void> {
     requestKey: SEED_GAME.requestKey,
     gameId: SEED_GAME.id,
     choices: {
-      blue: { botVersionId: blue.id, extraType: null },
-      pink: { botVersionId: pink.id, extraType: null },
+      blue: { botVersionId: blue.id, extraType: 'PAPER' },
+      pink: { botVersionId: pink.id, extraType: 'PAPER' },
     },
-    rulesetId: DEMO_RULESET_ID,
+    rulesetId: STANDARD_RULESET_ID,
     seed: SEED_GAME.seed,
     limits: {
       cpuMsPerMove: 200,
@@ -195,7 +195,11 @@ async function seedFinishedGame(): Promise<void> {
     piecesLeft: pieces,
   };
   const events = [
-    { type: 'game.created', ply: null, payload: { gameId: SEED_GAME.id, rulesetId: DEMO_RULESET_ID, coin } },
+    {
+      type: 'game.created',
+      ply: null,
+      payload: { gameId: SEED_GAME.id, rulesetId: STANDARD_RULESET_ID, coin },
+    },
     {
       type: 'game.started',
       ply: null,
@@ -213,7 +217,7 @@ async function seedFinishedGame(): Promise<void> {
         matchId: SEED_GAME.matchId,
         roomId: ROOM.id,
         no: 1,
-        rulesetId: DEMO_RULESET_ID,
+        rulesetId: STANDARD_RULESET_ID,
         seed: SEED_GAME.seed,
         maxPlies: SEED_GAME.maxPlies,
         status: 'finished',
@@ -273,7 +277,7 @@ async function seedFinishedGame(): Promise<void> {
         plies: sim.moves.length,
         piecesBlue: pieces.blue,
         piecesPink: pieces.pink,
-        rulesetId: DEMO_RULESET_ID,
+        rulesetId: STANDARD_RULESET_ID,
       },
     });
     // Chỉ gắn ván mẫu vào phòng nếu phòng chưa có ván nào (không đè ván demo mới hơn).

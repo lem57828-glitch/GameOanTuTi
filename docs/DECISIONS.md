@@ -14,7 +14,7 @@ Cây nhị phân 32 đội, ba lượt 32 → 16 → 8 → 4, cặp đấu có p
 
 | Vấn đề                                                                                             | Phụ trách phối hợp |
 | -------------------------------------------------------------------------------------------------- | ------------------ |
-| Email trường, xác minh, đăng nhập/session thật, quy trình duyệt đội 2–4 người                      | TV1                |
+| Đã chốt TV1: email @vnu.edu.vn, xác minh email, session thật; tối đa 4 người/đội, cần 2–4 khi chốt | TV1                |
 | Giao thức bot, private GitHub/upload, version/hash, hạn mức CPU/RAM/thời gian/network và sandbox   | TV2                |
 | Sơ loại: số hiệp/trận, số vòng Swiss, điểm/bye, tránh tái đấu, thứ tự tie-break, tranh suất Top 32 | TV3                |
 | Cách xếp hạt giống/cây 32 đội, thời điểm khóa/công bố đối thủ, chốt kết quả, khiếu nại             | TV3 + TV4          |

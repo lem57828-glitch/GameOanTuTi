@@ -13,7 +13,10 @@ export class SimulatedRunner implements GameRunner {
   async run(request: GameRequest, onMove: (move: MoveRecord) => Promise<void>): Promise<RunOutcome> {
     let rules;
     try {
-      rules = getRuleset(request.rulesetId);
+      rules = getRuleset(request.rulesetId, {
+        blue: request.choices.blue.extraType,
+        pink: request.choices.pink.extraType,
+      });
     } catch (e) {
       throw new PermanentRunError((e as Error).message);
     }

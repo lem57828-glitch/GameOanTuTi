@@ -13,7 +13,7 @@ import {
   type RoomSnapshot,
   type SessionUser,
 } from '@arena/contracts';
-import { DEMO_RULESET_ID } from '@arena/game-engine';
+import { STANDARD_RULESET_ID } from '@arena/game-engine';
 import { AuditService } from '../../core/audit.service.js';
 import { conflict, forbidden, notFound } from '../../core/errors.js';
 import { PrismaService, isUniqueViolation } from '../../core/prisma.service.js';
@@ -144,7 +144,7 @@ export class RoomsService {
           matchId: match.id,
           roomId: room.id,
           no: 1,
-          rulesetId: DEMO_RULESET_ID,
+          rulesetId: STANDARD_RULESET_ID,
           seed,
           maxPlies: DEMO_LIMITS.maxPlies,
           blueTeamId,
@@ -166,15 +166,15 @@ export class RoomsService {
         const blueBot = aWins ? botA : botB;
         const pinkBot = aWins ? botB : botA;
         await this.repo.createChoices(tx, [
-          { gameId: game.id, side: 'blue', teamId: blueTeamId, botVersionId: blueBot.id, extraType: null },
-          { gameId: game.id, side: 'pink', teamId: pinkTeamId, botVersionId: pinkBot.id, extraType: null },
+          { gameId: game.id, side: 'blue', teamId: blueTeamId, botVersionId: blueBot.id, extraType: 'PAPER' },
+          { gameId: game.id, side: 'pink', teamId: pinkTeamId, botVersionId: pinkBot.id, extraType: 'PAPER' },
         ]);
         await this.repo.createEvent(tx, {
           gameId: game.id,
           streamId: streamIdOf(game.id),
           seq: 1,
           type: 'game.created',
-          payload: { gameId: game.id, rulesetId: DEMO_RULESET_ID, coin },
+          payload: { gameId: game.id, rulesetId: STANDARD_RULESET_ID, coin },
         });
         const job = await this.bots.createGameJob(
           tx,
@@ -183,10 +183,10 @@ export class RoomsService {
             requestKey: body.requestKey,
             gameId: game.id,
             choices: {
-              blue: { botVersionId: blueBot.id, extraType: null },
-              pink: { botVersionId: pinkBot.id, extraType: null },
+              blue: { botVersionId: blueBot.id, extraType: 'PAPER' },
+              pink: { botVersionId: pinkBot.id, extraType: 'PAPER' },
             },
-            rulesetId: DEMO_RULESET_ID,
+            rulesetId: STANDARD_RULESET_ID,
             seed,
             limits: DEMO_LIMITS,
           },

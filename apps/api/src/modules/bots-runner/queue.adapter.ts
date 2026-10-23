@@ -45,7 +45,10 @@ export class BullmqQueueAdapter implements QueueAdapter, OnModuleDestroy {
 
   async enqueue(data: QueueJobData): Promise<void> {
     // jobId BullMQ = id GameJob (một job logic cho mỗi requestKey); thêm trùng sẽ bị BullMQ bỏ qua.
-    await this.queue.add('run-game', data, { jobId: data.jobId });
+    await this.queue.add('run-game', data, {
+      jobId: data.jobId,
+      priority: data.kind === 'game' ? 1 : data.kind === 'validate_bot' ? 5 : 10,
+    });
   }
 
   async requeue(data: QueueJobData): Promise<void> {

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('BTC configures and reviews stage schedules with a visible audit trail', async ({ page }) => {
-  await page.goto('/login');
+  await page.goto('/demo-login');
   await page.getByRole('button', { name: 'Đăng nhập bằng BTC Demo', exact: true }).click();
   await expect(page).toHaveURL(/\/admin$/);
   await page.getByRole('tab', { name: 'Cấu hình giải', exact: true }).click();
@@ -58,7 +58,7 @@ test('public pages fit mobile and desktop; private administration checks role', 
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }
   }
-  await page.goto('/login');
+  await page.goto('/demo-login');
   await page.getByRole('button', { name: 'Đăng nhập bằng Nguyễn An', exact: true }).click();
   await expect(page).toHaveURL(/\/team$/);
   await page.goto('/admin');
@@ -71,7 +71,7 @@ test('admin creates a real queued simulation; spectators reload and reconnect wi
   page,
   browser,
 }) => {
-  await page.goto('/login');
+  await page.goto('/demo-login');
   await page.getByRole('button', { name: 'Đăng nhập bằng BTC Demo', exact: true }).click();
   await expect(page).toHaveURL(/\/admin$/);
   await expect

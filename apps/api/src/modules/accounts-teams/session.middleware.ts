@@ -17,7 +17,9 @@ export class SessionMiddleware implements NestMiddleware {
     const claims = decodeSession(readCookie(req.headers.cookie, SESSION_COOKIE), this.cfg.sessionSecret);
     // Phiên demo hết hiệu lực khi tắt DEMO_MODE.
     const usable = claims && (!claims.demo || this.cfg.demoMode);
-    (req as ArenaRequest).user = usable ? await this.accounts.sessionUser(claims.sub, claims.demo) : null;
+    (req as ArenaRequest).user = usable
+      ? await this.accounts.sessionUser(claims.sub, claims.demo, claims.v ?? 0)
+      : null;
     next();
   }
 }
