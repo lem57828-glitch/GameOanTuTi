@@ -164,7 +164,11 @@ it('enforces roles, origin, validation and explicit placeholders', async () => {
   const invalid = await request('/demo/games', 'POST', {});
   expect(invalid.status).toBe(400);
   expect((await invalid.json()).error.requestId).toBeTruthy();
-  const todo = await request('/bots', 'POST', {});
+  // POST /bots đã được TV2 triển khai: dữ liệu thiếu phải trả 400, không phải 500.
+  const badBot = await request('/bots', 'POST', {});
+  expect(badBot.status).toBe(400);
+  expect((await badBot.json()).error.code).toBe('VALIDATION_ERROR');
+  const todo = await request('/rooms', 'POST', {});
   expect(todo.status).toBe(501);
   expect((await todo.json()).error.code).toBe('FEATURE_NOT_IMPLEMENTED');
 });

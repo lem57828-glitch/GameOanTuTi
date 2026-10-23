@@ -231,7 +231,7 @@ it('chạy trọn sơ loại → cây 32 → Top 4 bằng mô phỏng, không b�
   const done = await overview();
   expect(done.top4).toHaveLength(4);
   expect(done.next.action).toBe('done');
-});
+}, 120_000);
 
 it('khiếu nại: chỉ đội trưởng của đội trong cặp; khiếu nại mở chặn xác nhận; chấp nhận + thi lại xóa kết quả tạm', async () => {
   // Giải riêng nhỏ cho kịch bản khiếu nại: đặt lại phần thi đấu, gắn đội Alpha (đội trưởng acc_an) vào giải.

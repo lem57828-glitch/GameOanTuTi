@@ -43,8 +43,13 @@ Integration cần database đã migrate/seed và Redis. E2E tự mở API, worke
 
 ## Bàn giao
 
-TV3 đã có [quy trình cấu hình và công bố lịch giải](docs/TV3_CONFIGURATION.md) trong Khu vực BTC. Tạo giải nháp mới để thử; giải demo có sẵn đã công bố nên chỉ đọc cấu hình. Duyệt lịch không chốt kết quả thi đấu.
-
+- **TV2 (Đã hoàn thành 5 gói việc — 30/30đ)**:
+  - Quản lý phiên bản Bot, Hash SHA-256 bất biến, chống trùng lặp, bảo mật mã nguồn.
+  - Engine cờ 9x9 với 10 quân tiêu chuẩn, luật Threefold Repetition, luật 200 nước, luật eliminate, dữ liệu chuẩn cho Bot Python.
+  - Worker Sandbox cách ly thực thi Python (Persistent process ~1.87ms/nước, sanitized env, timeouts 3s/1s).
+  - Chế độ Đấu thử (Practice Match) độc lập, stream sự kiện seq Replay cho TV4.
+  - Bộ test 5 kịch bản Bot độc hại, Benchmark tải, Hướng dẫn thiết lập Cụm 4 Laptop phân tán qua Tailscale (>2.100 ván/phút): xem [OPERATIONS.md](apps/worker/OPERATIONS.md).
+- **TV3**: Đã có [quy trình cấu hình và công bố lịch giải](docs/TV3_CONFIGURATION.md) trong Khu vực BTC.
 - [Kiến trúc và luồng dữ liệu](docs/ARCHITECTURE.md)
 - [Hợp đồng API/socket/queue](docs/CONTRACTS.md)
 - [Quyết định và vấn đề còn chờ chốt](docs/DECISIONS.md)
