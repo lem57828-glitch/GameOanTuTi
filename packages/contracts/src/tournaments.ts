@@ -235,6 +235,8 @@ export type LevelView = z.infer<typeof LevelView>;
 export const StandingsView = z.object({
   level: LevelView.nullable(),
   provisional: z.boolean(),
+  /** Mức chưa khóa (hoặc chưa lập kế hoạch): danh sách đội DỰ KIẾN tham gia, chưa có điểm, chưa chốt. */
+  preview: z.boolean(),
   rows: z.array(StandingRowView),
 });
 export type StandingsView = z.infer<typeof StandingsView>;

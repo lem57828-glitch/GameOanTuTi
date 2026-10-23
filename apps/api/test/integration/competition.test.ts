@@ -143,6 +143,11 @@ it('chạy trọn sơ loại → cây 32 → Top 4 bằng mô phỏng, không b�
   expect(
     (await call('acc_admin', `/admin/tournaments/${tid}/demo/teams`, 'POST', { count: 38 })).data.created,
   ).toBe(38);
+  // Chưa lập kế hoạch/chưa khóa mức: bảng hiện danh sách đội dự kiến (không để trống).
+  const preview = (await call(null, `/tournaments/${tid}/standings`)).data;
+  expect(preview.preview).toBe(true);
+  expect(preview.rows).toHaveLength(38);
+  expect(preview.rows.every((r: { points: number }) => r.points === 0)).toBe(true);
   expect(
     (
       await call('acc_admin', `/admin/tournaments/${tid}/qualifier/plan`, 'POST', {

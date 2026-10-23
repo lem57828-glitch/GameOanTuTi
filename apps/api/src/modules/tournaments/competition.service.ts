@@ -169,7 +169,39 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
         : (t.levels.find((l) => ACTIVE_LEVEL.includes(l.status)) ??
           [...t.levels].reverse().find((l) => !['planned', 'skipped'].includes(l.status)) ??
           t.levels[0]);
-    if (!pick) return { level: null, provisional: false, rows: [] };
+    // Mức chưa khóa (hoặc chưa lập kế hoạch): hiện đội DỰ KIẾN tham gia thay vì bảng trống.
+    // Mức 1 / chưa có mức: các đội đủ điều kiện (đã duyệt, chưa rút). Mức sau: đội đi tiếp của mức trước (nếu đã chốt).
+    if (!pick || pick.status === 'planned') {
+      const prev = pick ? t.levels.find((l) => l.ord === pick.ord - 1) : undefined;
+      const teamIds = prev
+        ? prev.status === 'done' || prev.status === 'skipped'
+          ? ids(prev.qualified)
+          : []
+        : ctx.teams.filter((x) => ELIGIBLE_TEAM.includes(x.status)).map((x) => x.id);
+      const rows: StandingRowView[] = teamIds
+        .map((teamId) => ({
+          rank: 0,
+          teamId,
+          name: ctx.names.get(teamId) ?? teamId,
+          points: 0,
+          played: 0,
+          w: 0,
+          d: 0,
+          l: 0,
+          byes: 0,
+          diff: 0,
+          oppAvg: 0,
+          withdrawn: ctx.withdrawn.has(teamId),
+          state: null,
+        }))
+        .sort((x, y) => x.name.localeCompare(y.name, 'vi'));
+      return {
+        level: pick ? await this.levelView(t, pick, ctx) : null,
+        provisional: false,
+        preview: true,
+        rows,
+      };
+    }
     const levelPairings = ctx.pairings.filter(
       (p) => p.levelId === pick.id && (p.kind === 'swiss' || p.kind === 'bye'),
     );
@@ -211,7 +243,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
         state,
       };
     });
-    return { level: await this.levelView(t, pick, ctx), provisional, rows: view };
+    return { level: await this.levelView(t, pick, ctx), provisional, preview: false, rows: view };
   }
 
   async bracket(tournamentId: string): Promise<BracketView> {
