@@ -161,7 +161,39 @@ it('chạy trọn sơ loại → cây 32 → Top 4 bằng mô phỏng, không b�
   expect((await call('acc_admin', `/admin/tournaments/${tid}/qualifier/rounds`, 'POST', reason)).status).toBe(
     409,
   );
+  // Chưa mức nào bắt đầu: sửa mốc của mức và lập lại kế hoạch được.
+  const soon = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
+  const patch = (body: unknown) =>
+    call('acc_admin', `/admin/tournaments/${tid}/qualifier/levels/1`, 'PATCH', body);
+  expect(
+    (await patch({ name: 'Mức duy nhất', botLockAt: soon(2), publishAt: soon(1), ...reason })).status,
+  ).toBe(400);
+  expect(
+    (await patch({ name: 'Mức duy nhất', botLockAt: soon(1), publishAt: soon(2), ...reason })).status,
+  ).toBe(200);
+  expect((await overview()).levels[0]).toMatchObject({ name: 'Mức duy nhất', lockDue: false });
+  expect(
+    (
+      await call('acc_admin', `/admin/tournaments/${tid}/qualifier/plan`, 'POST', {
+        targets: [32],
+        rounds: 3,
+        avoidRematch: 'level',
+        ...reason,
+      })
+    ).status,
+  ).toBe(201);
   const locked = await call('acc_admin', `/admin/tournaments/${tid}/qualifier/lock`, 'POST', reason);
+  // Đã khóa: không đổi mốc khóa bot, không lập lại kế hoạch.
+  expect((await patch({ botLockAt: soon(3), ...reason })).status).toBe(409);
+  expect(
+    (
+      await call('acc_admin', `/admin/tournaments/${tid}/qualifier/plan`, 'POST', {
+        targets: [32],
+        rounds: 3,
+        ...reason,
+      })
+    ).status,
+  ).toBe(409);
   expect(locked.data).toMatchObject({ level: 1, teams: 38 });
 
   for (let round = 1; round <= 3; round++) {
