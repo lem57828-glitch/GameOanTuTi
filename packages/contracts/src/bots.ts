@@ -16,6 +16,7 @@ export const BotVersion = z.object({
   sourceHash: z.string().regex(/^[a-f0-9]{64}$/, 'sha256 dạng hex'),
   rulesetId: z.string(),
   status: BotVersionStatus,
+  submissionMethod: z.enum(['direct', 'github', 'demo']).optional(),
   duplicateOfId: z.string().nullable().optional(),
   createdAt: IsoDateTime,
 });

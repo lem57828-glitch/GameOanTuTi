@@ -1,0 +1,26 @@
+{
+  "startedAt": "2026-10-23T13:15:58.461Z",
+  "containerRuntime": "C:/Users/Admin/AppData/Local/Programs/Podman/podman.exe",
+  "steps": [
+    {
+      "command": "pnpm build",
+      "exitCode": 0,
+      "elapsedMs": 12755
+    },
+    {
+      "command": "pnpm typecheck",
+      "exitCode": 0,
+      "elapsedMs": 7772
+    },
+    {
+      "command": "pnpm test",
+      "exitCode": 0,
+      "elapsedMs": 8238
+    },
+    {
+      "command": "pnpm test:integration",
+      "exitCode": 0,
+      "elapsedMs": 25139
+    }
+  ]
+}
