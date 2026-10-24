@@ -32,6 +32,11 @@ export class RoomsController {
     return ok(await this.rooms.snapshot(parse(Id, id)));
   }
 
+  @Get('rooms/:id/games/:gameId')
+  async gameSnapshot(@Param('id') id: string, @Param('gameId') gameId: string) {
+    return ok(await this.rooms.gameSnapshot(parse(Id, id), parse(Id, gameId)));
+  }
+
   /** Sự kiện của một ván: replay mẫu và bù seq bị thiếu. */
   @Get('games/:id/events')
   async events(@Param('id') id: string, @Query() query: unknown) {

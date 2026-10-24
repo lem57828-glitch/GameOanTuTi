@@ -248,3 +248,4 @@ export const BotSelectionView = z.object({
   locked: z.boolean(),
   updatedAt: IsoDateTime,
 });
+export type BotSelectionView = z.infer<typeof BotSelectionView>;

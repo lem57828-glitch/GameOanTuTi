@@ -10,6 +10,7 @@ import { DemoLoginPage } from './features/accounts-teams/DemoLoginPage';
 import { MyTeamPage } from './features/accounts-teams/MyTeamPage';
 import { MyBotsPage } from './features/bots-runner/MyBotsPage';
 import { TournamentPage } from './features/tournaments/TournamentPage';
+import { TeamCompetitionPage } from './features/tournaments/TeamCompetitionPage';
 import { RoomPage } from './features/rooms-matches/RoomPage';
 import { RoomsPage } from './features/rooms-matches/RoomsPage';
 import { AdminPage } from './pages/AdminPage';
@@ -40,6 +41,7 @@ export function App() {
           <nav aria-label="Điều hướng chính" className="flex flex-wrap gap-x-5 gap-y-3 text-sm font-semibold">
             {(
               [
+                ['/competition', 'Thi đấu của đội'],
                 ['/tournament', 'Giải đấu'],
                 ['/rooms', 'Phòng đấu'],
                 ['/team', 'Đội của tôi'],
@@ -123,6 +125,7 @@ export function App() {
             }
           />
           <Route path="/team" element={<MyTeamPage />} />
+          <Route path="/competition" element={<TeamCompetitionPage />} />
           <Route path="/bots" element={<MyBotsPage />} />
           <Route path="/tournament" element={<TournamentPage />} />
           <Route path="/rooms" element={<RoomsPage />} />

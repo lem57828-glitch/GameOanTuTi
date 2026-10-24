@@ -77,17 +77,25 @@ export class RoomsService {
     return { ...base, match: await this.matches.viewOfRoom(roomId) };
   }
 
-  private async boardSnapshot(roomId: string): Promise<RoomSnapshot> {
+  /** Replay một ván cụ thể; không đổi currentGameId hoặc trạng thái trận. */
+  async gameSnapshot(roomId: string, gameId: string): Promise<RoomSnapshot> {
+    return this.boardSnapshot(roomId, gameId);
+  }
+
+  private async boardSnapshot(roomId: string, gameId?: string): Promise<RoomSnapshot> {
     return this.prisma.$transaction(
       async (tx) => {
         const room = await this.repo.findRoom(roomId, tx);
         if (!room) throw notFound('phòng');
         const names = await this.accounts.teamNames([room.teamAId, room.teamBId]);
-        const game = room.currentGameId ? await this.repo.findGame(room.currentGameId, tx) : null;
+        const selectedId = gameId ?? room.currentGameId;
+        const game = selectedId ? await this.repo.findGame(selectedId, tx) : null;
+        if (gameId && (!game || game.roomId !== roomId)) throw notFound('ván trong phòng');
         const events = game ? await this.repo.listEvents(game.id, 0, tx) : [];
         const job = game ? await this.bots.findJobByGame(game.id, tx) : null;
         return buildSnapshot({
-          room,
+          room:
+            gameId && game ? { ...room, status: game.status === 'queued' ? 'waiting' : game.status } : room,
           teams: {
             a: { id: room.teamAId, name: names.get(room.teamAId) ?? '?' },
             b: { id: room.teamBId, name: names.get(room.teamBId) ?? '?' },

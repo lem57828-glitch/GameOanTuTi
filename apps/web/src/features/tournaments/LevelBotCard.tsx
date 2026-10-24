@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Badge, Button, Card, CardHeader, Select, Spinner, useToast } from '@arena/ui';
 import type { LevelBotView } from '@arena/contracts';
 import { api } from '../../lib/api';
+import { useSession } from '../../lib/session';
 
 const SOURCE: Record<NonNullable<LevelBotView['current']>['source'], string> = {
   chosen: 'Đội trưởng chọn',
@@ -12,10 +13,11 @@ const SOURCE: Record<NonNullable<LevelBotView['current']>['source'], string> = {
 };
 
 export function LevelBotCard({ tournamentId }: { tournamentId: string }) {
+  const { user } = useSession();
   const qc = useQueryClient();
   const { toast } = useToast();
   const q = useQuery({
-    queryKey: ['level-bot', tournamentId],
+    queryKey: ['level-bot', tournamentId, user?.id],
     queryFn: () => api<LevelBotView>(`/tournaments/${tournamentId}/qualifier/my-bot`),
     refetchInterval: 15_000,
   });

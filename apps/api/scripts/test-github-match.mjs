@@ -306,34 +306,17 @@ try {
   const roomId = pairingRoomId(pair.id);
   step('TV3 generated Swiss pairing and TV4 opened its official room');
 
-  for (const gameNo of [1, 2]) {
-    const match = await wait(
-      async () => {
-        const m = await db.match.findFirst({ where: { pairId: pair.id } });
-        if (m?.status === 'paused')
-          throw new Error(`Official match paused: ${m.pauseReason}\n${logs.slice(-4000)}`);
-        return m?.status === 'selecting' && m.currentNo === gameNo && m;
-      },
-      `selection phase ${gameNo}`,
-      180000,
+  // Swiss hiện dùng bot đã chốt cho cả mức, tự chạy hai ván đổi màu.
+  // Chọn kín/sẵn sàng từng hiệp chỉ áp dụng loại trực tiếp (matches.test.ts).
+  for (const who of ['a', 'b']) {
+    const selection = await call(who, `/rooms/${roomId}/my-selection`, 'GET', undefined, 200);
+    assert.deepEqual(
+      selection.data.allowedBots.map((b) => b.id),
+      [botIds[who]],
     );
-    for (const who of ['a', 'b']) {
-      const selection = await call(who, `/rooms/${roomId}/my-selection`, 'GET', undefined, 200);
-      assert.deepEqual(
-        selection.data.allowedBots.map((b) => b.id),
-        [botIds[who]],
-      );
-      assert.equal(selection.data.canChoose, true);
-    }
-    await call('a', `/rooms/${roomId}/choices`, 'POST', { botVersionId: botIds.a, ready: false }, 201);
-    const spectator = await call(null, `/rooms/${roomId}`, 'GET', undefined, 200);
-    assert.equal(spectator.data.match.chooseExtra, false);
-    assert(!JSON.stringify(spectator.data).includes(botIds.a), 'Unpublished selection must remain private');
-    await call('a', `/rooms/${roomId}/choices`, 'POST', { botVersionId: botIds.a, ready: true }, 201);
-    await call('b', `/rooms/${roomId}/choices`, 'POST', { botVersionId: botIds.b, ready: true }, 201);
-    step(`Official game ${gameNo}: locked GitHub bots selected privately and readied`);
-    assert(match.id);
+    assert.equal(selection.data.canChoose, false);
   }
+  step('Swiss uses the frozen level bot without per-game selection');
   const finished = await wait(
     async () => {
       const m = await db.match.findFirst({ where: { pairId: pair.id } });
@@ -362,7 +345,17 @@ try {
       (await db.gameEvent.count({ where: { gameId: game.id, type: 'game.move' } })) > 0,
       'Replay events must be persisted',
     );
+    const saved = await call(null, `/rooms/${roomId}/games/${game.id}`, 'GET', undefined, 200);
+    assert.equal(saved.data.gameId, game.id);
+    assert.equal(saved.data.history.length, game.result.plies);
+    assert.equal(saved.data.status, 'finished');
   }
+  const current = await call(null, `/rooms/${roomId}`, 'GET', undefined, 200);
+  assert.equal(
+    current.data.gameId,
+    games[1].id,
+    'Reading an earlier replay must not switch the current game',
+  );
   const reported = await db.pairing.findUniqueOrThrow({ where: { id: pair.id } });
   assert.equal(reported.source, 'match');
   assert.equal(reported.status, 'done');

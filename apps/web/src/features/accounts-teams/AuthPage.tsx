@@ -25,9 +25,16 @@ function LoginPage() {
       qc.setQueryData(sessionKey, result);
       await qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'session' });
       const next = params.get('next');
-      navigate(next && next.startsWith('/') && !next.startsWith('//') && !next.includes('\\') ? next : '/', {
-        replace: true,
-      });
+      navigate(
+        next && next.startsWith('/') && !next.startsWith('//') && !next.includes('\\')
+          ? next
+          : result.user.role === 'student'
+            ? '/competition'
+            : '/admin',
+        {
+          replace: true,
+        },
+      );
     },
     onError: (error) => {
       if (error instanceof ApiError && Array.isArray(error.details))

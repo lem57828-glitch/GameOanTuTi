@@ -1,6 +1,7 @@
 // Trận của đội tôi + gửi khiếu nại chính thức (chỉ đội trưởng, khi kết quả chưa chốt).
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useId, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Alert,
   Badge,
@@ -139,6 +140,15 @@ export function MyPairings({ tournamentId }: { tournamentId: string }) {
                   <Badge>{KIND_LABEL[p.kind]}</Badge>
                 </div>
                 <PairingLine p={p} />
+                {p.roomId ? (
+                  <Button asChild size="sm" variant="secondary">
+                    <Link to={`/rooms/${p.roomId}`}>
+                      {p.status === 'done' ? 'Xem lại trận' : 'Vào phòng'}
+                    </Link>
+                  </Button>
+                ) : p.status === 'scheduled' ? (
+                  <p className="text-sm text-ink-muted">Chờ BTC mở phòng thi đấu.</p>
+                ) : null}
                 {p.games.length > 0 && (
                   <p className="font-mono text-xs text-ink-muted">
                     Ván/hiệp:{' '}

@@ -1,10 +1,12 @@
 // Phòng đấu (chỉ đọc cho người xem). TV4 phát triển tiếp: chọn bot/quân kín, tung xu chính thức, replay chính thức.
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Alert, Badge, Button, Card, CardHeader, EmptyState, Spinner, cn } from '@arena/ui';
 import type { RoomSnapshot, Side } from '@arena/contracts';
 import { Board, PIECE_GLYPH, PIECE_LABEL, SideTag } from '../../components/Board';
 import { CoinToss } from '../../components/CoinToss';
 import { usePublicHealth } from '../../lib/health';
+import { api } from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { END_REASON, JOB_STATUS, ROOM_STATUS } from './labels';
 import { MatchPanel } from './MatchPanel';
@@ -21,11 +23,31 @@ const CONN: Record<ConnectionState, { label: string; tone: 'success' | 'warning'
 
 export function RoomPage() {
   const { roomId = '' } = useParams();
-  const { snapshot, connection, error, resync, coinFor, dismissCoin } = useRoomStream(roomId);
-  // Vào phòng không tự chạy: bàn cờ ở nước 0, người xem bấm Chạy / kéo thanh để tua.
-  const replay = useReplay(snapshot);
+  const { snapshot: current, connection, error, resync, coinFor, dismissCoin } = useRoomStream(roomId);
+  const [params] = useSearchParams();
+  const gameId = params.get('game');
+  const archived = useQuery({
+    queryKey: ['game-replay', roomId, gameId],
+    queryFn: () =>
+      api<RoomSnapshot>(`/rooms/${encodeURIComponent(roomId)}/games/${encodeURIComponent(gameId!)}`),
+    enabled: !!gameId,
+  });
+  const snapshot = gameId ? (archived.data ?? null) : current;
+  // Phòng hiện tại theo sát nước mới; ván được chọn để replay bắt đầu từ nước 0.
+  const replay = useReplay(snapshot, !gameId);
   const health = usePublicHealth();
   const { user } = useSession();
+
+  if (gameId && archived.error)
+    return (
+      <Alert
+        tone="error"
+        title="Không tải được ván xem lại"
+        action={<Link to={`/rooms/${roomId}`}>Về trận hiện tại</Link>}
+      >
+        {archived.error.message}
+      </Alert>
+    );
 
   if (!snapshot) {
     if (error?.code === 'NOT_FOUND') {
@@ -77,11 +99,11 @@ export function RoomPage() {
         ? { label: 'Tạm dừng', tone: 'danger' as const }
         : ROOM_STATUS[s.status];
   const workerDown = health.data && !health.data.workerAlive;
-  const conn = CONN[connection];
+  const conn = gameId ? { label: 'Xem lại', tone: 'neutral' as const } : CONN[connection];
 
   return (
     <div className="flex flex-col gap-6">
-      {coinFor === s.gameId && s.coinResult && (
+      {!gameId && coinFor === s.gameId && s.coinResult && (
         <CoinToss coin={s.coinResult} teamName={(id) => teamName(id)} onDone={dismissCoin} />
       )}
 
@@ -124,7 +146,15 @@ export function RoomPage() {
         </Alert>
       )}
 
-      {s.match && <MatchPanel s={s} onChanged={() => void resync()} />}
+      {gameId && (
+        <Alert
+          title="Đang xem lại một ván đã lưu"
+          action={<Link to={`/rooms/${roomId}`}>Về trận hiện tại</Link>}
+        >
+          Việc xem lại không làm thay đổi trận đang thi.
+        </Alert>
+      )}
+      {current?.match && <MatchPanel s={current} onChanged={() => void resync()} />}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <Card className="p-3 sm:p-5">

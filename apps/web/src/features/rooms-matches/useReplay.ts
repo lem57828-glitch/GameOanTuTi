@@ -1,4 +1,4 @@
-// Xem lại ván trong phòng: vào phòng KHÔNG tự chạy; bấm Play để chạy từng nước, Pause để dừng, kéo thanh để tua.
+// Phòng hiện tại theo sát nước mới; replay ván cũ bắt đầu từ nước 0, bấm Play để phát lại.
 // Bàn cờ ở nước thứ n được dựng lại từ bàn cờ ban đầu của ván (đã gồm quân thứ 10) + n nước đầu trong lịch sử.
 // Chỉ là cách HIỂN THỊ phía trình duyệt: không đổi trạng thái ván trên máy chủ.
 import { useEffect, useMemo, useState } from 'react';
@@ -40,24 +40,28 @@ export interface Replay {
   seek: (n: number) => void;
   step: (delta: number) => void;
   setSpeed: (ms: number) => void;
+  followLive: () => void;
 }
 
 export type ReplaySource = Pick<RoomSnapshot, 'streamId' | 'history' | 'status' | 'initialBoard' | 'board'>;
 
-export function useReplay(s: ReplaySource | null): Replay {
+export function useReplay(s: ReplaySource | null, followByDefault = false): Replay {
   const streamId = s?.streamId ?? null;
   const history = useMemo(() => s?.history ?? [], [s?.history]);
   const total = history.length;
   const live = !!s && (s.status === 'running' || s.status === 'waiting');
-  const [cursor, setCursor] = useState(0);
+  const [position, setCursor] = useState(0);
+  const [following, setFollowing] = useState(followByDefault);
+  const cursor = following ? total : position;
   const [playing, setPlaying] = useState(false);
   const [speedMs, setSpeed] = useState<number>(SPEEDS[1].ms);
 
-  // Ván mới (stream đổi): về nước 0 và dừng — người xem tự bấm Play.
+  // Ván mới: theo sát trực tiếp hoặc dừng ở nước 0 theo chế độ của màn hình.
   useEffect(() => {
     setCursor(0);
     setPlaying(false);
-  }, [streamId]);
+    setFollowing(followByDefault);
+  }, [streamId, followByDefault]);
 
   // Đang chạy: tiến một nước mỗi `speedMs`. Hết nước: ván xong thì dừng; ván còn chạy thì chờ nước mới.
   useEffect(() => {
@@ -87,19 +91,35 @@ export function useReplay(s: ReplaySource | null): Replay {
     board,
     lastMove: cursor > 0 ? (history[cursor - 1] ?? null) : null,
     play: () => {
+      setFollowing(false);
+      setCursor(cursor);
       if (cursor >= total && !live) setCursor(0); // xem lại từ đầu khi đã ở cuối ván đã xong
       setPlaying(true);
     },
-    pause: () => setPlaying(false),
-    toggle: () => setPlaying((p) => !p),
+    pause: () => {
+      setFollowing(false);
+      setCursor(cursor);
+      setPlaying(false);
+    },
+    toggle: () => {
+      setFollowing(false);
+      setCursor(cursor >= total && !live && !playing ? 0 : cursor);
+      setPlaying((p) => !p);
+    },
     seek: (n) => {
+      setFollowing(false);
       setPlaying(false);
       setCursor(clamp(n));
     },
     step: (delta) => {
+      setFollowing(false);
       setPlaying(false);
-      setCursor((c) => clamp(c + delta));
+      setCursor(clamp(cursor + delta));
     },
     setSpeed,
+    followLive: () => {
+      setFollowing(true);
+      setPlaying(false);
+    },
   };
 }

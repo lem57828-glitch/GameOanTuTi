@@ -2,6 +2,7 @@
 // form chọn bot + quân thứ 10 cho đội trưởng, thao tác BTC/trọng tài. Khán giả chỉ thấy "đã chọn / sẵn sàng".
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Alert, Badge, Button, Card, CardHeader, Select, useToast, type BadgeTone } from '@arena/ui';
 import type { MatchView, MyMatchSelection, PieceType, RoomSnapshot } from '@arena/contracts';
 import { PIECE_GLYPH, PIECE_LABEL, SideTag } from '../../components/Board';
@@ -27,7 +28,10 @@ const PIECES: PieceType[] = ['ROCK', 'PAPER', 'SCISSORS'];
 /** Đếm ngược theo giờ máy chủ: bù lệch giữa đồng hồ trình duyệt và serverTime của snapshot. */
 function useCountdown(deadline: string | null, serverTime: string) {
   const [now, setNow] = useState(Date.now());
-  const [skew] = useState(() => Date.parse(serverTime) - Date.now());
+  const [skew, setSkew] = useState(() => Date.parse(serverTime) - Date.now());
+  useEffect(() => {
+    setSkew(Date.parse(serverTime) - Date.now());
+  }, [serverTime]);
   useEffect(() => {
     if (!deadline) return;
     const t = setInterval(() => setNow(Date.now()), 500);
@@ -144,6 +148,11 @@ export function MatchPanel({ s, onChanged }: { s: RoomSnapshot; onChanged: () =>
                   <Badge tone={g.status === 'failed' ? 'danger' : g.finished ? 'success' : 'accent'}>
                     {result}
                   </Badge>
+                  {g.finished && (
+                    <Link className="font-semibold text-accent" to={`/rooms/${s.roomId}?game=${g.gameId}`}>
+                      Xem lại ván {i + 1} →
+                    </Link>
+                  )}
                 </div>
                 <div className="mt-2 grid gap-1 sm:grid-cols-2">
                   {(['a', 'b'] as const).map((side) => {
@@ -174,10 +183,11 @@ export function MatchPanel({ s, onChanged }: { s: RoomSnapshot; onChanged: () =>
 }
 
 function CaptainForm({ roomId, m, onChanged }: { roomId: string; m: MatchView; onChanged: () => void }) {
+  const { user } = useSession();
   const qc = useQueryClient();
   const { toast } = useToast();
   const mine = useQuery({
-    queryKey: ['my-selection', roomId, m.currentNo, m.status],
+    queryKey: ['my-selection', roomId, m.currentNo, m.status, user?.id],
     queryFn: () => api<MyMatchSelection | null>(`/rooms/${roomId}/my-selection`),
   });
   const [bot, setBot] = useState<string>('');

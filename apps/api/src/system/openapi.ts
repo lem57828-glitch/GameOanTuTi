@@ -472,6 +472,14 @@ export function buildOpenApi() {
   });
   r.registerPath({
     method: 'get',
+    path: '/rooms/{id}/games/{gameId}',
+    tags: ['rooms-matches'],
+    description: 'Snapshot một ván trong phòng để xem lại. Chỉ đọc, không chuyển ván hiện tại.',
+    request: { params: z.object({ id: C.Id, gameId: C.Id }) },
+    responses: { 200: json(data(C.RoomSnapshot)), 404: error('Không có ván trong phòng') },
+  });
+  r.registerPath({
+    method: 'get',
     path: '/games/{id}/events',
     tags: ['rooms-matches'],
     request: { params: idParam, query: z.object({ afterSeq: z.number().int().nonnegative().optional() }) },

@@ -30,6 +30,11 @@ export function HomePage() {
             Xây dựng bot Búa – Bao – Kéo, gặp đối thủ và theo dõi từng nước đi cùng cả cộng đồng.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
+            {user?.role === 'student' && (
+              <Button asChild>
+                <Link to="/competition">Thi đấu của đội</Link>
+              </Button>
+            )}
             {!isLoading && !user && (
               <Button asChild>
                 <Link to="/register">Đăng ký tham gia</Link>
