@@ -6,6 +6,8 @@ coverage/
 .env
 .env.*
 !.env.example
+!.env.demo.example
+!.env.official.example
 # Dữ liệu cá nhân / bản cũ: không commit, không xóa
 data/
 deploy-snapshot/

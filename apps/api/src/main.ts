@@ -7,6 +7,9 @@ import type { ServerOptions } from 'socket.io';
 import { AppModule } from './app.module.js';
 import { loadConfig, type AppConfig } from './core/config.js';
 import { requestIdMiddleware } from './core/http.js';
+import { existsSync } from 'node:fs';
+import { resolve, extname } from 'node:path';
+import type { Request, Response, NextFunction } from 'express';
 
 /** Socket.IO cùng cổng với HTTP; giới hạn kích thước thông điệp và thời gian kết nối. */
 class ArenaIoAdapter extends IoAdapter {
@@ -44,6 +47,22 @@ async function bootstrap(): Promise<void> {
   app.enableCors({ origin: cfg.webOrigins, credentials: true });
   app.useWebSocketAdapter(new ArenaIoAdapter(app, cfg));
   app.enableShutdownHooks();
+  if (cfg.serveWeb) {
+    const webRoot = resolve(__dirname, '../../web/dist');
+    if (!existsSync(resolve(webRoot, 'index.html')))
+      throw new Error('Thiếu web/dist. Chạy pnpm build trước.');
+    app.useStaticAssets(webRoot, { index: false });
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (
+        req.method !== 'GET' ||
+        /^\/(?:api|socket\.io)(?:\/|$)/.test(req.path) ||
+        extname(req.path) ||
+        !req.accepts('html')
+      )
+        return next();
+      res.sendFile(resolve(webRoot, 'index.html'));
+    });
+  }
   await app.listen(cfg.port);
   log.log(
     `API chạy tại http://localhost:${cfg.port}/api/v1 (môi trường ${cfg.env}, demo ${cfg.demoMode ? 'BẬT' : 'tắt'})`,

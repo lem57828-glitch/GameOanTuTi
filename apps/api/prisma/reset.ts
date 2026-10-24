@@ -5,7 +5,12 @@ import { execSync } from 'node:child_process';
 import { PrismaClient } from '@prisma/client';
 
 async function main(): Promise<void> {
-  if (process.env.NODE_ENV === 'production') throw new Error('Không reset database ở production.');
+  if (
+    process.env.ARENA_PROFILE === 'official' ||
+    process.env.NODE_ENV === 'production' ||
+    (process.env.NODE_ENV !== 'test' && process.env.DEMO_MODE !== 'true')
+  )
+    throw new Error('Không reset database chính thức. Reset chỉ dành cho demo/test.');
   if (!process.argv.includes('--yes')) {
     const target = (process.env.DATABASE_URL ?? '').replace(/\/\/[^@]*@/, '//***@');
     console.error(

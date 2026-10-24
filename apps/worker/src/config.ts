@@ -1,5 +1,6 @@
 import { hostname } from 'node:os';
 import { z } from 'zod';
+import { assertRuntimeProfile } from '@arena/contracts';
 
 const Env = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -22,6 +23,7 @@ const Env = z.object({
 export type WorkerConfig = ReturnType<typeof loadConfig>;
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env) {
+  assertRuntimeProfile(source);
   const parsed = Env.safeParse(source);
   if (!parsed.success) {
     throw new Error(
@@ -29,12 +31,10 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env) {
     );
   }
   const e = parsed.data;
-  if (
-    (e.NODE_ENV === 'production' && (e.DEMO_MODE === 'true' || e.BOT_SANDBOX_MODE !== 'docker')) ||
-    (e.NODE_ENV !== 'production' && e.DEMO_MODE !== 'true')
-  ) {
-    throw new Error('Worker: production cần DEMO_MODE=false và container; demo M0 cần DEMO_MODE=true.');
-  }
+  if (e.NODE_ENV === 'production' && e.DEMO_MODE === 'true')
+    throw new Error('Worker: production yêu cầu DEMO_MODE=false.');
+  if ((e.NODE_ENV === 'production' || e.DEMO_MODE === 'false') && e.BOT_SANDBOX_MODE !== 'docker')
+    throw new Error('Worker: luồng chính thức yêu cầu container; trusted-local chỉ dành cho demo.');
   return {
     env: e.NODE_ENV,
     sandboxMode: e.BOT_SANDBOX_MODE,

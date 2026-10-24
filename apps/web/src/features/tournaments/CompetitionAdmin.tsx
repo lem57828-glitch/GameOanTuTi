@@ -453,7 +453,7 @@ export function CompetitionAdmin() {
             <BracketPanel bracket={c.bracket} top4={c.top4} />
           </Card>
 
-          {isAdmin && (
+          {isAdmin && health.data?.demoMode && (
             <Card>
               <CardHeader
                 title="Công cụ thử nghiệm"

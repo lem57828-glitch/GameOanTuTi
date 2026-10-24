@@ -103,8 +103,8 @@ export function TournamentPage() {
                         />
                         <p className="text-sm text-ink-muted">
                           {s.kind === 'qualifier'
-                            ? 'Số ván mỗi trận, số vòng Swiss, bye, tránh tái đấu và tie-break đang chờ chốt (docs/DECISIONS.md).'
-                            : 'Top 32 → Top 4. Bán kết và chung kết đổi luật là giai đoạn sau, chưa thuộc M0.'}
+                            ? 'Mỗi cặp Swiss thi đấu 2 ván đổi màu, không chọn quân thứ 10.'
+                            : 'Loại trực tiếp từ Top 32 đến Top 4; có xác nhận kết quả trước khi sang vòng tiếp theo.'}
                         </p>
                         {s.startsAt && (
                           <p className="mt-3 text-sm">

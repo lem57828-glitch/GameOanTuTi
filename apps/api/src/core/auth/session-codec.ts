@@ -65,8 +65,8 @@ export function readCookie(header: string | undefined, name: string): string | u
   return undefined;
 }
 
-export function setSessionCookie(res: Response, token: string, secure: boolean): void {
-  res.cookie(SESSION_COOKIE, token, {
+export function setSessionCookie(res: Response, token: string, secure: boolean, name = SESSION_COOKIE): void {
+  res.cookie(name, token, {
     httpOnly: true,
     sameSite: 'lax',
     secure,
@@ -75,6 +75,6 @@ export function setSessionCookie(res: Response, token: string, secure: boolean):
   });
 }
 
-export function clearSessionCookie(res: Response, secure: boolean): void {
-  res.clearCookie(SESSION_COOKIE, { httpOnly: true, sameSite: 'lax', secure, path: '/' });
+export function clearSessionCookie(res: Response, secure: boolean, name = SESSION_COOKIE): void {
+  res.clearCookie(name, { httpOnly: true, sameSite: 'lax', secure, path: '/' });
 }

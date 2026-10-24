@@ -105,7 +105,7 @@ export function RoomPage() {
         </div>
         {user?.role === 'admin' && (
           <Button asChild variant="secondary" size="sm">
-            <Link to="/admin">Tạo ván mô phỏng</Link>
+            <Link to="/admin">{health.data?.demoMode ? 'Tạo ván mô phỏng' : 'Điều hành giải'}</Link>
           </Button>
         )}
       </header>

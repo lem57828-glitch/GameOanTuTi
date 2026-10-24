@@ -5,10 +5,17 @@ import { Alert, Badge, Button, Card, CardHeader } from '@arena/ui';
 import type { RoomSnapshot } from '@arena/contracts';
 import { Board } from '../components/Board';
 import { api } from '../lib/api';
+import { usePublicHealth } from '../lib/health';
 
 export function HomePage() {
   const { user, isLoading } = useSession();
-  const room = useQuery({ queryKey: ['home-room'], queryFn: () => api<RoomSnapshot>('/rooms/room_demo_1') });
+  const health = usePublicHealth();
+  const demo = health.data?.demoMode === true;
+  const room = useQuery({
+    queryKey: ['home-room'],
+    queryFn: () => api<RoomSnapshot>('/rooms/room_demo_1'),
+    enabled: demo,
+  });
   return (
     <div className="flex flex-col gap-10">
       <section className="grid items-center gap-10 lg:grid-cols-2">
@@ -33,15 +40,15 @@ export function HomePage() {
             </Button>
           </div>
           <p className="mt-4 text-xs text-ink-muted">
-            M0 dùng bot mô phỏng tin cậy. Chưa nhận bot của thí sinh.
+            Nộp bot, đấu thử chiến thuật và tham gia các trận đấu theo lịch của BTC.
           </p>
         </div>
         <Card className="relative bg-gradient-to-br from-surface-2 to-bg-deep">
           <div className="mb-4 flex items-center justify-between gap-2">
             <span className="font-bold">
-              ALPHA <span className="mx-2 text-accent">VS</span> BETA
+              XANH <span className="mx-2 text-accent">VS</span> HỒNG
             </span>
-            <Badge>Ván mẫu</Badge>
+            <Badge>{demo ? 'Ván mẫu' : 'Minh họa bàn cờ'}</Badge>
           </div>
           <Board
             board={
@@ -73,7 +80,7 @@ export function HomePage() {
                 {
                   [
                     'Mỗi người thuộc một đội trong một giải.',
-                    'Tính năng nộp và chạy bot thật sẽ có sau M0.',
+                    'Tập luyện với file Python; nộp bot GitHub theo commit để thi chính thức.',
                     'Phòng công khai cho thí sinh và khán giả.',
                   ][i]
                 }
@@ -83,10 +90,12 @@ export function HomePage() {
         )}
       </section>
       <Card>
-        <CardHeader title="Giải mẫu Bot Arena" subtitle="Sơ loại → Top 32 → Top 4" />
+        <CardHeader
+          title={demo ? 'Giải mẫu Bot Arena' : 'Giải đấu Bot Arena'}
+          subtitle="Sơ loại → Top 32 → Top 4"
+        />
         <p className="text-sm text-ink-muted">
-          Bộ khung để cả nhóm phát triển các module. Bán kết, chung kết offline và luật mới sẽ được đặc tả ở
-          giai đoạn sau.
+          Theo dõi lịch thi, cặp đấu, bảng xếp hạng và nhánh loại trực tiếp của giải đang mở.
         </p>
         <Link to="/tournament" className="mt-4 inline-block font-semibold text-accent">
           Xem thông tin giải →

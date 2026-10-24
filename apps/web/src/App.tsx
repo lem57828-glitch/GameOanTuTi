@@ -35,7 +35,7 @@ export function App() {
       <header className="border-b border-line bg-bg-deep/80">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-8">
           <Link to="/" className="text-xl font-black tracking-tight">
-            BOT<span className="text-accent"> ARENA</span> <span className="text-xs text-ink-muted">M0</span>
+            BOT<span className="text-accent"> ARENA</span>
           </Link>
           <nav aria-label="Điều hướng chính" className="flex flex-wrap gap-x-5 gap-y-3 text-sm font-semibold">
             {(
@@ -109,7 +109,19 @@ export function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<AuthPage key="login" />} />
           <Route path="/register" element={<AuthPage key="register" register />} />
-          <Route path="/demo-login" element={<DemoLoginPage />} />
+          <Route
+            path="/demo-login"
+            element={
+              health.data?.demoMode ? (
+                <DemoLoginPage />
+              ) : (
+                <EmptyState
+                  title="Đăng nhập mẫu không khả dụng"
+                  action={<Link to="/login">Đăng nhập</Link>}
+                />
+              )
+            }
+          />
           <Route path="/team" element={<MyTeamPage />} />
           <Route path="/bots" element={<MyBotsPage />} />
           <Route path="/tournament" element={<TournamentPage />} />
@@ -119,7 +131,16 @@ export function App() {
           <Route path="/news" element={<NewsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
-          <Route path="/mailbox" element={<MailboxPage />} />
+          <Route
+            path="/mailbox"
+            element={
+              health.data?.demoMode ? (
+                <MailboxPage />
+              ) : (
+                <EmptyState title="Hộp thư thử nghiệm không khả dụng" />
+              )
+            }
+          />
           <Route path="/forgot-password" element={<RecoveryPage mode="forgot" />} />
           <Route path="/reset-password" element={<RecoveryPage mode="reset" />} />
           <Route path="/verify-email" element={<RecoveryPage mode="verify" />} />
@@ -132,7 +153,8 @@ export function App() {
         </Routes>
       </main>
       <footer className="border-t border-line px-4 py-6 text-center text-xs text-ink-muted">
-        Bot Arena · Nền tảng M0 · Luật thi chính thức đang hoàn thiện
+        Bot Arena ·{' '}
+        {health.data?.demoMode ? 'Môi trường demo · Dữ liệu mô phỏng' : 'Đấu trường lập trình bot'}
       </footer>
     </div>
   );

@@ -43,7 +43,7 @@ export function AdminPage() {
           { value: 'config', label: 'Cấu hình giải', content: <TournamentAdmin /> },
           {
             value: 'system',
-            label: 'Dịch vụ & ván demo',
+            label: h?.demoMode ? 'Dịch vụ & ván demo' : 'Dịch vụ',
             content: (
               <div className="flex flex-col gap-6">
                 {health.isLoading && <Spinner label="Kiểm tra dịch vụ" />}
@@ -59,7 +59,6 @@ export function AdminPage() {
                         ['PostgreSQL', h.database],
                         ['Redis', h.redis],
                         ['Worker', h.worker.alive],
-                        ['Demo', h.demoMode],
                       ].map(([name, up]) => (
                         <Card key={String(name)}>
                           <p className="mb-3 font-semibold">{name}</p>
@@ -93,7 +92,7 @@ export function AdminPage() {
                     )}
                   </>
                 )}
-                {user?.role === 'admin' && (
+                {h?.demoMode && user?.role === 'admin' && (
                   <Card>
                     <CardHeader
                       title="Tạo ván mô phỏng"
