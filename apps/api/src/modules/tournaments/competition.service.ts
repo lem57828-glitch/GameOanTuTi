@@ -35,6 +35,7 @@ import { AppError, conflict, forbidden, notFound } from '../../core/errors.js';
 import type { Tx } from '../../core/prisma.service.js';
 import { AccountsTeamsService } from '../accounts-teams/accounts-teams.service.js';
 import { BotsRunnerService } from '../bots-runner/bots-runner.service.js';
+import { CompetitionNotices } from './competition-notices.js';
 import {
   CompetitionRepository,
   type CompetitionTournament,
@@ -104,6 +105,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
     private readonly accounts: AccountsTeamsService,
     private readonly bots: BotsRunnerService,
     private readonly audit: AuditService,
+    private readonly notices: CompetitionNotices,
   ) {}
 
   // ================================================================== tự khóa mức theo giờ máy chủ
@@ -146,6 +148,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
     const top4 = ids(t.top4).map((id) => ({ id, name: ctx.names.get(id) ?? id }));
     return {
       tournamentId: t.id,
+      demoKind: t.demoKind === 'experience' || t.demoKind === 'simulation' ? t.demoKind : null,
       avoidRematch: t.avoidRematch === 'qualifier' ? 'qualifier' : 'level',
       eligibleTeams: ctx.teams.filter((x) => ELIGIBLE_TEAM.includes(x.status)).length,
       suggestedTargets: suggestTargets(
@@ -512,6 +515,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
             skipped.push(l.ord);
             continue;
           }
+          const lockedAt = new Date();
           await tx.qualifierLevel.update({
             where: { id: l.id },
             data: {
@@ -519,12 +523,13 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
               seed: newSeed(),
               teamsIn: entrants.length,
               entrants: json(entrants),
-              lockedAt: new Date(),
+              lockedAt,
             },
           });
           await tx.tournament.update({ where: { id: tournamentId }, data: { status: 'running' } });
           await this.setStageStatus(tx, t, 'qualifier', 'running');
           await this.freezeLevelBots(tx, t, l, entrants);
+          await this.notices.levelLocked(tx, l, entrants, lockedAt);
           return { level: l.ord, teams: entrants.length, skipped };
         }
         throw conflict('Không còn mức sơ loại nào chờ khóa.');
@@ -565,8 +570,9 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
         if (p.kind === 'bye') byeCounts.set(p.teamAId!, (byeCounts.get(p.teamAId!) ?? 0) + 1);
       const seed = deriveSeed(L.seed ?? 1, roundNo);
       const plan = pairRound(rows, played2, byeCounts, seed, roundNo);
+      const created = [];
       for (const [i, [a, b]] of plan.pairs.entries()) {
-        await tx.pairing.create({
+        const row = await tx.pairing.create({
           data: {
             tournamentId,
             kind: 'swiss',
@@ -578,9 +584,10 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
             seed: deriveSeed(seed, i + 1),
           },
         });
+        created.push(row);
       }
       if (plan.bye) {
-        await tx.pairing.create({
+        const row = await tx.pairing.create({
           data: {
             tournamentId,
             kind: 'bye',
@@ -596,8 +603,10 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
             resultVersion: 1,
           },
         });
+        created.push(row);
       }
       await tx.qualifierLevel.update({ where: { id: L.id }, data: { status: 'running' } });
+      await this.notices.paired(tx, `${L.name} · vòng ${roundNo}`, created);
       return {
         level: L.ord,
         round: roundNo,
@@ -628,6 +637,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
         where: { id: { in: list.map((p) => p.id) } },
         data: { confirmed: true },
       });
+      await this.notices.confirmed(tx, `${L.name} · vòng ${round}`, list);
       return { level: L.ord, round };
     });
   }
@@ -745,6 +755,12 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
         data: { status: 'running', startedAt: new Date() },
       });
       await this.setStageStatus(tx, t, 'knockout', 'running');
+      await this.notices.paired(
+        tx,
+        PHASES[idx]!.title,
+        list.filter((p) => p.teamAId && p.teamBId),
+        'Trận loại trực tiếp: 5 hiệp, bằng điểm đấu thêm 2 hiệp phụ.',
+      );
       await this.checkPhaseFinished(tx, tournamentId, phase);
       return { phase, pairings: list.length };
     });
@@ -768,6 +784,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
         where: { id: round.id },
         data: { status: 'done', confirmedAt: new Date() },
       });
+      await this.notices.confirmed(tx, PHASES.find((x) => x.phase === phase)!.title, list);
       const sorted = list.slice().sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0));
       const idx = PHASES.findIndex((p) => p.phase === phase);
       const next = PHASES[idx + 1];
@@ -775,6 +792,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
         const winners = sorted.map((p) => p.winnerTeamId).filter((w): w is string => !!w);
         await tx.tournament.update({ where: { id: tournamentId }, data: { top4: json(winners) } });
         await this.setStageStatus(tx, t, 'knockout', 'confirmed');
+        await this.notices.top4(tx, tournamentId, winners);
         return { phase, next: null, top4: winners };
       }
       for (let j = 0; j < sorted.length / 2; j++) {
@@ -874,6 +892,13 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
   async simulatePending(tournamentId: string, actor: Actor) {
     const t = await this.repo.findTournament(tournamentId);
     if (!t) throw notFound('giải đấu');
+    // Kết quả mô phỏng chỉ vào giải mô phỏng nhanh; giải trải nghiệm/giải thật chỉ nhận kết quả từ phòng đấu.
+    if (t.demoKind !== 'simulation')
+      throw conflict(
+        t.demoKind === 'experience'
+          ? 'Giải trải nghiệm chạy bot thật: kết quả chỉ đến từ phòng đấu, không sinh kết quả mô phỏng.'
+          : 'Chỉ giải mô phỏng nhanh mới dùng được công cụ sinh kết quả.',
+      );
     let rounds = 0;
     let done = 0;
     // Tranh suất có thể sinh bước mới sau mỗi lượt → lặp tới khi hết cặp chờ (giới hạn để không chạy vô hạn).
@@ -1015,6 +1040,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
   async addDemoTeams(tournamentId: string, count: number, actor: Actor) {
     const t = await this.repo.findTournament(tournamentId);
     if (!t) throw notFound('giải đấu');
+    if (!t.demoKind) throw conflict('Chỉ thêm đội mẫu vào giải demo (trải nghiệm hoặc mô phỏng nhanh).');
     if (t.levels.some((l) => l.status !== 'planned'))
       throw conflict('Sơ loại đã bắt đầu, không thêm đội được.');
     const teamIds = await this.accounts.createDemoTeams(tournamentId, count);
@@ -1059,14 +1085,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
     if (!p) throw notFound('cặp đấu');
     const t = (await this.repo.findTournament(p.tournamentId))!;
     const stage = t.stages.find((s) => s.kind === (p.kind === 'knockout' ? 'knockout' : 'qualifier')) ?? null;
-    const level = t.levels.find((l) => l.id === p.levelId) ?? null;
-    const phaseTitle = PHASES.find((x) => x.phase === p.phase)?.title;
-    const title =
-      p.kind === 'knockout'
-        ? `${phaseTitle} · cặp ${(p.slot ?? 0) + 1}`
-        : p.kind === 'tiebreak'
-          ? `${level?.name ?? 'Sơ loại'} · tranh suất bước ${p.round - 1000}`
-          : `${level?.name ?? 'Sơ loại'} · vòng ${p.round}`;
+    const title = this.pairingTitle(t, p);
     return {
       pairingId: p.id,
       tournamentId: t.id,
@@ -1082,6 +1101,16 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
     };
   }
 
+  private pairingTitle(t: CompetitionTournament, p: PairingRow): string {
+    const level = t.levels.find((l) => l.id === p.levelId) ?? null;
+    const phaseTitle = PHASES.find((x) => x.phase === p.phase)?.title;
+    return p.kind === 'knockout'
+      ? `${phaseTitle} · cặp ${(p.slot ?? 0) + 1}`
+      : p.kind === 'tiebreak'
+        ? `${level?.name ?? 'Sơ loại'} · tranh suất bước ${p.round - 1000}`
+        : `${level?.name ?? 'Sơ loại'} · vòng ${p.round}`;
+  }
+
   /** TV4 gắn trận vừa mở vào cặp (trong transaction của TV4). Một cặp chỉ có một trận hiệu lực. */
   async attachMatch(tx: Tx, pairingId: string, matchId: string): Promise<void> {
     const updated = await tx.pairing.updateMany({
@@ -1089,6 +1118,9 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
       data: { matchId },
     });
     if (updated.count === 0) throw conflict('Cặp đã có trận hoặc không còn chờ thi.');
+    const p = (await this.repo.findPairing(pairingId, tx))!;
+    const t = (await this.repo.findTournament(p.tournamentId, tx))!;
+    await this.notices.roomOpened(tx, this.pairingTitle(t, p), p, pairingRoomId(pairingId), matchId);
   }
 
   /** Thể thức trận theo loại cặp: số hiệp chính và có chọn quân thứ 10 không. */
@@ -1216,8 +1248,9 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
       );
       st.history.push({ ...plan, step: st.step, applied: false });
       await tx.qualifierLevel.update({ where: { id: L.id }, data: { cutState: json(st) } });
+      const created = [];
       for (const [i, [a, b]] of plan.pairs.entries()) {
-        await tx.pairing.create({
+        const row = await tx.pairing.create({
           data: {
             tournamentId,
             kind: 'tiebreak',
@@ -1229,7 +1262,14 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
             seed: deriveSeed(st.seed, st.step, i + 1),
           },
         });
+        created.push(row);
       }
+      await this.notices.paired(
+        tx,
+        `${L.name} · tranh suất bước ${st.step}`,
+        created,
+        'Cặp tranh suất ở ranh giới đi tiếp: 2 ván, bằng nhau đấu thêm tối đa 2 ván.',
+      );
       return;
     }
     if (st.contest && st.contest.slots > 0) st.qualified.push(...st.contest.group);
@@ -1243,14 +1283,27 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
     const qualified = st.qualified
       .slice()
       .sort((a, b) => compare(rows[order.get(a)!]!, rows[order.get(b)!]!) || lot.get(a)! - lot.get(b)!);
+    const finishedAt = new Date();
     await tx.qualifierLevel.update({
       where: { id: L.id },
-      data: { status: 'done', cutState: json(st), qualified: json(qualified), finishedAt: new Date() },
+      data: { status: 'done', cutState: json(st), qualified: json(qualified), finishedAt },
     });
     const lastLevel = await tx.qualifierLevel.findFirst({
       where: { tournamentId },
       orderBy: { ord: 'desc' },
     });
+    const nextLevel = await tx.qualifierLevel.findFirst({
+      where: { tournamentId, ord: { gt: L.ord }, status: 'planned' },
+      orderBy: { ord: 'asc' },
+    });
+    await this.notices.levelDone(
+      tx,
+      L,
+      qualified,
+      ids(L.entrants),
+      nextLevel?.name ?? (lastLevel?.id === L.id ? 'nhánh loại trực tiếp 32 đội' : 'mức sau'),
+      finishedAt,
+    );
     if (lastLevel?.id === L.id) await this.buildBracket(tx, tournamentId, qualified);
   }
 

@@ -1,10 +1,11 @@
 // Giải đấu. TV3 phát triển tiếp: sơ loại Swiss, tranh suất Top 32, cây 32→4, bảng xếp hạng, khiếu nại.
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { Alert, Badge, Card, CardHeader, EmptyState, Spinner, Tabs } from '@arena/ui';
 import type { TournamentView } from '@arena/contracts';
 import type { CompetitionView } from '@arena/contracts';
 import { api, isApiError } from '../../lib/api';
-import { BracketPanel, StandingsPanel } from './competition-ui';
+import { BracketPanel, DEMO_KIND, LEVEL_STATUS, StandingsPanel } from './competition-ui';
 import { MyPairings } from './MyPairings';
 
 const STAGE_STATUS: Record<string, string> = {
@@ -16,6 +17,8 @@ const STAGE_STATUS: Record<string, string> = {
 };
 
 export function TournamentPage() {
+  // ?tab=mine: thông báo theo vòng mở thẳng tab "Trận của đội tôi".
+  const [params] = useSearchParams();
   const q = useQuery({
     queryKey: ['tournament', 'current'],
     queryFn: () => api<TournamentView>('/tournaments/current'),
@@ -36,10 +39,12 @@ export function TournamentPage() {
           {t?.name ?? 'Giải đấu hiện tại'}
         </h1>
         {t?.isDemo && (
-          <p className="mt-2">
+          <p className="mt-2 flex flex-wrap items-center gap-2">
+            {t.demoKind && <Badge tone={DEMO_KIND[t.demoKind].tone}>{DEMO_KIND[t.demoKind].label}</Badge>}
             <Badge tone="warning">Giải mẫu — không phải lịch thi chính thức</Badge>
           </p>
         )}
+        {t?.demoKind && <p className="mt-1 text-sm text-ink-muted">{DEMO_KIND[t.demoKind].hint}</p>}
       </header>
       {q.isLoading && <Spinner label="Đang tải giải đấu" />}
       {isApiError(q.error, 'NOT_FOUND') && <EmptyState title="Chưa có giải đấu nào đang mở" />}
@@ -86,7 +91,9 @@ export function TournamentPage() {
       )}
       {t && (
         <Tabs
+          key={params.get('tab') ?? 'default'}
           label="Thông tin giải"
+          defaultValue={params.get('tab') ?? undefined}
           items={[
             {
               value: 'stages',
@@ -124,6 +131,11 @@ export function TournamentPage() {
                       </Card>
                     </li>
                   ))}
+                  {(comp.data?.levels.length ?? 0) > 0 && (
+                    <li className="md:col-span-2">
+                      <LevelSchedule levels={comp.data!.levels} />
+                    </li>
+                  )}
                 </ol>
               ),
             },
@@ -146,5 +158,39 @@ export function TournamentPage() {
         />
       )}
     </div>
+  );
+}
+
+/** Lịch các mức sơ loại cho thí sinh: chỉ tiêu, số vòng, mốc khóa bot, mốc công bố kết quả, tiến độ. */
+function LevelSchedule({ levels }: { levels: CompetitionView['levels'] }) {
+  const at = (v: string | null) => (v ? new Date(v).toLocaleString('vi-VN') : 'BTC thông báo sau');
+  return (
+    <Card>
+      <CardHeader
+        title="Lịch các mức sơ loại"
+        subtitle="Mỗi mức: khóa bot (chốt một bot cho cả mức) → các vòng Swiss → công bố đội đi tiếp."
+      />
+      <ol className="grid gap-2">
+        {levels.map((l) => (
+          <li
+            key={l.id}
+            className="grid gap-1 rounded-md border border-line p-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center"
+          >
+            <div>
+              <p className="font-semibold">
+                {l.name} · giữ {l.teamTarget} đội · {l.rounds} vòng
+                {l.roundsPlayed > 0 && l.status !== 'done' ? ` (đã ghép ${l.roundsPlayed})` : ''}
+              </p>
+              <p className="text-xs text-ink-muted">
+                Khóa bot: {l.status === 'planned' ? at(l.botLockAt) : 'đã khóa'} · Công bố kết quả:{' '}
+                {at(l.publishAt)}
+                {l.late && <span className="text-warning"> · đang chậm so với lịch</span>}
+              </p>
+            </div>
+            <Badge tone={LEVEL_STATUS[l.status].tone}>{LEVEL_STATUS[l.status].label}</Badge>
+          </li>
+        ))}
+      </ol>
+    </Card>
   );
 }

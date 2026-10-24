@@ -53,7 +53,8 @@ export class TournamentsService {
   }
   async create(userId: string, input: CreateTournamentRequest, requestId: string) {
     return this.repo.create(async (tx) => {
-      const row = await tx.tournament.create({ data: input, include: { stages: true } });
+      const demoKind = input.isDemo ? (input.demoKind ?? 'simulation') : null;
+      const row = await tx.tournament.create({ data: { ...input, demoKind }, include: { stages: true } });
       const view = tournamentView(row);
       await this.audit.record(
         { actorId: userId, action: 'tournament.create', target: row.id, data: { after: view }, requestId },

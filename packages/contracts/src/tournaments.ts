@@ -20,12 +20,17 @@ export type ConfigurationAction = z.infer<typeof ConfigurationAction>;
 const OptionalTime = IsoDateTime.nullable();
 const Name = z.string().trim().min(3).max(120);
 const Reason = z.string().trim().min(3).max(500);
+/** Loại giải demo: trải nghiệm chạy bot thật, hoặc mô phỏng nhanh (kết quả do hệ thống sinh, có nhãn). */
+export const DemoKind = z.enum(['experience', 'simulation']);
+export type DemoKind = z.infer<typeof DemoKind>;
 export const RevisionRequest = z.object({ expectedRevision: z.number().int().nonnegative(), reason: Reason });
 export const CreateTournamentRequest = z
   .object({
     name: Name,
     description: z.string().trim().max(2000).default(''),
     isDemo: z.boolean().default(false),
+    /** Chỉ với giải demo; bỏ trống thì mặc định mô phỏng nhanh. */
+    demoKind: DemoKind.nullable().optional(),
   })
   .strict();
 export const UpdateTournamentRequest = RevisionRequest.extend({
@@ -68,6 +73,7 @@ export const TournamentView = z.object({
   status: z.enum(['draft', 'registration', 'running', 'finished']),
   /** Giải mẫu chỉ để phát triển; giao diện phải ghi rõ không phải lịch thi chính thức. */
   isDemo: z.boolean(),
+  demoKind: DemoKind.nullable(),
   description: z.string(),
   configStatus: ConfigurationStatus,
   revision: z.number().int().nonnegative(),
@@ -253,6 +259,7 @@ export type BracketView = z.infer<typeof BracketView>;
 
 export const CompetitionView = z.object({
   tournamentId: Id,
+  demoKind: DemoKind.nullable(),
   avoidRematch: AvoidRematchScope,
   eligibleTeams: Count,
   suggestedTargets: z.array(Count),

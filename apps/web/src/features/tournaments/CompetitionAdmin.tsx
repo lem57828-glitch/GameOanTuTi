@@ -23,6 +23,7 @@ import { useSession } from '../../lib/session';
 import { usePublicHealth } from '../../lib/health';
 import {
   BracketPanel,
+  DEMO_KIND,
   KIND_LABEL,
   LEVEL_STATUS,
   PairingLine,
@@ -211,7 +212,7 @@ export function CompetitionAdmin() {
               {gameRange(r!.byGame.filter((g) => g.selecting))})
             </Button>
           )}
-          {health.data?.demoMode && isAdmin && unopened > 0 && (
+          {health.data?.demoMode && isAdmin && unopened > 0 && c.demoKind === 'simulation' && (
             <Button
               variant="secondary"
               loading={busy}
@@ -232,7 +233,13 @@ export function CompetitionAdmin() {
         <CardHeader
           title="Điều hành thi đấu"
           subtitle="Sơ loại chia mức (Swiss) → tranh suất → cây 32 → Top 4"
+          action={
+            c?.demoKind ? (
+              <Badge tone={DEMO_KIND[c.demoKind].tone}>{DEMO_KIND[c.demoKind].label}</Badge>
+            ) : undefined
+          }
         />
+        {c?.demoKind && <p className="mb-3 text-sm text-ink-muted">{DEMO_KIND[c.demoKind].hint}</p>}
         <div className="grid gap-4 md:grid-cols-2">
           <Select
             label="Giải đã công bố"
@@ -452,11 +459,15 @@ export function CompetitionAdmin() {
             <BracketPanel bracket={c.bracket} top4={c.top4} />
           </Card>
 
-          {isAdmin && health.data?.demoMode && (
+          {isAdmin && health.data?.demoMode && c.demoKind && (
             <Card>
               <CardHeader
                 title="Công cụ thử nghiệm"
-                subtitle="Chỉ có khi DEMO_MODE bật. Kết quả mô phỏng được gắn nhãn, không phải kết quả thi thật."
+                subtitle={
+                  c.demoKind === 'simulation'
+                    ? 'Chỉ có khi DEMO_MODE bật. Kết quả mô phỏng được gắn nhãn, không phải kết quả thi thật.'
+                    : 'Giải trải nghiệm: được thêm đội đối thủ có bot mẫu (đấu qua worker thật); không có nút sinh kết quả.'
+                }
               />
               {!health.data?.demoMode ? (
                 <p className="text-sm text-ink-muted">DEMO_MODE đang tắt.</p>
@@ -477,14 +488,16 @@ export function CompetitionAdmin() {
                   >
                     Thêm đội mẫu có bot mô phỏng
                   </Button>
-                  <Button
-                    variant="secondary"
-                    loading={act.isPending}
-                    disabled={!c.pending.length}
-                    onClick={() => run('/demo/simulate', 'Đã mô phỏng các cặp đang chờ')}
-                  >
-                    Mô phỏng các cặp đang chờ
-                  </Button>
+                  {c.demoKind === 'simulation' && (
+                    <Button
+                      variant="secondary"
+                      loading={act.isPending}
+                      disabled={!c.pending.length}
+                      onClick={() => run('/demo/simulate', 'Đã mô phỏng các cặp đang chờ')}
+                    >
+                      Mô phỏng các cặp đang chờ
+                    </Button>
+                  )}
                   <Button variant="danger" onClick={() => setResetOpen(true)}>
                     Bắt đầu lại phần thi đấu
                   </Button>

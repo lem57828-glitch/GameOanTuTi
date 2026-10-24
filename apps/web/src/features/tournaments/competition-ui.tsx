@@ -4,8 +4,29 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Alert, Badge, EmptyState, Select, Spinner, Table, cn, type BadgeTone } from '@arena/ui';
-import type { BracketView, LevelView, PairingView, StandingRowView, StandingsView } from '@arena/contracts';
+import type {
+  BracketView,
+  DemoKind,
+  LevelView,
+  PairingView,
+  StandingRowView,
+  StandingsView,
+} from '@arena/contracts';
 import { api } from '../../lib/api';
+
+/** Nhãn loại giải demo, dùng chung cho màn hình BTC và sinh viên. */
+export const DEMO_KIND: Record<DemoKind, { label: string; tone: BadgeTone; hint: string }> = {
+  experience: {
+    label: 'Giải trải nghiệm · Chạy bot thật',
+    tone: 'accent',
+    hint: 'Mọi kết quả đến từ phòng đấu do worker chạy bot; không có kết quả mô phỏng.',
+  },
+  simulation: {
+    label: 'Giải mô phỏng nhanh',
+    tone: 'warning',
+    hint: 'Dùng để thử ghép cặp, bảng điểm, cây giải. Kết quả mô phỏng có nhãn, không phải ván bot đã chạy.',
+  },
+};
 
 export const LEVEL_STATUS: Record<LevelView['status'], { label: string; tone: BadgeTone }> = {
   planned: { label: 'Chưa bắt đầu', tone: 'neutral' },

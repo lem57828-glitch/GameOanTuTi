@@ -6,6 +6,7 @@ import type { BotSourceDetail, BotVersion, PieceType, TestRunDetail } from '@are
 import { SubmitBotInput } from '@arena/contracts';
 import { api } from '../../lib/api';
 import { useSession } from '../../lib/session';
+import { TestRunHistory } from './TestRunHistory';
 import { TestRunReplay } from './TestRunReplay';
 
 const STATUS: Record<BotVersion['status'], { label: string; tone: 'neutral' | 'success' | 'danger' }> = {
@@ -78,6 +79,7 @@ export function MyBotsPage() {
       }),
     onSuccess: (data) => {
       setActiveTestRunId(data.id);
+      void queryClient.invalidateQueries({ queryKey: ['test-runs', data.botVersionId] });
     },
   });
 
@@ -660,6 +662,7 @@ export function MyBotsPage() {
                     Bắt đầu đấu ngay
                   </Button>
                 </div>
+                <TestRunHistory botId={testRunBot.id} bots={q.data ?? []} onOpen={setActiveTestRunId} />
               </div>
             ) : (
               <div className="flex flex-col gap-4">

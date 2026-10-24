@@ -4,6 +4,7 @@ import { Alert, Badge, Button, Card, CardHeader, EmptyState, Spinner } from '@ar
 import type { MyPairingView, StandingsView, TeamView, TournamentView } from '@arena/contracts';
 import { api, isApiError } from '../../lib/api';
 import { useSession } from '../../lib/session';
+import { DEMO_KIND } from './competition-ui';
 import { MyPairings } from './MyPairings';
 import { StageBotCard } from './StageBotCard';
 import { teamNextStep } from './team-competition';
@@ -69,6 +70,12 @@ export function TeamCompetitionPage() {
           {own?.name ?? 'Đội của bạn'}
           {t ? ` · ${t.name}` : ''}
         </p>
+        {t?.demoKind && (
+          <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-muted">
+            <Badge tone={DEMO_KIND[t.demoKind].tone}>{DEMO_KIND[t.demoKind].label}</Badge>
+            {DEMO_KIND[t.demoKind].hint}
+          </p>
+        )}
       </header>
       {(team.isLoading || tournament.isLoading || pairings.isLoading) && (
         <Spinner label="Đang tải trạng thái thi đấu" />

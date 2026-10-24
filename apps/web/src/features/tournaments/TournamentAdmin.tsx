@@ -21,7 +21,9 @@ import type {
   TournamentView,
 } from '@arena/contracts';
 import { api, isApiError } from '../../lib/api';
+import { usePublicHealth } from '../../lib/health';
 import { useSession } from '../../lib/session';
+import { DEMO_KIND } from './competition-ui';
 
 export const CONFIG_LABEL: Record<ConfigurationStatus, string> = {
   draft: 'Nháp',
@@ -54,13 +56,21 @@ export function TournamentAdmin() {
   const { toast } = useToast();
   const [selected, setSelected] = useState('');
   const [name, setName] = useState('');
+  // Chỉ khi DEMO_MODE bật: chọn giải trải nghiệm chạy bot thật hay giải mô phỏng nhanh.
+  const [kind, setKind] = useState<'experience' | 'simulation' | 'none'>('experience');
+  const health = usePublicHealth();
+  const demo = health.data?.demoMode === true;
   const [reason, setReason] = useState('');
   const q = useQuery({
     queryKey: ['admin-tournaments', user?.id],
     queryFn: () => api<TournamentView[]>('/admin/tournaments'),
   });
   const create = useMutation({
-    mutationFn: () => api<TournamentView>('/admin/tournaments', { method: 'POST', json: { name } }),
+    mutationFn: () =>
+      api<TournamentView>('/admin/tournaments', {
+        method: 'POST',
+        json: demo && kind !== 'none' ? { name, isDemo: true, demoKind: kind } : { name },
+      }),
     onSuccess: (t) => {
       setSelected(t.id);
       setName('');
@@ -98,6 +108,20 @@ export function TournamentAdmin() {
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
+            {demo && (
+              <div className="min-w-56">
+                <Select
+                  label="Loại giải (môi trường demo)"
+                  value={kind}
+                  onValueChange={(v) => setKind(v as typeof kind)}
+                  options={[
+                    { value: 'experience', label: DEMO_KIND.experience.label },
+                    { value: 'simulation', label: DEMO_KIND.simulation.label },
+                    { value: 'none', label: 'Giải thường (không phải demo)' },
+                  ]}
+                />
+              </div>
+            )}
             <Button type="submit" loading={create.isPending}>
               Tạo giải nháp
             </Button>

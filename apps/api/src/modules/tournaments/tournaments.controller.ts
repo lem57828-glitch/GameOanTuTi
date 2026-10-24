@@ -12,7 +12,7 @@ import { Roles, CurrentUser } from '../../core/auth/guards.js';
 import { ok, parse, type ArenaRequest } from '../../core/http.js';
 import { TournamentsService } from './tournaments.service.js';
 import { APP_CONFIG, type AppConfig } from '../../core/config.js';
-import { forbidden } from '../../core/errors.js';
+import { forbidden, validationError } from '../../core/errors.js';
 
 @Controller()
 export class TournamentsController {
@@ -37,6 +37,7 @@ export class TournamentsController {
   async create(@CurrentUser() user: SessionUser, @Body() body: unknown, @Req() req: ArenaRequest) {
     const input = parse(CreateTournamentRequest, body);
     if (input.isDemo && !this.cfg.demoMode) throw forbidden('Không tạo giải mẫu ở chế độ chính thức.');
+    if (input.demoKind && !input.isDemo) throw validationError('Loại giải demo chỉ dùng cho giải demo.');
     return ok(await this.tournaments.create(user.id, input, req.requestId));
   }
 

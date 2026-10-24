@@ -23,6 +23,11 @@ const tid = `tour_tv4_${randomUUID().slice(0, 8)}`;
 const children: ChildProcess[] = [];
 let logs = '';
 const cookies: Record<string, string> = {};
+const startedAt = new Date();
+const notes = (prefix: string) =>
+  prisma.notification.findMany({
+    where: { accountId: 'acc_an', sourceKey: { startsWith: prefix }, createdAt: { gte: startedAt } },
+  });
 
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function call(who: string | null, path: string, method = 'GET', json?: unknown) {
@@ -83,6 +88,7 @@ beforeAll(async () => {
       name: 'Giải kiểm thử TV4',
       status: 'registration',
       isDemo: true,
+      demoKind: 'experience',
       configStatus: 'confirmed',
       stages: {
         create: [
@@ -158,6 +164,9 @@ afterAll(async () => {
     prisma.team.deleteMany({ where: { tournamentId: tid } }),
     prisma.auditLog.deleteMany({ where: { target: { in: [tid, ...matches.map((m) => m.id)] } } }),
     prisma.stage.deleteMany({ where: { tournamentId: tid } }),
+    prisma.notification.deleteMany({
+      where: { accountId: 'acc_an', sourceKey: { startsWith: 'comp:' }, createdAt: { gte: startedAt } },
+    }),
     prisma.tournament.delete({ where: { id: tid } }),
   ]);
   await prisma.$disconnect();
@@ -208,6 +217,16 @@ it('sơ loại: đội trưởng chốt một bot cho cả mức, trận Swiss c
   expect(
     (await call('acc_admin', `/admin/tournaments/${tid}/qualifier/rounds`, 'POST', reason)).data,
   ).toMatchObject({ pairs: 8 });
+  // Giải trải nghiệm chạy bot thật: API từ chối sinh kết quả mô phỏng, kể cả khi gọi trực tiếp.
+  expect((await overview()).demoKind).toBe('experience');
+  const sim = await call('acc_admin', `/admin/tournaments/${tid}/demo/simulate`, 'POST');
+  expect(sim.status).toBe(409);
+  expect(sim.error?.message).toMatch(/trải nghiệm/);
+  // Loại giải demo chỉ dùng cho giải demo.
+  expect(
+    (await call('acc_admin', '/admin/tournaments', 'POST', { name: 'Giải sai loại', demoKind: 'experience' }))
+      .status,
+  ).toBe(400);
   // Sinh viên không mở phòng được; BTC mở phòng cho 8 cặp, mở lại không tạo trận trùng.
   expect((await call('acc_an', `/admin/tournaments/${tid}/matches/open`, 'POST')).status).toBe(403);
   expect((await call('acc_admin', `/admin/tournaments/${tid}/matches/open`, 'POST')).data.opened).toBe(8);
@@ -250,11 +269,35 @@ it('sơ loại: đội trưởng chốt một bot cho cả mức, trận Swiss c
   const snap = (await call(null, `/rooms/${roomId}`)).data;
   expect(snap.match).toMatchObject({ status: 'completed', kind: 'swiss', mainGames: 2, chooseExtra: false });
   expect(snap.match.games).toHaveLength(2);
+
+  // Xem lại ván 1 (không phải ván hiện tại của phòng): đúng ván, đủ nước đi, trạng thái theo chính ván đó.
+  const first = (await call(null, `/rooms/${roomId}/games/${match.games[0]!.id}`)).data;
+  expect(first).toMatchObject({ gameId: match.games[0]!.id, status: 'finished' });
+  expect(first.history.length).toBeGreaterThan(0);
+  const otherGame = await prisma.game.findFirstOrThrow({
+    where: { roomId: { not: roomId }, id: { not: match.games[0]!.id } },
+  });
+  expect((await call(null, `/rooms/${roomId}/games/${otherGame.id}`)).status).toBe(404);
+
+  // Thông báo theo vòng cho đội của acc_an: khóa mức, ghép cặp (kèm đối thủ), mở phòng (dẫn tới phòng).
+  expect(await notes('comp:level-lock:')).toHaveLength(1);
+  const pair = await notes(`comp:pair:${mine.id}`);
+  expect(pair).toHaveLength(1);
+  expect(pair[0]!.body).toMatch(/Đội bạn gặp/);
+  const room = await notes(`comp:room:${match.id}`);
+  expect(room).toHaveLength(1);
+  expect(room[0]!.href).toBe(`/rooms/${roomId}`);
 }, 240_000);
 
 it('loại trực tiếp: 5 hiệp (+2 khi hòa) có quân thứ 10, tung xu từng hiệp; thi lại sau khiếu nại mở trận mới cùng phòng', async () => {
   await call('acc_admin', `/admin/tournaments/${tid}/qualifier/rounds/1/confirm`, 'POST', reason);
+  const confirmed = await notes('comp:confirm:');
+  expect(confirmed).toHaveLength(1);
+  expect(confirmed[0]!.body).toMatch(/Đội bạn (thắng|thua|hòa)/);
   await call('acc_admin', `/admin/tournaments/${tid}/qualifier/finish`, 'POST', reason);
+  const passed = await notes('comp:level-done:');
+  expect(passed).toHaveLength(1);
+  expect(passed[0]!.title).toMatch(/vượt qua/);
   expect(
     (await call('acc_admin', `/admin/tournaments/${tid}/knockout/r32/start`, 'POST', reason)).status,
   ).toBe(201);

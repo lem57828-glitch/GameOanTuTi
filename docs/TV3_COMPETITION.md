@@ -26,6 +26,20 @@ Phần này nối tiếp [cấu hình giải](TV3_CONFIGURATION.md). Giải ph�
 
 Trang **Khu vực BTC → Điều hành thi đấu** chỉ hiện đúng một nút chính cho bước kế tiếp; máy chủ tự kiểm tra lại trạng thái. Hai người bấm cùng lúc không tạo vòng trùng vì mỗi thao tác khóa hàng Tournament trong transaction.
 
+## Loại giải demo
+
+Giải demo có trường `demoKind` (chỉ khi `isDemo`, không thay cho kiểm tra `DEMO_MODE`):
+
+- `experience` — **Giải trải nghiệm · Chạy bot thật**: mọi kết quả đến từ phòng đấu (worker chạy bot). API từ chối `demo/simulate` (409). Được thêm đội mẫu làm đối thủ vì các đội này cũng đấu qua worker.
+- `simulation` — **Giải mô phỏng nhanh**: được sinh kết quả để thử ghép cặp, bảng điểm, cây giải; kết quả gắn nhãn "Mô phỏng".
+- Giải không phải demo: `demoKind = null`, không được mô phỏng hay thêm đội mẫu.
+
+BTC chọn loại khi tạo giải (ô "Loại giải" chỉ hiện ở môi trường demo). Giải demo cũ được migration gán `simulation`.
+
+## Thông báo cho đội
+
+Ghi cùng transaction với thao tác thi đấu, mỗi sự kiện một lần (`CompetitionNotices`, gọi `NotificationsService.deliver` của TV1): khóa mức, ghép cặp (kèm đối thủ / miễn đấu), mở phòng (dẫn vào phòng), xác nhận kết quả vòng, chốt mức (đi tiếp hay dừng), Top 4. Người nhận là thành viên của đội (`Membership`).
+
 ## Tính kết quả một cặp
 
 | Loại cặp        | Cấu trúc                                                                                            |

@@ -11,6 +11,7 @@ const row = (): TournamentRow => ({
   name: 'Test',
   status: 'draft',
   isDemo: false,
+  demoKind: null,
   description: '',
   configStatus: 'draft',
   revision: 0,

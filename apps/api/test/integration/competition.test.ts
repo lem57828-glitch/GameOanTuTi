@@ -51,6 +51,7 @@ beforeAll(async () => {
       name: 'Giải kiểm thử TV3',
       status: 'registration',
       isDemo: true,
+      demoKind: 'simulation',
       configStatus: 'confirmed',
       stages: {
         create: [

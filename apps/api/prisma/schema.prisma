@@ -182,6 +182,9 @@ model Tournament {
   name                 String
   status               String    @default("draft") // draft | registration | running | finished
   isDemo               Boolean   @default(false)
+  /// Loại giải demo: experience (trải nghiệm, kết quả chỉ từ worker chạy bot) | simulation (mô phỏng nhanh).
+  /// Null với giải không phải demo. Không thay cho kiểm tra DEMO_MODE.
+  demoKind             String?
   description          String    @default("")
   configStatus         String    @default("draft")
   revision             Int       @default(0)
