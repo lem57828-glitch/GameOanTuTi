@@ -92,8 +92,9 @@ export function evaluatePairing(
 export function gamesNeeded(kind: PairingKind, games: readonly GameOutcome[]): number {
   const f = FORMAT[kind];
   if (games.length < f.main) return f.main - games.length;
-  if (games.length === f.main && f.decisive && f.extra > 0) {
-    const t = games.reduce(
+  if (f.decisive && f.extra > 0) {
+    // Bằng điểm sau các ván chính: chơi ĐỦ số ván phụ (không dừng sớm khi một bên đã dẫn).
+    const t = games.slice(0, f.main).reduce(
       (acc, g) =>
         g === 'a'
           ? { ...acc, a: acc.a + f.win }
@@ -102,7 +103,7 @@ export function gamesNeeded(kind: PairingKind, games: readonly GameOutcome[]): n
             : { a: acc.a + f.draw, b: acc.b + f.draw },
       { a: 0, b: 0 },
     );
-    return t.a === t.b ? f.extra : 0;
+    return t.a === t.b ? Math.max(0, f.main + f.extra - games.length) : 0;
   }
   return 0;
 }

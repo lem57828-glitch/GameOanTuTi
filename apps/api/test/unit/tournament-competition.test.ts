@@ -130,6 +130,11 @@ describe('tính kết quả cặp đấu', () => {
     expect(win).toMatchObject({ result: 'a', scoreA: 8, scoreB: 5, decidedBy: 'score' });
     const tied = ['a', 'a', 'b', 'b', null] as const;
     expect(gamesNeeded('knockout', [...tied])).toBe(2);
+    // Đã đấu 1 hiệp phụ và một bên dẫn: vẫn phải chơi nốt hiệp phụ thứ hai.
+    expect(gamesNeeded('knockout', [...tied, 'a'])).toBe(1);
+    expect(gamesNeeded('knockout', [...tied, 'a', 'b'])).toBe(0);
+    expect(gamesNeeded('tiebreak', ['a', 'b', 'a'])).toBe(1);
+    expect(gamesNeeded('knockout', ['a', 'a', 'b', null, null])).toBe(0);
     expect(() => evaluatePairing('knockout', [...tied], 5)).toThrow(/hiệp phụ/);
     expect(evaluatePairing('knockout', [...tied, 'b', null], 5)).toMatchObject({
       result: 'b',
