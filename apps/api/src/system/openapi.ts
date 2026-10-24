@@ -38,7 +38,7 @@ export function buildOpenApi() {
     responses: {
       200: json(data(C.ServiceHealth)),
       401: error('Chưa đăng nhập'),
-      403: error('Không phải BTC/trọng tài'),
+      403: error('Không phải BTC'),
     },
   });
 
@@ -181,6 +181,7 @@ export function buildOpenApi() {
     method: 'post',
     path: '/teams',
     tags: ['accounts-teams'],
+    description: 'Lập đội độc lập, không cần có giải hoặc đang trong thời gian đăng ký.',
     security: auth,
     request: { body: { content: { 'application/json': { schema: C.CreateTeamRequest } } } },
     responses: {
@@ -204,6 +205,20 @@ export function buildOpenApi() {
       403: error('FORBIDDEN'),
       404: error('NOT_FOUND'),
       409: error('CONFLICT'),
+    },
+  });
+  r.registerPath({
+    method: 'post',
+    path: '/teams/mine/tournaments/{tournamentId}',
+    tags: ['accounts-teams'],
+    security: auth,
+    description: 'Đội trưởng đăng ký đội vào giải trong thời gian đăng ký. Sau đăng ký chờ BTC duyệt.',
+    request: { params: z.object({ tournamentId: C.Id }) },
+    responses: {
+      201: json(data(z.object({ team: C.TeamView }))),
+      403: error('Chỉ đội trưởng'),
+      404: error('Không có đội/giải'),
+      409: error('Đã đăng ký hoặc hết hạn'),
     },
   });
 
@@ -315,7 +330,7 @@ export function buildOpenApi() {
           ),
         ),
       ),
-      403: error('Chỉ BTC/trọng tài'),
+      403: error('Chỉ BTC'),
     },
   });
   r.registerPath({
@@ -349,7 +364,7 @@ export function buildOpenApi() {
     request: { params: idParam },
     responses: {
       200: json(data(C.JobView)),
-      403: error('Không phải BTC/trọng tài'),
+      403: error('Không phải BTC'),
       404: error('Không có job'),
     },
   });

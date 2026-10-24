@@ -7,7 +7,7 @@ export const SessionUser = z.object({
   id: Id,
   displayName: z.string(),
   role: Role,
-  /** Đội của người dùng trong giải hiện tại; null nếu chưa có đội. */
+  /** Đội của người dùng, kể cả đội chưa đăng ký giải; null nếu chưa có đội. */
   teamId: Id.nullable(),
   /** Phiên tạo bằng đăng nhập mẫu (chỉ có ở development/test). */
   demo: z.boolean(),
@@ -37,7 +37,7 @@ export const TeamView = z.object({
   id: Id,
   name: z.string(),
   status: TeamStatus,
-  tournamentId: Id,
+  tournamentId: Id.nullable(),
   members: z.array(TeamMember),
 });
 export type TeamView = z.infer<typeof TeamView>;

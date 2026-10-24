@@ -95,9 +95,14 @@ export function RoomPage() {
   const status =
     s.match?.status === 'selecting'
       ? { label: 'Chờ hai đội chọn', tone: 'warning' as const }
-      : s.match?.status === 'paused'
-        ? { label: 'Tạm dừng', tone: 'danger' as const }
-        : ROOM_STATUS[s.status];
+      : s.match?.status === 'cancelled'
+        ? {
+            label: s.match.pauseReason?.startsWith('BTC phân xử:') ? 'BTC đã phân xử' : 'Trận đã hủy',
+            tone: 'warning' as const,
+          }
+        : s.match?.status === 'paused'
+          ? { label: 'Tạm dừng', tone: 'danger' as const }
+          : ROOM_STATUS[s.status];
   const workerDown = health.data && !health.data.workerAlive;
   const conn = gameId ? { label: 'Xem lại', tone: 'neutral' as const } : CONN[connection];
 

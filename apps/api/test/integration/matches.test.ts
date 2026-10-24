@@ -104,7 +104,7 @@ beforeAll(async () => {
   }
   if (!up) throw new Error(`API không khởi động: ${logs.slice(-3000)}`);
   await waitFor(async () => (await call(null, '/health')).data?.workerAlive === true, 60_000, 'worker');
-  for (const a of ['acc_admin', 'acc_referee']) await login(a);
+  for (const a of ['acc_admin']) await login(a);
 }, 120_000);
 
 afterAll(async () => {
@@ -221,7 +221,9 @@ it('sơ loại: đội trưởng chốt một bot cho cả mức, trận Swiss c
   const sel = (await call('acc_an', `/rooms/${roomId}/my-selection`)).data;
   expect(sel).toMatchObject({ isCaptain: true, canChoose: false });
   expect(sel.reason).toMatch(/Sơ loại/);
-  expect((await call('acc_an', `/rooms/${roomId}/choices`, 'POST', { botVersionId: v2.id })).status).toBe(409);
+  expect((await call('acc_an', `/rooms/${roomId}/choices`, 'POST', { botVersionId: v2.id })).status).toBe(
+    409,
+  );
 
   // Hạn chọn 2 giây không liên quan: các trận chạy ngay; worker chạy 2 ván đổi màu cho mỗi cặp.
   await waitFor(
@@ -242,7 +244,8 @@ it('sơ loại: đội trưởng chốt một bot cho cả mức, trận Swiss c
   expect(match.games).toHaveLength(2);
   // Ván 2 đổi màu so với ván 1; cả hai hiệp dùng đúng bot đội trưởng đã chốt cho mức, không có lựa chọn tự động.
   expect(match.games[0]!.blueTeamId).not.toBe(match.games[1]!.blueTeamId);
-  for (const g of match.games) expect(g.choices.find((c) => c.teamId === teams[0]!.id)!.botVersionId).toBe(v1.id);
+  for (const g of match.games)
+    expect(g.choices.find((c) => c.teamId === teams[0]!.id)!.botVersionId).toBe(v1.id);
   expect(match.selections.every((x) => !x.auto)).toBe(true);
   const snap = (await call(null, `/rooms/${roomId}`)).data;
   expect(snap.match).toMatchObject({ status: 'completed', kind: 'swiss', mainGames: 2, chooseExtra: false });
@@ -250,7 +253,7 @@ it('sơ loại: đội trưởng chốt một bot cho cả mức, trận Swiss c
 }, 240_000);
 
 it('loại trực tiếp: 5 hiệp (+2 khi hòa) có quân thứ 10, tung xu từng hiệp; thi lại sau khiếu nại mở trận mới cùng phòng', async () => {
-  await call('acc_referee', `/admin/tournaments/${tid}/qualifier/rounds/1/confirm`, 'POST', reason);
+  await call('acc_admin', `/admin/tournaments/${tid}/qualifier/rounds/1/confirm`, 'POST', reason);
   await call('acc_admin', `/admin/tournaments/${tid}/qualifier/finish`, 'POST', reason);
   expect(
     (await call('acc_admin', `/admin/tournaments/${tid}/knockout/r32/start`, 'POST', reason)).status,
@@ -287,7 +290,7 @@ it('loại trực tiếp: 5 hiệp (+2 khi hòa) có quân thứ 10, tung xu t�
       body: 'Bot đối thủ đi sai nước ở hiệp 2.',
     },
   });
-  await call('acc_referee', `/admin/appeals/${appeal.id}/decision`, 'POST', {
+  await call('acc_admin', `/admin/appeals/${appeal.id}/decision`, 'POST', {
     decision: 'accept',
     action: 'rerun',
     reason: 'Xác minh lỗi hạ tầng',
@@ -327,7 +330,10 @@ it('gửi bù kết quả trận bị mất giữa chừng; đặt lại phần 
     },
   });
   // Khi chưa gửi, vòng loại trực tiếp vẫn đang thi (chưa có cặp nào báo xong).
-  await prisma.bracketRound.updateMany({ where: { tournamentId: tid, phase: 'r32' }, data: { status: 'running' } });
+  await prisma.bracketRound.updateMany({
+    where: { tournamentId: tid, phase: 'r32' },
+    data: { status: 'running' },
+  });
   await prisma.match.update({ where: { id: match.id }, data: { reportedAt: null, pauseReason: null } });
   await waitFor(
     async () => (await prisma.pairing.findUniqueOrThrow({ where: { id: real.id } })).source === 'match',
@@ -347,13 +353,13 @@ it('gửi bù kết quả trận bị mất giữa chừng; đặt lại phần 
       body: 'Yêu cầu thi lại để kiểm thử hủy trận.',
     },
   });
-  await call('acc_referee', `/admin/appeals/${appeal.id}/decision`, 'POST', {
+  await call('acc_admin', `/admin/appeals/${appeal.id}/decision`, 'POST', {
     decision: 'accept',
     action: 'rerun',
     reason: 'Kiểm thử',
   });
   await call('acc_admin', `/admin/tournaments/${tid}/matches/open`, 'POST');
-  const summary = (await call('acc_referee', `/admin/tournaments/${tid}/matches/summary`)).data;
+  const summary = (await call('acc_admin', `/admin/tournaments/${tid}/matches/summary`)).data;
   expect(summary).toMatchObject({ pending: 1, notOpened: 0 });
   expect(summary.selecting + summary.running).toBe(1);
   expect(summary.byGame).toHaveLength(1);
@@ -362,6 +368,31 @@ it('gửi bù kết quả trận bị mất giữa chừng; đặt lại phần 
     where: { pairId: real.id },
     orderBy: { createdAt: 'desc' },
   });
+  // BTC kiêm phân xử: thí sinh không được nhập kết quả; quyết định BTC dừng điều phối trận.
+  expect(
+    (
+      await call('acc_an', `/admin/pairings/${real.id}/result`, 'POST', {
+        games: ['a', 'a', 'a', 'a', 'a'],
+        ...reason,
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await call('acc_admin', `/admin/pairings/${real.id}/result`, 'POST', {
+        games: ['a', 'a', 'a', 'a', 'a'],
+        ...reason,
+      })
+    ).status,
+  ).toBe(201);
+  const adjudicated = await prisma.match.findUniqueOrThrow({ where: { id: fresh.id } });
+  expect(adjudicated.status).toBe('cancelled');
+  expect(adjudicated.pauseReason).toContain('BTC phân xử:');
+  expect(adjudicated.reportedAt).not.toBeNull();
+  expect((await prisma.pairing.findUniqueOrThrow({ where: { id: real.id } })).source).toBe('manual');
+  const view = (await call(null, `/rooms/${fresh.roomId}`)).data.match;
+  expect(view.status).toBe('cancelled');
+  expect(view.scoreA).toBeGreaterThan(view.scoreB);
   await prisma.appeal.deleteMany({ where: { pairingId: real.id } });
   await call('acc_admin', `/admin/tournaments/${tid}/competition/reset`, 'POST', reason);
   await waitFor(

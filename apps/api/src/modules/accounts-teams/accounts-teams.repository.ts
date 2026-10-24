@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Tx } from '../../core/prisma.service.js';
 import { PrismaService } from '../../core/prisma.service.js';
+import { findTeamMembership } from './team-policy.js';
 
 @Injectable()
 export class AccountsTeamsRepository {
@@ -22,10 +23,8 @@ export class AccountsTeamsRepository {
     return this.prisma.account.findUnique({ where: { id } });
   }
 
-  findMembership(accountId: string, tournamentId: string) {
-    return this.prisma.membership.findUnique({
-      where: { accountId_tournamentId: { accountId, tournamentId } },
-    });
+  findMembership(accountId: string, tournamentId: string | null) {
+    return findTeamMembership(this.prisma, accountId, tournamentId);
   }
 
   listDemoAccounts(tournamentId: string | null) {

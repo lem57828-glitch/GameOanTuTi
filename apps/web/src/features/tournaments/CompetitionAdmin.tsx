@@ -1,4 +1,4 @@
-// Điều hành thi đấu (BTC/trọng tài): kế hoạch mức → khóa mức → ghép vòng → nhập/mô phỏng kết quả → xác nhận →
+// Điều hành thi đấu (BTC): kế hoạch mức → khóa mức → ghép vòng → nhập/mô phỏng kết quả → xác nhận →
 // chốt mức/tranh suất → cây 32 → chốt từng vòng → Top 4. Mọi thao tác gửi kèm lý do và được ghi audit.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -207,7 +207,8 @@ export function CompetitionAdmin() {
               loading={busy}
               onClick={() => run('/matches/force-lock', 'Đã khóa lựa chọn các phòng đang chọn')}
             >
-              Khóa lựa chọn ngay ({r!.selecting} phòng đang chọn · {gameRange(r!.byGame.filter((g) => g.selecting))})
+              Khóa lựa chọn ngay ({r!.selecting} phòng đang chọn ·{' '}
+              {gameRange(r!.byGame.filter((g) => g.selecting))})
             </Button>
           )}
           {health.data?.demoMode && isAdmin && unopened > 0 && (
@@ -246,12 +247,10 @@ export function CompetitionAdmin() {
             hint="Tối thiểu 3 ký tự; áp dụng cho các nút bên dưới."
           />
         </div>
-        {!isAdmin && (
-          <p className="mt-3 text-xs text-ink-muted">
-            Trọng tài: được xác nhận vòng, chốt vòng loại trực tiếp, nhập kết quả và xử lý khiếu nại; các thao
-            tác khác dành cho BTC.
-          </p>
-        )}
+        <p className="mt-3 text-xs text-ink-muted">
+          BTC điều hành giải, xử lý khiếu nại và phân xử kết quả khi trận có sự cố. Mọi quyết định phải có lý
+          do và được ghi nhật ký.
+        </p>
       </Card>
 
       {view.isLoading && <Spinner label="Đang tải trạng thái thi đấu" />}
@@ -425,7 +424,7 @@ export function CompetitionAdmin() {
             <Card>
               <CardHeader
                 title={`Cặp đang chờ kết quả (${c.pending.length})`}
-                subtitle="Kết quả đến từ phòng đấu (TV4) hoặc trọng tài nhập tay."
+                subtitle="Kết quả đến từ phòng đấu (TV4) hoặc BTC nhập tay."
               />
               <ul className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                 {c.pending.slice(0, 60).map((p) => (
@@ -435,7 +434,7 @@ export function CompetitionAdmin() {
                     </p>
                     <PairingLine p={p} compact />
                     <Button size="sm" variant="secondary" onClick={() => setEntry(p)}>
-                      Nhập kết quả
+                      Phân xử / Nhập kết quả
                     </Button>
                   </li>
                 ))}
@@ -571,7 +570,7 @@ function ResultDialog({
           onClose();
         }
       }}
-      title="Nhập kết quả cặp đấu"
+      title="BTC phân xử / Nhập kết quả cặp đấu"
       description={`${pairingLabel(p)} · ${p.teamA?.name} vs ${p.teamB?.name}`}
       footer={
         <>

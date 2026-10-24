@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common';
-import { CreateTeamRequest, JoinTeamRequest, type SessionUser } from '@arena/contracts';
+import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { CreateTeamRequest, JoinTeamRequest, Id, type SessionUser } from '@arena/contracts';
 import { Authenticated, CurrentUser } from '../../core/auth/guards.js';
 import { RateLimiter } from '../../core/rate-limit.js';
 import { ok, parse, type ArenaRequest } from '../../core/http.js';
@@ -10,7 +10,7 @@ export class TeamsController {
   private readonly limiter = new RateLimiter(20, 60_000);
   constructor(private readonly accounts: AccountsTeamsService) {}
 
-  /** Đội của người dùng trong giải hiện tại; `team: null` khi chưa có đội. */
+  /** Đội của người dùng, kể cả chưa đăng ký giải. */
   @Get('mine')
   @Authenticated()
   async mine(@CurrentUser() user: SessionUser) {
@@ -32,5 +32,16 @@ export class TeamsController {
     this.limiter.check(`team:${user.id}:${req.ip}`);
     const { code } = parse(JoinTeamRequest, body);
     return ok({ team: await this.accounts.joinTeam(user, code) });
+  }
+
+  @Post('mine/tournaments/:tournamentId')
+  @Authenticated()
+  async register(
+    @CurrentUser() user: SessionUser,
+    @Param('tournamentId') tournamentId: string,
+    @Req() req: ArenaRequest,
+  ) {
+    this.limiter.check(`team:${user.id}:${req.ip}`);
+    return ok({ team: await this.accounts.registerTeam(user, parse(Id, tournamentId)) });
   }
 }

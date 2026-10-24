@@ -80,9 +80,9 @@ export class BotsRunnerService implements OnApplicationBootstrap, OnModuleDestro
 
   // ------------------------------------------------------------ Bot
 
-  /** Sinh viên chỉ xem bot của đội mình; trọng tài/BTC xem tất cả. Mã nguồn không bao giờ nằm trong danh sách. */
+  /** Sinh viên chỉ xem bot của đội mình; BTC xem tất cả. Mã nguồn không bao giờ nằm trong danh sách. */
   async listBots(user: SessionUser, teamId?: string): Promise<BotVersion[]> {
-    const staff = user.role === 'admin' || user.role === 'referee';
+    const staff = user.role === 'admin';
     if (!staff && teamId && teamId !== user.teamId) throw forbidden('Không xem được bot của đội khác.');
     const scope = teamId ?? (staff ? null : user.teamId);
     if (!staff && !scope) return [];
@@ -158,7 +158,7 @@ except (SyntaxError, ValueError) as e:
    */
   async submitBot(user: SessionUser, rawInput: unknown): Promise<BotVersion> {
     const input = parse(SubmitBotInput, rawInput);
-    const staff = user.role === 'admin' || user.role === 'referee';
+    const staff = user.role === 'admin';
 
     if (!staff && user.teamId !== input.teamId) {
       throw forbidden('Bạn chỉ có thể nộp bot cho đội của mình.');
@@ -242,14 +242,14 @@ except (SyntaxError, ValueError) as e:
 
   /**
    * Xem mã nguồn riêng tư của một phiên bản bot:
-   * - Chỉ thành viên trong đội hoặc BTC/Trọng tài mới được xem.
+   * - Chỉ thành viên trong đội hoặc BTC mới được xem.
    * - Đội khác xem sẽ bị từ chối 403 Forbidden.
    */
   async getBotSource(user: SessionUser, botId: string): Promise<BotSourceDetail> {
     const bot = await this.repo.findBotVersion(botId);
     if (!bot) throw notFound('Phiên bản bot');
 
-    const staff = user.role === 'admin' || user.role === 'referee';
+    const staff = user.role === 'admin';
     if (!staff && bot.teamId !== user.teamId) {
       throw forbidden('Bạn không có quyền xem mã nguồn của đội khác.');
     }
@@ -288,7 +288,7 @@ except (SyntaxError, ValueError) as e:
 
   async saveSelection(user: SessionUser, stageId: string, raw: unknown, lock = false) {
     const input = parse(BotSelectionInput, raw);
-    const staff = user.role === 'admin' || user.role === 'referee';
+    const staff = user.role === 'admin';
     const team = await this.repo.findTeam(input.teamId);
     if (!team) throw notFound('Đội');
     if (!staff && (user.teamId !== team.id || team.captainId !== user.id))
@@ -298,7 +298,7 @@ except (SyntaxError, ValueError) as e:
     return BotSelectionView.parse({ ...row, updatedAt: row.updatedAt.toISOString() });
   }
   async selection(user: SessionUser, teamId: string, stageId: string) {
-    if (user.role !== 'admin' && user.role !== 'referee' && user.teamId !== teamId) throw forbidden();
+    if (user.role !== 'admin' && user.teamId !== teamId) throw forbidden();
     const row = await this.repo.selection(teamId, stageId);
     return row ? BotSelectionView.parse({ ...row, updatedAt: row.updatedAt.toISOString() }) : null;
   }
@@ -345,7 +345,7 @@ except (SyntaxError, ValueError) as e:
   async diagnostics(user: SessionUser, gameId: string) {
     const data = await this.repo.diagnostics(gameId);
     if (!data) throw notFound('Ván');
-    const staff = user.role === 'admin' || user.role === 'referee';
+    const staff = user.role === 'admin';
     const side =
       data.game.blueTeamId === user.teamId ? 'blue' : data.game.pinkTeamId === user.teamId ? 'pink' : null;
     if (!staff && !side) throw forbidden();
@@ -526,7 +526,7 @@ except (SyntaxError, ValueError) as e:
     const bot = await this.repo.findBotVersion(botVersionId);
     if (!bot) throw notFound('Phiên bản bot');
 
-    const staff = user.role === 'admin' || user.role === 'referee';
+    const staff = user.role === 'admin';
     if (!staff && user.teamId !== bot.teamId) {
       throw forbidden('Bạn chỉ có thể đấu thử với bot của đội mình.');
     }
@@ -578,7 +578,7 @@ except (SyntaxError, ValueError) as e:
     const run = await this.repo.findTestRun(runId);
     if (!run) throw notFound('Lượt đấu thử');
 
-    const staff = user.role === 'admin' || user.role === 'referee';
+    const staff = user.role === 'admin';
     if (!staff && user.teamId !== run.botVersion.teamId) {
       throw forbidden('Bạn không có quyền xem lượt đấu thử này.');
     }
@@ -615,7 +615,7 @@ except (SyntaxError, ValueError) as e:
     const bot = await this.repo.findBotVersion(botVersionId);
     if (!bot) throw notFound('Phiên bản bot');
 
-    const staff = user.role === 'admin' || user.role === 'referee';
+    const staff = user.role === 'admin';
     if (!staff && user.teamId !== bot.teamId) {
       throw forbidden('Bạn chỉ có thể xem danh sách đấu thử của đội mình.');
     }

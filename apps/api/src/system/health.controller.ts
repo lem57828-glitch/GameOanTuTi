@@ -1,4 +1,4 @@
-// Sức khỏe dịch vụ. /health công khai chỉ trả trạng thái chung; /admin/health chi tiết cho BTC/trọng tài.
+// Sức khỏe dịch vụ. /health công khai chỉ trả trạng thái chung; /admin/health chi tiết cho BTC.
 import { Controller, Get, Inject } from '@nestjs/common';
 import type { PublicHealth, ServiceHealth } from '@arena/contracts';
 import { Roles } from '../core/auth/guards.js';
@@ -36,7 +36,7 @@ export class HealthController {
   }
 
   @Get('admin/health')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   async adminHealth() {
     const [database, redis, worker, queue] = await Promise.all([
       this.dbOk(),

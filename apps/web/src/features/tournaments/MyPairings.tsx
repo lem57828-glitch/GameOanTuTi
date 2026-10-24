@@ -99,7 +99,7 @@ export function MyPairings({ tournamentId }: { tournamentId: string }) {
     onSuccess: () => {
       toast({
         title: 'Đã gửi khiếu nại',
-        description: 'Trọng tài/BTC sẽ xử lý trước khi chốt vòng.',
+        description: 'BTC sẽ xử lý trước khi chốt vòng.',
         tone: 'success',
       });
       setTarget(null);

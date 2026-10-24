@@ -82,7 +82,7 @@ beforeAll(async () => {
     if (!up) await pause(100);
   }
   if (!up) throw new Error(`API không khởi động: ${logs.slice(-3000)}`);
-  for (const a of ['acc_admin', 'acc_referee', 'acc_an']) await login(a);
+  for (const a of ['acc_admin', 'acc_an']) await login(a);
 }, 60_000);
 
 afterAll(async () => {
@@ -106,7 +106,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-it('phân quyền: khách xem được bảng, không điều hành được; trọng tài không lập kế hoạch được', async () => {
+it('phân quyền: khách xem được bảng, không điều hành được; thí sinh không lập kế hoạch được', async () => {
   expect((await call(null, `/tournaments/${tid}/competition`)).status).toBe(200);
   expect(
     (
@@ -120,7 +120,7 @@ it('phân quyền: khách xem được bảng, không điều hành được; tr
   expect((await call('acc_an', `/admin/tournaments/${tid}/qualifier/lock`, 'POST', reason)).status).toBe(403);
   expect(
     (
-      await call('acc_referee', `/admin/tournaments/${tid}/qualifier/plan`, 'POST', {
+      await call('acc_an', `/admin/tournaments/${tid}/qualifier/plan`, 'POST', {
         targets: [32],
         rounds: 3,
         ...reason,
@@ -211,14 +211,8 @@ it('chạy trọn sơ loại → cây 32 → Top 4 bằng mô phỏng, không b�
       19,
     );
     expect(
-      (
-        await call(
-          'acc_referee',
-          `/admin/tournaments/${tid}/qualifier/rounds/${round}/confirm`,
-          'POST',
-          reason,
-        )
-      ).status,
+      (await call('acc_admin', `/admin/tournaments/${tid}/qualifier/rounds/${round}/confirm`, 'POST', reason))
+        .status,
     ).toBe(201);
   }
   const standings = (await call(null, `/tournaments/${tid}/standings`)).data;
@@ -294,7 +288,7 @@ it('khiếu nại: chỉ đội trưởng của đội trong cặp; khiếu nạ
     body: 'Bot đối thủ đi nước không hợp lệ ở ván 1.',
   });
   expect([403, 409]).toContain(denied.status);
-  // Trọng tài nhận và xử lý khiếu nại tạo trực tiếp (mô phỏng đội trưởng gửi qua giao diện).
+  // BTC nhận và xử lý khiếu nại tạo trực tiếp (mô phỏng đội trưởng gửi qua giao diện).
   const appeal = await prisma.appeal.create({
     data: {
       pairingId: pairing.id,
@@ -304,8 +298,7 @@ it('khiếu nại: chỉ đội trưởng của đội trong cặp; khiếu nạ
     },
   });
   expect(
-    (await call('acc_referee', `/admin/tournaments/${tid}/qualifier/rounds/1/confirm`, 'POST', reason))
-      .status,
+    (await call('acc_admin', `/admin/tournaments/${tid}/qualifier/rounds/1/confirm`, 'POST', reason)).status,
   ).toBe(409);
   expect(
     (
@@ -315,7 +308,7 @@ it('khiếu nại: chỉ đội trưởng của đội trong cặp; khiếu nạ
       })
     ).status,
   ).toBe(403);
-  const decided = await call('acc_referee', `/admin/appeals/${appeal.id}/decision`, 'POST', {
+  const decided = await call('acc_admin', `/admin/appeals/${appeal.id}/decision`, 'POST', {
     decision: 'accept',
     action: 'rerun',
     reason: 'Xác minh có lỗi hạ tầng',
@@ -324,26 +317,25 @@ it('khiếu nại: chỉ đội trưởng của đội trong cặp; khiếu nạ
   expect((await prisma.pairing.findUniqueOrThrow({ where: { id: pairing.id } })).status).toBe('scheduled');
   expect(
     (
-      await call('acc_referee', `/admin/appeals/${appeal.id}/decision`, 'POST', {
+      await call('acc_admin', `/admin/appeals/${appeal.id}/decision`, 'POST', {
         decision: 'reject',
         reason: 'Lần hai',
       })
     ).status,
   ).toBe(409);
   // Nhập tay kết quả thi lại, rồi mới xác nhận được vòng.
-  const manual = await call('acc_referee', `/admin/pairings/${pairing.id}/result`, 'POST', {
+  const manual = await call('acc_admin', `/admin/pairings/${pairing.id}/result`, 'POST', {
     games: ['a', 'b'],
     reason: 'Thi lại theo quyết định khiếu nại',
   });
   expect(manual.data).toMatchObject({ result: 'draw' });
   expect((await prisma.pairing.findUniqueOrThrow({ where: { id: pairing.id } })).resultVersion).toBe(2);
   expect(
-    (await call('acc_referee', `/admin/tournaments/${tid}/qualifier/rounds/1/confirm`, 'POST', reason))
-      .status,
+    (await call('acc_admin', `/admin/tournaments/${tid}/qualifier/rounds/1/confirm`, 'POST', reason)).status,
   ).toBe(201);
   expect(
     (
-      await call('acc_referee', `/admin/pairings/${pairing.id}/result`, 'POST', {
+      await call('acc_admin', `/admin/pairings/${pairing.id}/result`, 'POST', {
         games: ['a', 'a'],
         reason: 'Sửa sau khi chốt',
       })

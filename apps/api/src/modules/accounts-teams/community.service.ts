@@ -137,6 +137,7 @@ export class CommunityService {
       if (row.isDemo) throw forbidden('Không thay đổi tài khoản mẫu.');
       if (
         row.role === 'admin' &&
+        row.status === 'active' &&
         (input.role !== 'admin' || input.status !== 'active') &&
         (await tx.account.count({ where: { role: 'admin', status: 'active', isDemo: false } })) <= 1
       )
@@ -188,6 +189,7 @@ export class CommunityService {
       if (team.status === 'withdrawn') throw conflict('Đội đã rút không thể đổi trạng thái.');
       if (
         ['draft', 'approved'].includes(input.status) &&
+        team.tournament &&
         (team.tournament.status !== 'registration' ||
           (team.tournament.teamLockAt && team.tournament.teamLockAt <= new Date()))
       )

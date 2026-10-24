@@ -83,16 +83,16 @@ export class CompetitionController {
     return ok(await this.competition.myAppeals(user));
   }
 
-  // ---------------------------------------------------------------- trọng tài / BTC
+  // ---------------------------------------------------------------- BTC
 
   @Get('admin/appeals')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   async appeals(@Query() query: unknown) {
     return ok(await this.competition.listAppeals(parse(AppealsQuery, query).status));
   }
 
   @Post('admin/appeals/:id/decision')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   async decide(
     @Param('id') id: string,
     @CurrentUser() user: SessionUser,
@@ -109,7 +109,7 @@ export class CompetitionController {
   }
 
   @Post('admin/pairings/:id/result')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   async result(
     @Param('id') id: string,
     @CurrentUser() user: SessionUser,
@@ -129,7 +129,7 @@ export class CompetitionController {
   }
 
   @Post('admin/tournaments/:id/qualifier/rounds/:round/confirm')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   async confirmRound(
     @Param('id') id: string,
     @Param('round') round: string,
@@ -148,7 +148,7 @@ export class CompetitionController {
   }
 
   @Post('admin/tournaments/:id/knockout/:phase/confirm')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   async confirmPhase(
     @Param('id') id: string,
     @Param('phase') phase: string,

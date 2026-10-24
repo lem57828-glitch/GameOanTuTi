@@ -21,7 +21,6 @@ const SAMPLE_BOTS = join(process.cwd(), 'prisma', 'sample-bots');
 const TOURNAMENT = 'tour_demo';
 const ACCOUNTS = [
   { id: 'acc_admin', username: 'btc', displayName: 'BTC Demo', role: 'admin' },
-  { id: 'acc_referee', username: 'trongtai', displayName: 'Trọng tài Demo', role: 'referee' },
   { id: 'acc_an', username: 'an', displayName: 'Nguyễn An', role: 'student' },
   { id: 'acc_binh', username: 'binh', displayName: 'Trần Bình', role: 'student' },
   { id: 'acc_chi', username: 'chi', displayName: 'Lê Chi', role: 'student' },
@@ -156,7 +155,7 @@ async function main(): Promise<void> {
 
   await seedFinishedGame();
   console.log(
-    'Seed xong: 7 tài khoản mẫu, 2 đội, 6 phiên bản bot (2 bot Python có mã nguồn), 1 phòng, 1 ván mẫu đã kết thúc.',
+    `Seed xong: ${ACCOUNTS.length} tài khoản mẫu, 2 đội, 6 phiên bản bot (2 bot Python có mã nguồn), 1 phòng, 1 ván mẫu đã kết thúc.`,
   );
 }
 

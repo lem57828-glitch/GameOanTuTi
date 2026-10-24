@@ -27,7 +27,7 @@ export class TournamentsController {
   }
 
   @Get('admin/tournaments')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   async list() {
     return ok(await this.tournaments.list());
   }
@@ -155,7 +155,7 @@ export class TournamentsController {
   }
 
   @Get('admin/tournaments/:id/audit')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   async history(@Param('id') id: string) {
     return ok(await this.tournaments.history(parse(Id, id)));
   }

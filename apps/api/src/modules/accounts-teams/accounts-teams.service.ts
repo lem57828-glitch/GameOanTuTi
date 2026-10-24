@@ -1,6 +1,6 @@
 import { NotificationsService } from './notifications.service.js';
 // TV1 — interface công khai của module tài khoản & đội.
-import { assertContestant, assertTeamWindow, normalizeTeamName } from './team-policy.js';
+import { assertContestant, assertTeamWindow, findTeamMembership, normalizeTeamName } from './team-policy.js';
 import { randomBytes } from 'node:crypto';
 import { TEAM_MEMBER_LIMIT, type CreateTeamRequest } from '@arena/contracts';
 import { conflict, forbidden } from '../../core/errors.js';
@@ -27,7 +27,7 @@ export class AccountsTeamsService {
     if (!acc || acc.status !== 'active' || (version !== undefined && acc.sessionVersion !== version))
       return null;
     const tournamentId = await this.tournaments.currentId();
-    const membership = tournamentId ? await this.repo.findMembership(acc.id, tournamentId) : null;
+    const membership = await this.repo.findMembership(acc.id, tournamentId);
     return SessionUser.parse({
       id: acc.id,
       displayName: acc.displayName,
@@ -67,33 +67,22 @@ export class AccountsTeamsService {
       throw new AppError('NOT_FOUND', 'Không có tài khoản mẫu này.');
   }
 
-  private async membershipTournament(user: SessionUser): Promise<string> {
-    if (user.role !== 'student') throw forbidden('Chỉ thí sinh được lập hoặc tham gia đội.');
-    const id = await this.tournaments.currentId();
-    if (!id) throw notFound('giải đấu hiện tại');
-    return id;
-  }
-
   async createTeam(user: SessionUser, input: CreateTeamRequest): Promise<TeamView> {
-    const tournamentId = await this.membershipTournament(user);
+    if (user.role !== 'student') throw forbidden('Chỉ thí sinh được lập hoặc tham gia đội.');
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const team = await this.repo.membershipTransaction(user.id, async (tx) => {
           await assertContestant(tx, user.id);
-          await assertTeamWindow(tx, tournamentId, true);
-          const membership = await tx.membership.findUnique({
-            where: { accountId_tournamentId: { accountId: user.id, tournamentId } },
-          });
-          if (membership) throw conflict('Bạn đã có đội trong giải hiện tại.');
+          const membership = await findTeamMembership(tx, user.id);
+          if (membership) throw conflict('Bạn đã có đội. Hãy rời đội trước khi lập đội mới.');
           const nameKey = normalizeTeamName(input.name);
           const created = await tx.team.create({
             data: {
-              tournamentId,
               name: input.name,
               nameKey,
               captainId: user.id,
               joinCode: randomBytes(5).toString('hex').toUpperCase(),
-              members: { create: { accountId: user.id, tournamentId } },
+              members: { create: { accountId: user.id } },
             },
           });
           await this.notifications.team(
@@ -111,7 +100,7 @@ export class AccountsTeamsService {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
           const target = error.meta?.target;
           if (Array.isArray(target) && target.includes('joinCode') && attempt < 2) continue;
-          throw conflict('Tên đội đã được sử dụng hoặc bạn đã có đội trong giải này.');
+          throw conflict('Tên đội đã được sử dụng hoặc bạn đã có đội.');
         }
         throw error;
       }
@@ -120,26 +109,30 @@ export class AccountsTeamsService {
   }
 
   async joinTeam(user: SessionUser, code: string): Promise<TeamView> {
-    const tournamentId = await this.membershipTournament(user);
+    if (user.role !== 'student') throw forbidden('Chỉ thí sinh được lập hoặc tham gia đội.');
     const teamId = await this.repo.membershipTransaction(user.id, async (tx) => {
       await assertContestant(tx, user.id);
-      await assertTeamWindow(tx, tournamentId, true);
-      const membership = await tx.membership.findUnique({
-        where: { accountId_tournamentId: { accountId: user.id, tournamentId } },
-      });
-      if (membership) throw conflict('Bạn đã có đội trong giải hiện tại.');
+      const membership = await findTeamMembership(tx, user.id);
+      if (membership) throw conflict('Bạn đã có đội. Hãy rời đội trước khi tham gia đội khác.');
+      const initial = await tx.team.findUnique({ where: { joinCode: code } });
+      if (!initial) throw notFound('đội với mã này');
+      await assertTeamWindow(tx, initial.tournamentId, true);
       // Lock the team before counting to enforce capacity under concurrent joins.
       await tx.$queryRaw`SELECT id FROM "Team" WHERE "joinCode" = ${code} FOR UPDATE`;
       const team = await tx.team.findUnique({
         where: { joinCode: code },
         include: { _count: { select: { members: true } } },
       });
-      if (!team || team.tournamentId !== tournamentId) throw notFound('đội với mã này trong giải hiện tại');
+      if (!team) throw notFound('đội với mã này');
+      if (team.tournamentId !== initial.tournamentId)
+        throw conflict('Đội vừa đăng ký giải. Vui lòng thử tham gia lại.');
       if (team.status === 'locked' || team.status === 'withdrawn')
         throw conflict('Đội đã khóa hoặc đã rút, không thể tham gia.');
       if (team._count.members >= TEAM_MEMBER_LIMIT)
         throw conflict(`Đội đã đủ ${TEAM_MEMBER_LIMIT} thành viên.`);
-      await tx.membership.create({ data: { teamId: team.id, accountId: user.id, tournamentId } });
+      await tx.membership.create({
+        data: { teamId: team.id, accountId: user.id, tournamentId: team.tournamentId },
+      });
       await this.notifications.team(
         tx,
         team.id,
@@ -148,6 +141,51 @@ export class AccountsTeamsService {
         `${user.displayName} vừa tham gia đội ${team.name}.`,
       );
       await tx.auditLog.create({ data: { actorId: user.id, action: 'team.join', target: team.id } });
+      return team.id;
+    });
+    return this.team(teamId);
+  }
+
+  async registerTeam(user: SessionUser, tournamentId: string): Promise<TeamView> {
+    if (user.role !== 'student') throw forbidden('Chỉ đội trưởng thí sinh được đăng ký giải.');
+    const teamId = await this.repo.membershipTransaction(user.id, async (tx) => {
+      await assertContestant(tx, user.id);
+      await assertTeamWindow(tx, tournamentId, true);
+      const membership = await findTeamMembership(tx, user.id);
+      if (!membership) throw notFound('đội của bạn');
+      // Account → Tournament → Team, đồng bộ với lịch đăng ký và quản lý của BTC.
+      await tx.$queryRaw`SELECT id FROM "Team" WHERE id = ${membership.teamId} FOR UPDATE`;
+      const team = await tx.team.findUniqueOrThrow({
+        where: { id: membership.teamId },
+        include: { members: true },
+      });
+      if (team.captainId !== user.id) throw forbidden('Chỉ đội trưởng được đăng ký đội vào giải.');
+      if (team.tournamentId === tournamentId) return team.id;
+      if (team.tournamentId) throw conflict('Đội đã đăng ký một giải.');
+      if (team.status === 'locked' || team.status === 'withdrawn') throw conflict('Đội đã khóa hoặc đã rút.');
+      for (const member of team.members) await assertContestant(tx, member.accountId);
+      const collision = await tx.membership.findFirst({
+        where: {
+          tournamentId,
+          accountId: { in: team.members.map((m) => m.accountId) },
+          teamId: { not: team.id },
+        },
+      });
+      if (collision) throw conflict('Có thành viên đã thuộc đội khác trong giải này.');
+      const duplicate = await tx.team.findFirst({ where: { tournamentId, nameKey: team.nameKey } });
+      if (duplicate) throw conflict('Tên đội đã được sử dụng trong giải này.');
+      await tx.team.update({ where: { id: team.id }, data: { tournamentId, status: 'draft' } });
+      await tx.membership.updateMany({ where: { teamId: team.id }, data: { tournamentId } });
+      await tx.auditLog.create({
+        data: { actorId: user.id, action: 'team.register', target: team.id, data: { tournamentId } },
+      });
+      await this.notifications.team(
+        tx,
+        team.id,
+        `team-registered:${team.id}:${tournamentId}`,
+        'Đã đăng ký giải',
+        'Đội đã đăng ký giải và đang chờ BTC duyệt.',
+      );
       return team.id;
     });
     return this.team(teamId);
@@ -164,8 +202,11 @@ export class AccountsTeamsService {
       rosterLocked:
         t.status === 'locked' ||
         t.status === 'withdrawn' ||
-        t.tournament.status !== 'registration' ||
-        !!(t.tournament.teamLockAt && t.tournament.teamLockAt <= new Date()),
+        !!(
+          t.tournament &&
+          (t.tournament.status !== 'registration' ||
+            (t.tournament.teamLockAt && t.tournament.teamLockAt <= new Date()))
+        ),
       tournamentId: t.tournamentId,
       members: t.members.map((m) => ({
         id: m.account.id,

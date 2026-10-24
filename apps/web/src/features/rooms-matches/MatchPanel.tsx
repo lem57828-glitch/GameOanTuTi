@@ -1,5 +1,5 @@
 // TV4 — bảng trận nhiều hiệp trong phòng: điểm, các hiệp, trạng thái chọn kín, đồng hồ đếm ngược (theo giờ máy chủ),
-// form chọn bot + quân thứ 10 cho đội trưởng, thao tác BTC/trọng tài. Khán giả chỉ thấy "đã chọn / sẵn sàng".
+// form chọn bot + quân thứ 10 cho đội trưởng, thao tác BTC. Khán giả chỉ thấy "đã chọn / sẵn sàng".
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -46,11 +46,12 @@ function useCountdown(deadline: string | null, serverTime: string) {
 export function MatchPanel({ s, onChanged }: { s: RoomSnapshot; onChanged: () => void }) {
   const m = s.match!;
   const { user } = useSession();
-  const staff = user?.role === 'admin' || user?.role === 'referee';
+  const staff = user?.role === 'admin';
   const countdown = useCountdown(m.status === 'selecting' ? m.deadline : null, s.serverTime);
   const name = (side: 'a' | 'b') => (side === 'a' ? s.teams.a.name : s.teams.b.name);
   const teamId = (side: 'a' | 'b') => (side === 'a' ? s.teams.a.id : s.teams.b.id);
-  const status = STATUS[m.status];
+  const adjudicated = m.status === 'cancelled' && m.pauseReason?.startsWith('BTC phân xử:');
+  const status = adjudicated ? { label: 'BTC đã phân xử', tone: 'warning' as const } : STATUS[m.status];
   // Sơ loại: mỗi đội dùng bot đã chốt cho cả mức, không có bước chọn kín theo hiệp.
   const fixed = m.kind !== 'knockout';
   return (
@@ -90,7 +91,11 @@ export function MatchPanel({ s, onChanged }: { s: RoomSnapshot; onChanged: () =>
         </p>
       )}
       {m.pauseReason && (
-        <Alert tone="error" title="Trận cần BTC xử lý" className="mt-3">
+        <Alert
+          tone={adjudicated ? 'warning' : 'error'}
+          title={adjudicated ? 'Quyết định của BTC' : 'Trận cần BTC xử lý'}
+          className="mt-3"
+        >
           {m.pauseReason}
         </Alert>
       )}
@@ -306,7 +311,7 @@ function StaffActions({ m, onChanged }: { m: MatchView; onChanged: () => void })
           Chạy lại hiệp lỗi
         </Button>
       )}
-      <p className="w-full text-xs text-ink-muted">BTC/trọng tài: thao tác được ghi nhật ký.</p>
+      <p className="w-full text-xs text-ink-muted">BTC: thao tác được ghi nhật ký.</p>
     </div>
   );
 }

@@ -238,8 +238,8 @@ export class IdentityService {
             memberships.some(
               (m) =>
                 m.team.status === 'locked' ||
-                m.team.tournament.status === 'running' ||
-                !!(m.team.tournament.teamLockAt && m.team.tournament.teamLockAt <= new Date()),
+                m.team.tournament?.status === 'running' ||
+                !!(m.team.tournament?.teamLockAt && m.team.tournament.teamLockAt <= new Date()),
             )
           )
             throw conflict('Không đổi MSSV khi đội hình đã khóa.');

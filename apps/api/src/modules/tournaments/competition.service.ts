@@ -70,7 +70,7 @@ const ELIGIBLE_TEAM = ['approved', 'locked'];
 const MAX_PLIES = 200;
 /** Kết quả cặp không tự sinh ra: phải mở phòng (TV4) hoặc nhập tay/mô phỏng. Nói rõ để BTC không chờ vô ích. */
 const WAITING_HINT =
-  'Kết quả đến khi trận trong phòng đấu kết thúc. Bấm "Mở phòng thi đấu" để các đội chọn bot và thi; hoặc trọng tài nhập kết quả từng cặp, hoặc "Mô phỏng" khi đang bật chế độ demo.';
+  'Kết quả đến khi trận trong phòng đấu kết thúc. Bấm "Mở phòng thi đấu" để các đội chọn bot và thi; hoặc BTC nhập kết quả từng cặp, hoặc "Mô phỏng" khi đang bật chế độ demo.';
 
 interface CutState {
   seed: number;
@@ -816,6 +816,8 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
       if (p.kind === 'bye') throw conflict('Lượt nghỉ không có kết quả để nhập.');
       if (p.status === 'cancelled') throw conflict('Cặp đã hủy.');
       if (p.confirmed) throw conflict('Kết quả đã chốt. Dùng khiếu nại/chạy lại trước khi sửa.');
+      if (source === 'match' && p.source === 'manual')
+        throw conflict('BTC đã phân xử kết quả. Kết quả worker không được ghi đè.');
       if (!this.playable(t, p)) throw conflict('Cặp này chưa tới lượt thi (vòng chưa bắt đầu hoặc đã chốt).');
       if (!p.teamAId || !p.teamBId) throw conflict('Cặp thiếu đối thủ.');
       const out = evaluatePairing(p.kind as 'swiss' | 'tiebreak' | 'knockout', games, p.seed);
@@ -845,6 +847,20 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
         },
         tx,
       );
+      // Dừng điều phối hiệp tiếp theo và gửi bù khi BTC đã phân xử; giữ nguyên các ván/sự kiện để xem lại.
+      if (source === 'manual' && p.matchId) {
+        await tx.match.updateMany({
+          where: { id: p.matchId },
+          data: {
+            status: 'cancelled',
+            reportedAt: new Date(),
+            deadlineAt: null,
+            scoreA: out.scoreA,
+            scoreB: out.scoreB,
+            pauseReason: `BTC phân xử: ${reason}`,
+          },
+        });
+      }
       if (p.kind === 'tiebreak') await this.advanceContest(tx, t.id);
       if (p.kind === 'knockout' && p.phase) await this.checkPhaseFinished(tx, t.id, p.phase as KnockoutPhase);
       return { pairingId: p.id, ...out, winnerTeamId: winner };
@@ -934,7 +950,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
     return this.appealViews(await this.repo.appeals({ teamId: user.teamId }));
   }
 
-  /** Trọng tài/BTC quyết định: bác, chấp nhận, hoặc chấp nhận và cho thi lại cặp (giữ đội, seed; tăng resultVersion). */
+  /** BTC quyết định: bác, chấp nhận, hoặc chấp nhận và cho thi lại cặp (giữ đội, seed; tăng resultVersion). */
   async decideAppeal(id: string, input: AppealDecisionRequest, actor: Actor): Promise<AppealView> {
     const a = await this.repo.findAppeal(id);
     if (!a) throw notFound('khiếu nại');

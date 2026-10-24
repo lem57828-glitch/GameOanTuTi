@@ -25,7 +25,6 @@ export function useLogout() {
 }
 
 export const ROLE_LABEL: Record<SessionUser['role'], string> = {
-  student: 'Sinh viên',
-  referee: 'Trọng tài',
+  student: 'Thí sinh',
   admin: 'BTC',
 };

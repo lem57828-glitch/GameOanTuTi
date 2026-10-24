@@ -9,8 +9,7 @@ import { ActionButton, ActionForm, ErrorMessage } from './Forms';
 
 const roles = [
   { value: 'student', label: 'Thí sinh' },
-  { value: 'referee', label: 'Trọng tài' },
-  { value: 'admin', label: 'Quản trị viên' },
+  { value: 'admin', label: 'BTC (admin)' },
 ];
 const statuses = [
   { value: 'draft', label: 'Đang lập' },

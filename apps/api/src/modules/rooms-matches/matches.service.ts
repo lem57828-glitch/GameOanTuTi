@@ -254,7 +254,7 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
     return this.mySelection(user, roomId);
   }
 
-  /** BTC/trọng tài khóa ngay lựa chọn của hiệp đang chọn (không chờ hết giờ). Đội chưa chọn dùng lựa chọn dự phòng. */
+  /** BTC khóa ngay lựa chọn của hiệp đang chọn (không chờ hết giờ). Đội chưa chọn dùng lựa chọn dự phòng. */
   async forceLock(matchId: string, actor: Actor, reason: string) {
     const m = await this.repo.find(matchId);
     if (!m) throw notFound('trận');

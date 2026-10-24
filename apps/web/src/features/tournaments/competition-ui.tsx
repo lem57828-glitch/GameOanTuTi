@@ -79,6 +79,7 @@ export function PairingLine({ p, compact = false }: { p: PairingView; compact?: 
         {p.status === 'done' &&
           (p.confirmed ? <Badge tone="success">Đã chốt</Badge> : <Badge tone="blue">Kết quả tạm</Badge>)}
         {p.source === 'simulation' && <Badge tone="warning">Mô phỏng</Badge>}
+        {p.source === 'manual' && <Badge tone="warning">BTC phân xử</Badge>}
         {p.openAppeals > 0 && <Badge tone="danger">{p.openAppeals} khiếu nại mở</Badge>}
         {p.roomId && (
           <Link

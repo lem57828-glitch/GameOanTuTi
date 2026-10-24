@@ -5,7 +5,7 @@ import { PrismaService, type Tx, isUniqueViolation } from '../../core/prisma.ser
 import { conflict, forbidden, notFound } from '../../core/errors.js';
 import { TournamentsService } from '../tournaments/tournaments.service.js';
 import { NotificationsService } from './notifications.service.js';
-import { assertContestant, assertTeamWindow } from './team-policy.js';
+import { assertContestant, assertTeamWindow, findTeamMembership } from './team-policy.js';
 
 @Injectable()
 export class TeamManagementService {
@@ -20,22 +20,21 @@ export class TeamManagementService {
     action: string,
     work: (
       tx: Tx,
-      team: { id: string; captainId: string; name: string; tournamentId: string },
+      team: { id: string; captainId: string; name: string; tournamentId: string | null },
     ) => Promise<void>,
   ) {
     const tournamentId = await this.tournaments.currentId();
-    if (!tournamentId) throw notFound('giải đấu hiện tại');
     try {
       await this.db.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM "Account" WHERE id = ${user.id} FOR UPDATE`;
         await assertContestant(tx, user.id);
-        await assertTeamWindow(tx, tournamentId);
-        const membership = await tx.membership.findUnique({
-          where: { accountId_tournamentId: { accountId: user.id, tournamentId } },
-        });
+        const membership = await findTeamMembership(tx, user.id, tournamentId);
         if (!membership) throw notFound('đội của bạn');
+        await assertTeamWindow(tx, membership.tournamentId);
         await tx.$queryRaw`SELECT id FROM "Team" WHERE id = ${membership.teamId} FOR UPDATE`;
         const team = await tx.team.findUniqueOrThrow({ where: { id: membership.teamId } });
+        if (team.tournamentId !== membership.tournamentId)
+          throw conflict('Đội vừa đăng ký giải. Tải lại và thử lại.');
         if (team.status === 'locked' || team.status === 'withdrawn')
           throw conflict('Đội đã khóa hoặc đã rút.');
         if (captain && team.captainId !== user.id)

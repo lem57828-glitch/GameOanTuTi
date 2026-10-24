@@ -7,6 +7,7 @@ import { Alert, Badge, Card, CardHeader, EmptyState, Spinner, Button, Input } fr
 import { CreateTeamRequest, JoinTeamRequest, TEAM_MEMBER_LIMIT, type TeamView } from '@arena/contracts';
 import { api } from '../../lib/api';
 import { sessionKey, useSession } from '../../lib/session';
+import { TeamRegistrationCard } from './TeamRegistrationCard';
 
 const TEAM_STATUS: Record<
   TeamView['status'],
@@ -96,7 +97,7 @@ export function MyTeamPage() {
         (user.role === 'student' ? (
           <>
             <p className="text-sm text-ink-muted">
-              Bạn chưa có đội. Hãy lập đội mới hoặc nhập mã để tham gia đội của bạn bè. Mỗi đội tối đa{' '}
+              Bạn chưa có đội. Có thể lập hoặc tham gia đội ngay, không cần có giải đấu. Mỗi đội tối đa{' '}
               {TEAM_MEMBER_LIMIT} thành viên, tính cả đội trưởng.
             </p>
             <div className="grid gap-6 md:grid-cols-2">
@@ -162,7 +163,7 @@ export function MyTeamPage() {
         <Card>
           <CardHeader
             title={q.data.team.name}
-            subtitle={`${q.data.team.members.length}/${TEAM_MEMBER_LIMIT} thành viên`}
+            subtitle={`${q.data.team.members.length}/${TEAM_MEMBER_LIMIT} thành viên · ${q.data.team.tournamentId ? 'Đã đăng ký giải' : 'Chưa đăng ký giải'}`}
             action={
               <Badge tone={TEAM_STATUS[q.data.team.status].tone} dot>
                 {TEAM_STATUS[q.data.team.status].label}
@@ -230,7 +231,7 @@ export function MyTeamPage() {
               <ActionButton
                 confirm={
                   isCaptain && q.data.team.members.length === 1
-                    ? 'Bạn là thành viên cuối cùng. Rời đội sẽ rút đội khỏi giải. Tiếp tục?'
+                    ? 'Bạn là thành viên cuối cùng. Rời đội sẽ giải tán đội. Tiếp tục?'
                     : 'Bạn muốn rời đội? Đội trưởng cần chuyển quyền nếu còn thành viên khác.'
                 }
                 run={() => api(`/teams/mine/members/${user.id}`, { method: 'DELETE' })}
@@ -249,6 +250,7 @@ export function MyTeamPage() {
           </p>
         </Card>
       )}
+      {q.data?.team && q.data.team.status !== 'withdrawn' && <TeamRegistrationCard team={q.data.team} />}
     </div>
   );
 }

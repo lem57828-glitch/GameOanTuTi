@@ -7,8 +7,7 @@ import { api, isApiError } from '../../lib/api';
 import { ROLE_LABEL, sessionKey, useSession } from '../../lib/session';
 
 const ROLE_HINT: Record<DemoAccount['role'], string> = {
-  admin: 'Xem sức khỏe dịch vụ, tạo ván mô phỏng.',
-  referee: 'Xem sức khỏe dịch vụ và tiến độ job.',
+  admin: 'Điều hành giải, phân xử sự cố và xử lý khiếu nại.',
   student: 'Xem đội và bot của mình; không vào được khu vực BTC.',
 };
 
@@ -83,9 +82,7 @@ export function DemoLoginPage() {
                       {a.teamName ?? (a.role === 'student' ? 'Chưa có đội' : 'Không thuộc đội')}
                     </p>
                   </div>
-                  <Badge tone={a.role === 'admin' ? 'accent' : a.role === 'referee' ? 'blue' : 'neutral'}>
-                    {ROLE_LABEL[a.role]}
-                  </Badge>
+                  <Badge tone={a.role === 'admin' ? 'accent' : 'neutral'}>{ROLE_LABEL[a.role]}</Badge>
                 </div>
                 <p className="flex-1 text-xs text-ink-muted">{ROLE_HINT[a.role]}</p>
                 <Button

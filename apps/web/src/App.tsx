@@ -58,9 +58,7 @@ export function App() {
                 {label}
               </NavLink>
             ))}
-            {(user?.role === 'admin' || user?.role === 'referee') && (
-              <NavLink to="/admin">Khu vực BTC</NavLink>
-            )}
+            {user?.role === 'admin' && <NavLink to="/admin">Khu vực BTC</NavLink>}
             {user && (
               <>
                 <NavLink to="/profile">Hồ sơ</NavLink>
@@ -171,7 +169,7 @@ function StaffPage() {
   if (user.role === 'student')
     return (
       <Alert tone="error" title="Không có quyền truy cập">
-        Khu vực này dành cho BTC và trọng tài.
+        Khu vực này dành cho BTC.
       </Alert>
     );
   return <AdminPage />;

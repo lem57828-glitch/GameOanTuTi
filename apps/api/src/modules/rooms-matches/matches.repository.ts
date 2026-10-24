@@ -26,10 +26,17 @@ export class MatchesRepository {
     return tx.match.findUnique({ where: { id: matchId }, include: withGames });
   }
 
-  /** Trận hiệu lực mới nhất của phòng (bỏ qua trận demo 1 ván và trận đã hủy). */
+  /** Trận hiệu lực mới nhất, gồm trận BTC đã phân xử để phòng hiển thị đúng quyết định. */
   latestOfRoom(roomId: string, tx: Tx = this.prisma) {
     return tx.match.findFirst({
-      where: { roomId, kind: { not: 'demo' }, status: { not: 'cancelled' } },
+      where: {
+        roomId,
+        kind: { not: 'demo' },
+        OR: [
+          { status: { not: 'cancelled' } },
+          { status: 'cancelled', pauseReason: { startsWith: 'BTC phân xử:' } },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
       include: withGames,
     });
@@ -56,7 +63,10 @@ export class MatchesRepository {
   }
 
   statuses(ids: string[]) {
-    return this.prisma.match.findMany({ where: { id: { in: ids } }, select: { id: true, status: true, currentNo: true } });
+    return this.prisma.match.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, status: true, currentNo: true },
+    });
   }
 
   selecting(roomIds?: string[]) {

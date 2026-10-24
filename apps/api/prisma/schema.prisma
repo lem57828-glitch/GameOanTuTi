@@ -15,7 +15,6 @@ datasource db {
 
 enum Role {
   student
-  referee
   admin
 }
 
@@ -41,14 +40,14 @@ model Account {
 model Team {
   joinCode     String       @unique @default(dbgenerated("upper(substr(md5((random())::text), 1, 10))"))
   id           String       @id @default(cuid())
-  tournamentId String
+  tournamentId String?
   name         String
   nameKey      String // tên đã chuẩn hóa để chống trùng trong giải
   captainId    String
   status       String       @default("draft") // draft | approved | locked | withdrawn
   isDemo       Boolean      @default(false)
   createdAt    DateTime     @default(now())
-  tournament   Tournament   @relation(fields: [tournamentId], references: [id])
+  tournament   Tournament?  @relation(fields: [tournamentId], references: [id])
   members      Membership[]
   botVersions  BotVersion[]
   botSelections BotStageSelection[]
@@ -59,7 +58,7 @@ model Team {
 model Membership {
   teamId       String
   accountId    String
-  tournamentId String // lặp lại để ràng buộc: một tài khoản chỉ thuộc một đội trong một giải
+  tournamentId String? // null khi đội chưa đăng ký giải
   joinedAt     DateTime @default(now())
   team         Team     @relation(fields: [teamId], references: [id])
   account      Account  @relation(fields: [accountId], references: [id])

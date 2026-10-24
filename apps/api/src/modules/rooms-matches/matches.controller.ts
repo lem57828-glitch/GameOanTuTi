@@ -1,4 +1,4 @@
-// TV4 — trận nhiều hiệp: chọn kín của đội trưởng, mở phòng theo cặp, thao tác BTC/trọng tài.
+// TV4 — trận nhiều hiệp: chọn kín của đội trưởng, mở phòng theo cặp, thao tác BTC.
 import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { Id, z, type SessionUser } from '@arena/contracts';
 import { Authenticated, CurrentUser, Roles } from '../../core/auth/guards.js';
@@ -37,10 +37,10 @@ export class MatchesController {
     return ok(await this.matches.choose(user, parse(Id, id), body, req.requestId));
   }
 
-  // ---- BTC / trọng tài
+  // ---- BTC
 
   @Get('admin/tournaments/:id/matches/summary')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   async summary(@Param('id') id: string) {
     return ok(await this.matches.summary(parse(Id, id)));
   }
@@ -52,7 +52,7 @@ export class MatchesController {
   }
 
   @Post('admin/tournaments/:id/matches/force-lock')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   async forceLockAll(
     @Param('id') id: string,
     @CurrentUser() user: SessionUser,
@@ -63,7 +63,7 @@ export class MatchesController {
   }
 
   @Post('admin/matches/:id/force-lock')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   async forceLock(
     @Param('id') id: string,
     @CurrentUser() user: SessionUser,
@@ -74,7 +74,7 @@ export class MatchesController {
   }
 
   @Post('admin/matches/:id/rerun-game')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   async rerunGame(
     @Param('id') id: string,
     @CurrentUser() user: SessionUser,

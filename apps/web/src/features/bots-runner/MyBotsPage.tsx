@@ -93,7 +93,7 @@ export function MyBotsPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const staff = user?.role === 'admin' || user?.role === 'referee';
+  const staff = user?.role === 'admin';
 
   const submitMutation = useMutation({
     mutationFn: (data: SubmitBotInput) =>

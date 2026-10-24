@@ -21,7 +21,7 @@ const service = new AccountsTeamsService(
     new MailService(db, loadConfig({ ...process.env, NODE_ENV: 'test', MAIL_TRANSPORT: 'local' })),
   ),
 );
-const users: SessionUser[] = Array.from({ length: 8 }, (_, i) => ({
+const users: SessionUser[] = Array.from({ length: 12 }, (_, i) => ({
   id: `${id}-${i}`,
   displayName: `Member ${i}`,
   role: 'student',
@@ -47,8 +47,8 @@ beforeAll(async () => {
   });
 });
 afterAll(async () => {
-  await db.membership.deleteMany({ where: { tournamentId: id } });
-  await db.team.deleteMany({ where: { tournamentId: id } });
+  await db.membership.deleteMany({ where: { accountId: { in: users.map((u) => u.id) } } });
+  await db.team.deleteMany({ where: { captainId: { in: users.map((u) => u.id) } } });
   await db.auditLog.deleteMany({ where: { actorId: { in: users.map((u) => u.id) } } });
   await db.notification.deleteMany({ where: { accountId: { in: users.map((u) => u.id) } } });
   await db.emailMessage.deleteMany({ where: { to: { in: users.map((u) => `${u.id}@example.com`) } } });
@@ -61,6 +61,7 @@ describe('team membership with PostgreSQL transactions', () => {
   it('assigns the creator as captain and admits only three concurrent joiners', async () => {
     const captain = users[0]!;
     const team = await service.createTeam(captain, { name: 'Capacity test' });
+    expect(team.tournamentId).toBeNull();
     expect(team.joinCode).toMatch(/^[A-F0-9]{10}$/);
     expect(team.members).toEqual([{ id: captain.id, displayName: captain.displayName, isCaptain: true }]);
     await expect(service.createTeam(captain, { name: 'Second team' })).rejects.toThrow('Bạn đã có đội');
@@ -93,5 +94,35 @@ describe('team membership with PostgreSQL transactions', () => {
       service.createTeam(users[7]!, { name: 'Race B' }),
     ]);
     expect(creates.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+  });
+  it('creates and manages a team without a current tournament, even while another tournament is locked', async () => {
+    await db.tournament.update({ where: { id }, data: { status: 'running', teamLockAt: new Date(0) } });
+    const team = await service.createTeam(users[8]!, { name: `${id}-independent` });
+    expect(team.tournamentId).toBeNull();
+    expect(team.rosterLocked).toBe(false);
+    await service.joinTeam(users[9]!, team.joinCode);
+    const noTournament = new AccountsTeamsService(
+      new AccountsTeamsRepository(db),
+      { currentId: async () => null } as unknown as TournamentsService,
+      new NotificationsService(
+        db,
+        new MailService(db, loadConfig({ ...process.env, NODE_ENV: 'test', MAIL_TRANSPORT: 'local' })),
+      ),
+    );
+    expect((await noTournament.sessionUser(users[8]!.id, false))?.teamId).toBe(team.id);
+    const created = await noTournament.createTeam(users[10]!, { name: `${id}-no-tournament` });
+    expect(created.tournamentId).toBeNull();
+    await expect(service.registerTeam(users[8]!, id)).rejects.toThrow('Đội hình đã khóa');
+    expect((await service.team(team.id)).tournamentId).toBeNull();
+    await db.tournament.update({ where: { id }, data: { status: 'registration', teamLockAt: null } });
+    await expect(service.registerTeam(users[9]!, id)).rejects.toThrow('đội trưởng');
+    const registered = await service.registerTeam(users[8]!, id);
+    expect(registered.tournamentId).toBe(id);
+    expect(registered.status).toBe('draft');
+    expect(await db.membership.count({ where: { teamId: team.id, tournamentId: id } })).toBe(2);
+    expect((await service.registerTeam(users[8]!, id)).id).toBe(team.id);
+    await db.tournament.update({ where: { id }, data: { teamLockAt: new Date(0) } });
+    await expect(service.joinTeam(users[11]!, team.joinCode)).rejects.toThrow('Đội hình đã khóa');
+    await db.tournament.update({ where: { id }, data: { teamLockAt: null } });
   });
 });

@@ -49,5 +49,5 @@ export interface ApiSuccess<T, M = undefined> {
 export const IsoDateTime = z.string().datetime({ offset: true });
 export const Id = z.string().min(1).max(64);
 
-export const Role = z.enum(['student', 'referee', 'admin']);
+export const Role = z.enum(['student', 'admin']);
 export type Role = z.infer<typeof Role>;

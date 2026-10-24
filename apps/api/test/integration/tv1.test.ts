@@ -154,6 +154,7 @@ describe('TV1 account lifecycle, teams and notifications', () => {
     expect((await accounts.team(teamId)).joinCode).toBe(code);
     await teams.remove(captain, captain.id);
     expect((await accounts.team(teamId)).members).toHaveLength(1);
+    await accounts.registerTeam(member, tournamentId);
     await db.tournament.update({ where: { id: tournamentId }, data: { teamLockAt: new Date(0) } });
     await expect(teams.remove(member, member.id)).rejects.toThrow('Đội hình đã khóa');
     await expect(
@@ -293,7 +294,7 @@ describe('TV1 account lifecycle, teams and notifications', () => {
       }),
     ).rejects.toThrow('chính mình');
     await community.updateAccount(captain, fourth.id, {
-      role: 'referee',
+      role: 'admin',
       status: 'disabled',
       reason: 'Kiểm thử khóa quyền',
     });

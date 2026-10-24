@@ -24,7 +24,7 @@ export class BotsController {
     return ok(await this.bots.saveSelection(user, parse(Id, stageId), body));
   }
   @Post('stages/:stageId/bot-selection/lock')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   async lockBots(@CurrentUser() user: SessionUser, @Param('stageId') stageId: string, @Body() body: unknown) {
     return ok(await this.bots.saveSelection(user, parse(Id, stageId), body, true));
   }
@@ -38,7 +38,7 @@ export class BotsController {
     return ok(await this.bots.selection(user, parse(Id, teamId), parse(Id, stageId)));
   }
   @Get('admin/bots/duplicates')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   async duplicates() {
     return ok(await this.bots.duplicateReport());
   }
@@ -58,7 +58,7 @@ export class BotsController {
   }
 
   @Get('jobs/:id')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   async job(@Param('id') id: string) {
     return ok(await this.bots.jobView(parse(Id, id)));
   }

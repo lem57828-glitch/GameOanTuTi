@@ -66,7 +66,7 @@ export class RoomsController {
   // ---- Chưa làm (TV4): phòng ngoài cặp đấu của giải; phòng theo cặp mở qua admin/tournaments/:id/matches/open.
 
   @Post('rooms')
-  @Roles('admin', 'referee')
+  @Roles('admin')
   open() {
     notImplemented('Mở phòng cho cặp đấu của giải', 'TV4');
   }

@@ -178,11 +178,22 @@ it('lets a team delete unused bot versions but keeps demo bots and bots already 
   const before = await prisma.botStageSelection.findUnique({ where: { teamId_stageId: sel } });
   const mk = (id: string, version: number) =>
     prisma.botVersion.create({
-      data: { id, teamId: 'team_alpha', version, label: id, sourceHash: id.padEnd(64, '0'), sourceCode: 'def make_move(s): pass', rulesetId: 'standard-32-4', status: 'valid' },
+      data: {
+        id,
+        teamId: 'team_alpha',
+        version,
+        label: id,
+        sourceHash: id.padEnd(64, '0'),
+        sourceCode: 'def make_move(s): pass',
+        rulesetId: 'standard-32-4',
+        status: 'valid',
+      },
     });
   const free = await mk(`bot_del_${randomUUID().slice(0, 8)}`, 9001);
   const used = await mk(`bot_keep_${randomUUID().slice(0, 8)}`, 9002);
-  await prisma.botTestRun.create({ data: { botVersionId: free.id, opponentType: 'demo', opponentTarget: 'random' } });
+  await prisma.botTestRun.create({
+    data: { botVersionId: free.id, opponentType: 'demo', opponentTarget: 'random' },
+  });
   await prisma.botStageSelection.upsert({
     where: { teamId_stageId: sel },
     update: { botVersionIds: [...(before?.botVersionIds ?? []), used.id] },
@@ -205,7 +216,11 @@ it('lets a team delete unused bot versions but keeps demo bots and bots already 
     expect(await prisma.botTestRun.count({ where: { botVersionId: free.id } })).toBe(0);
     expect((await request(`/bots/${free.id}`, 'DELETE')).status).toBe(404);
   } finally {
-    if (before) await prisma.botStageSelection.update({ where: { teamId_stageId: sel }, data: { botVersionIds: before.botVersionIds } });
+    if (before)
+      await prisma.botStageSelection.update({
+        where: { teamId_stageId: sel },
+        data: { botVersionIds: before.botVersionIds },
+      });
     else await prisma.botStageSelection.deleteMany({ where: sel });
     await prisma.botTestRun.deleteMany({ where: { botVersionId: { in: [free.id, used.id] } } });
     await prisma.botVersion.deleteMany({ where: { id: { in: [free.id, used.id] } } });
@@ -423,8 +438,6 @@ it('reviews tournament configuration atomically, protects roles/revisions and fr
   };
   await loginAs('acc_an');
   expect((await request('/admin/tournaments')).status).toBe(403);
-  await loginAs('acc_referee');
-  expect((await request('/admin/tournaments')).status).toBe(200);
   expect((await request('/admin/tournaments', 'POST', { name: 'Forbidden tournament' })).status).toBe(403);
   await loginAs('acc_admin');
   const current = (await (await request('/tournaments/current')).json()).data.id;
