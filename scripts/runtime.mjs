@@ -4,7 +4,7 @@ import { readProfile } from './runtime-profile.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const [profile, action = 'dev'] = process.argv.slice(2);
-const allowed = ['dev', 'worker', 'start', 'migrate', 'seed', 'bootstrap-admin'];
+const allowed = ['dev', 'worker', 'start', 'migrate', 'seed', 'bootstrap-admin', 'experience'];
 const children = new Set();
 let stopping = false;
 function stop() {
@@ -21,6 +21,7 @@ process.on('SIGTERM', stop);
 async function main() {
   if (!allowed.includes(action)) throw new Error('Lệnh profile không hợp lệ.');
   if (profile === 'official' && action === 'seed') throw new Error('Không seed dữ liệu mẫu vào official.');
+  if (profile !== 'demo' && action === 'experience') throw new Error('Giải trải nghiệm chỉ dùng cho demo.');
   if (profile !== 'official' && action === 'bootstrap-admin')
     throw new Error('Tạo BTC thật chỉ dùng cho official.');
   const { path, values } = readProfile(root, profile);
@@ -64,6 +65,13 @@ async function main() {
   console.log(`Bot Arena · ${profile} · ${action} · cấu hình .env.${profile}`);
   if (action === 'migrate') return run(['db:migrate']);
   if (action === 'seed') return run(['db:seed']);
+  if (action === 'experience')
+    return run([
+      '--filter',
+      '@arena/api',
+      'db:demo-experience',
+      ...process.argv.slice(4).filter((a) => a !== '--'),
+    ]);
   if (action === 'bootstrap-admin')
     return run(['--filter', '@arena/api', 'exec', 'tsx', 'prisma/bootstrap-admin.ts']);
   if (action === 'dev' || action === 'worker') await run(['--filter', '@arena/game-engine...', 'build']);

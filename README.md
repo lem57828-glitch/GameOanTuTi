@@ -8,6 +8,7 @@ Dùng chung code, tách dữ liệu và cấu hình. Chạy `pnpm env:init` đ�
 - `pnpm dev:official`: web + API + worker với tài khoản/thể thức thật, không bật công cụ demo.
 - `pnpm start:official`: bản build production, phục vụ web và API cùng cổng, kèm worker.
 - `pnpm db:migrate:demo` / `pnpm db:migrate:official`: migration riêng từng schema.
+- `pnpm demo:experience`: tạo giải trải nghiệm chạy bot thật (đội đối thủ, bot GitHub) cho buổi trình diễn hai góc nhìn BTC + sinh viên. Xem [kịch bản từng bước](docs/DEMO_HAI_GOC_NHIN.md).
 
 Các lệnh và `.env` trong phần dưới là cách chạy cũ, giữ để tương thích. Không chạy đồng thời cách cũ và profile nếu trùng cổng. Không cần mở thêm worker khi dùng `dev:demo` hoặc `dev:official`.
 

@@ -17,6 +17,7 @@
     "db:migrate:demo": "node scripts/runtime.mjs demo migrate",
     "db:migrate:official": "node scripts/runtime.mjs official migrate",
     "db:seed:demo": "node scripts/runtime.mjs demo seed",
+    "demo:experience": "node scripts/runtime.mjs demo experience",
     "admin:create:official": "node scripts/runtime.mjs official bootstrap-admin",
     "test:profiles": "node --test scripts/runtime-profile.test.mjs",
     "dev": "pnpm --filter @arena/game-engine... build && pnpm --parallel --filter @arena/api --filter @arena/web dev",
