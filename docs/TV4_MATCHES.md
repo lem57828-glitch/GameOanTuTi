@@ -5,8 +5,9 @@ Nối cặp đấu của TV3 với worker chạy bot của TV2. Mỗi cặp có 
 ## Luồng một trận
 
 1. **Mở phòng** (BTC): Khu vực BTC → Điều hành thi đấu → **"Mở phòng thi đấu cho N cặp"**. Mỗi cặp đang chờ thi được tạo phòng `room_p_<pairingId>` và một trận. Mở lại không tạo trận trùng.
-2. **Chọn kín** (đội trưởng, trong phòng):
-   - Chọn một bot trong bộ bot của đội cho giai đoạn. Ở loại trực tiếp chọn thêm **quân thứ 10** (Búa/Bao/Kéo). Sơ loại và tranh suất dùng bố trí chuẩn 3 Búa – 4 Bao – 3 Kéo (Q06).
+2. **Chọn bot:**
+   - **Sơ loại (Swiss, tranh suất): không chọn trong phòng.** Mỗi đội dùng **một bot cho cả mức**. Đội trưởng chọn ở tab "Trận của đội" trước khi mức khóa (TV3, `tournaments/:id/qualifier/my-bot`). Khóa mức thì chốt; đội chưa chọn dùng bot của mức trước, không có thì bot hợp lệ mới nhất. Trận mở ra là chạy luôn cả 2 ván, bố trí chuẩn 3 Búa – 4 Bao – 3 Kéo (Q06). Bot đã chốt không còn hợp lệ thì dùng lựa chọn dự phòng như hết giờ.
+   - **Loại trực tiếp: chọn kín trong phòng**, mỗi hiệp một lần: một bot trong bộ bot của đội và **quân thứ 10** (Búa/Bao/Kéo).
    - Bấm **"Xác nhận và sẵn sàng"**. Đổi được cho tới khi khóa.
    - Đối thủ và khán giả chỉ thấy "Chưa chọn / Đã chọn / Sẵn sàng", không thấy bot hay quân.
 3. **Khóa:**
@@ -23,7 +24,7 @@ Nối cặp đấu của TV3 với worker chạy bot của TV2. Mỗi cặp có 
    - Loại trực tiếp: 5 hiệp, bằng điểm thì đúng 2 hiệp phụ.
    - Tranh suất: 2 ván + tối đa 2 ván phụ.
 
-   Còn hiệp thì quay lại bước chọn kín (lại 10 phút); đủ thì trận **kết thúc**.
+   Còn hiệp thì: loại trực tiếp quay lại bước chọn kín (lại 10 phút), sơ loại chạy ván tiếp ngay. Đủ thì trận **kết thúc**.
 
 6. **Bàn giao cho TV3:** danh sách ván/hiệp được gửi qua `CompetitionService.recordResult(pairingId, games, 'match')`. TV3 tính kết quả (kể cả bốc thăm khi vẫn bằng), hiển thị nhãn nguồn "match", và chờ BTC/trọng tài xác nhận/chốt vòng như mọi kết quả khác.
 
@@ -89,9 +90,8 @@ Worker (TV2) không còn tự đặt `Match` thành "finished" sau mỗi ván; t
 `apps/api/test/integration/matches.test.ts` chạy với PostgreSQL, Redis và worker thật:
 
 - **Sơ loại 17 đội, 8 phòng Swiss:**
-  - Đội trưởng chọn kín; khán giả không thấy bot đã chọn.
-  - Sinh viên/trọng tài không chọn thay được; bot của đội khác bị từ chối.
-  - Hết giờ thì dùng lựa chọn dự phòng.
+  - Đội trưởng chọn bot cho mức trước khi khóa; bot của đội khác bị từ chối; khóa mức rồi thì không đổi được, các đội chưa chọn được hệ thống chốt.
+  - Trong phòng không có bước chọn; cả 2 ván dùng đúng bot đã chốt.
   - Mỗi trận đúng 2 ván, ván 2 đổi màu; kết quả về TV3 với nguồn "match".
 - **Loại trực tiếp:**
   - Trận 5 (hoặc 7) hiệp có quân thứ 10.

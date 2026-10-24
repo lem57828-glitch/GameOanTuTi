@@ -243,8 +243,23 @@ model QualifierLevel {
   finishedAt   DateTime?
   tournament   Tournament @relation(fields: [tournamentId], references: [id])
   pairings     Pairing[]
+  bots         LevelBot[]
 
   @@unique([tournamentId, ord])
+}
+
+/// Bot một đội dùng cho MỌI trận Swiss/tranh suất của một mức sơ loại. Đội trưởng chọn tới khi mức khóa;
+/// khóa mức thì chốt (đội chưa chọn: bot của mức trước, không có thì bot hợp lệ mới nhất — auto = true).
+model LevelBot {
+  levelId      String
+  teamId       String
+  botVersionId String?
+  auto         Boolean        @default(false)
+  chosenById   String?
+  updatedAt    DateTime       @default(now()) @updatedAt
+  level        QualifierLevel @relation(fields: [levelId], references: [id], onDelete: Cascade)
+
+  @@id([levelId, teamId])
 }
 
 /// Vòng loại trực tiếp của cây 32 → 4: r32 | r16 | qf.

@@ -47,14 +47,18 @@ export function MatchPanel({ s, onChanged }: { s: RoomSnapshot; onChanged: () =>
   const name = (side: 'a' | 'b') => (side === 'a' ? s.teams.a.name : s.teams.b.name);
   const teamId = (side: 'a' | 'b') => (side === 'a' ? s.teams.a.id : s.teams.b.id);
   const status = STATUS[m.status];
+  // Sơ loại: mỗi đội dùng bot đã chốt cho cả mức, không có bước chọn kín theo hiệp.
+  const fixed = m.kind !== 'knockout';
   return (
     <Card className="border-accent/40">
       <CardHeader
         title={`Trận · ${KIND[m.kind]}`}
         subtitle={
-          m.status === 'selecting'
-            ? `Hiệp ${m.currentNo}: chọn kín bot${m.chooseExtra ? ' và quân thứ 10' : ''}`
-            : undefined
+          fixed
+            ? 'Sơ loại: mỗi đội dùng bot đã chốt cho cả mức, các hiệp chạy liên tục'
+            : m.status === 'selecting'
+              ? `Hiệp ${m.currentNo}: chọn kín bot${m.chooseExtra ? ' và quân thứ 10' : ''}`
+              : undefined
         }
         action={
           <Badge tone={status.tone} dot>
@@ -87,7 +91,7 @@ export function MatchPanel({ s, onChanged }: { s: RoomSnapshot; onChanged: () =>
         </Alert>
       )}
 
-      {m.selection && (
+      {m.selection && !fixed && (
         <div className="mt-4 grid gap-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-ink-muted">Hạn chọn (giờ máy chủ)</span>
@@ -116,7 +120,7 @@ export function MatchPanel({ s, onChanged }: { s: RoomSnapshot; onChanged: () =>
         </div>
       )}
 
-      {user && <CaptainForm roomId={s.roomId} m={m} onChanged={onChanged} />}
+      {user && !fixed && <CaptainForm roomId={s.roomId} m={m} onChanged={onChanged} />}
       {staff && <StaffActions m={m} onChanged={onChanged} />}
 
       {m.games.length > 0 && (

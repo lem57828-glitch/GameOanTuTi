@@ -40,6 +40,8 @@ import { streamIdOf } from './snapshot.js';
 
 type Kind = 'swiss' | 'tiebreak' | 'knockout';
 type Outcome = 'a' | 'b' | null;
+/** Sơ loại: mỗi đội dùng một bot chốt cho cả mức, không có bước chọn kín theo hiệp. */
+const FIXED_BOT: ReadonlySet<string> = new Set(['swiss', 'tiebreak']);
 interface Actor {
   id: string | null;
   requestId?: string;
@@ -172,6 +174,7 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
       return { roomId, matchId: match.id };
     });
     this.notify(roomId);
+    if (FIXED_BOT.has(kind)) await this.advance(out.matchId);
     return out;
   }
 
@@ -189,7 +192,9 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
     const { bots } = await this.bots.botsForMatch(teamId, m.stageId);
     const sel = m.selections.find((s) => s.gameNo === m.currentNo && s.teamId === teamId) ?? null;
     let reason: string | null = null;
-    if (m.status !== 'selecting')
+    if (FIXED_BOT.has(m.kind))
+      reason = 'Sơ loại: dùng bot đội đã chốt cho cả mức, không chọn lại giữa các hiệp/vòng.';
+    else if (m.status !== 'selecting')
       reason = m.status === 'completed' ? 'Trận đã kết thúc.' : 'Chưa tới thời gian chọn cho hiệp tiếp theo.';
     else if (!isCaptain) reason = 'Chỉ đội trưởng chọn bot và quân thứ 10.';
     else if (!bots.length) reason = 'Đội chưa có bộ bot đã khóa cho giai đoạn này. Liên hệ BTC.';
@@ -345,6 +350,7 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
     let complete = false;
     let roomId: string | null = null;
     let kicked = false;
+    let nextNow = false;
     await this.prisma.$transaction(
       async (tx) => {
         const m = await this.repo.lock(tx, matchId);
@@ -356,9 +362,14 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
           const a = sels.find((s) => s.teamId === m.teamAId);
           const b = sels.find((s) => s.teamId === m.teamBId);
           const expired = !!m.deadlineAt && m.deadlineAt <= new Date();
-          if (!(a?.ready && b?.ready) && !expired) return;
-          const choiceA = a ?? (await this.fallback(tx, m, m.teamAId));
-          const choiceB = b ?? (await this.fallback(tx, m, m.teamBId));
+          const fixed = FIXED_BOT.has(kind);
+          if (!fixed && !(a?.ready && b?.ready) && !expired) return;
+          const choiceA = fixed
+            ? await this.levelChoice(tx, m, m.teamAId)
+            : (a ?? (await this.fallback(tx, m, m.teamAId)));
+          const choiceB = fixed
+            ? await this.levelChoice(tx, m, m.teamBId)
+            : (b ?? (await this.fallback(tx, m, m.teamBId)));
           if (!choiceA || !choiceB) {
             const who = !choiceA ? m.teamAId : m.teamBId;
             const names = await this.accounts.teamNames([who]);
@@ -443,6 +454,8 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
               },
             });
             await tx.room.update({ where: { id: m.roomId }, data: { status: 'waiting' } });
+            // Sơ loại không có bước chọn: tạo hiệp kế tiếp ngay trong lượt xử lý này.
+            nextNow = FIXED_BOT.has(kind);
             return;
           }
           await tx.match.update({
@@ -462,6 +475,7 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
       { timeout: 30_000 },
     );
     if (kicked) this.bots.kick();
+    if (nextNow) this.again.add(matchId);
     // Bàn giao sau khi commit; nếu tiến trình dừng ngay đây, bộ hẹn giờ sẽ gửi bù (reportedAt vẫn null).
     if (complete) await this.report(matchId);
     if (roomId) this.notify(roomId);
@@ -677,6 +691,18 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
       tx,
       { matchId: m.id, gameNo: m.currentNo, teamId },
       { botVersionId, extraType: prev?.extraType ?? 'PAPER', ready: true, auto: true },
+    );
+  }
+
+  /** Sơ loại (Swiss/tranh suất): bot đội đã chốt cho mức, quân thứ 10 mặc định. Thiếu/không còn hợp lệ → như hết giờ. */
+  private async levelChoice(tx: Tx, m: MatchRow, teamId: string) {
+    const botVersionId = m.pairId ? await this.competition.levelBotFor(tx, m.pairId, teamId) : null;
+    const { bots } = await this.bots.botsForMatch(teamId, m.stageId);
+    if (!botVersionId || !bots.some((b) => b.id === botVersionId)) return this.fallback(tx, m, teamId);
+    return this.repo.upsertSelection(
+      tx,
+      { matchId: m.id, gameNo: m.currentNo, teamId },
+      { botVersionId, extraType: 'PAPER', ready: true, auto: false },
     );
   }
 

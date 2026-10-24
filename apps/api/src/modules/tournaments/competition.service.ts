@@ -17,6 +17,8 @@ import type {
   BracketView,
   CompetitionView,
   KnockoutPhase,
+  LevelBotRequest,
+  LevelBotView,
   LevelUpdateRequest,
   LevelView,
   MyPairingView,
@@ -277,6 +279,134 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
     });
   }
 
+  // ================================================================== bot theo mức sơ loại
+
+  /** Mức mà lựa chọn bot đang nói tới: mức đang thi (bot đã chốt) nếu có, không thì mức kế tiếp còn "planned". */
+  private botLevel(t: CompetitionTournament) {
+    return (
+      t.levels.find((l) => ACTIVE_LEVEL.includes(l.status)) ??
+      t.levels.find((l) => l.status === 'planned') ??
+      null
+    );
+  }
+
+  /** Bot mặc định của đội cho một mức: bot của mức gần nhất trước đó (nếu còn được phép), không thì bot hợp lệ mới nhất. */
+  private async defaultLevelBot(
+    t: CompetitionTournament,
+    ord: number,
+    teamId: string,
+    allowed: Array<{ id: string }>,
+    tx?: Tx,
+  ): Promise<string | null> {
+    const earlier = t.levels.filter((l) => l.ord < ord).map((l) => l.id);
+    const rows = earlier.length ? await this.repo.levelBots({ levelId: { in: earlier }, teamId }, tx) : [];
+    const ordOf = new Map(t.levels.map((l) => [l.id, l.ord]));
+    const prev = rows
+      .filter((r) => r.botVersionId && allowed.some((b) => b.id === r.botVersionId))
+      .sort((a, b) => ordOf.get(b.levelId)! - ordOf.get(a.levelId)!)[0];
+    return prev?.botVersionId ?? allowed[0]?.id ?? null;
+  }
+
+  /** Khóa mức: chốt bot của từng đội tham gia. Bot đội chọn không còn hợp lệ thì thay bằng bot mặc định (auto). */
+  private async freezeLevelBots(
+    tx: Tx,
+    t: CompetitionTournament,
+    level: { id: string; ord: number },
+    entrants: string[],
+  ) {
+    const stageId = t.stages.find((s) => s.kind === 'qualifier')?.id ?? null;
+    const rows = new Map((await this.repo.levelBots({ levelId: level.id }, tx)).map((r) => [r.teamId, r]));
+    for (const teamId of entrants) {
+      const { bots } = await this.bots.botsForMatch(teamId, stageId);
+      const row = rows.get(teamId);
+      if (row?.botVersionId && bots.some((b) => b.id === row.botVersionId)) continue;
+      const botVersionId = await this.defaultLevelBot(t, level.ord, teamId, bots, tx);
+      await tx.levelBot.upsert({
+        where: { levelId_teamId: { levelId: level.id, teamId } },
+        update: { botVersionId, auto: true },
+        create: { levelId: level.id, teamId, botVersionId, auto: true },
+      });
+    }
+  }
+
+  /** TV4: bot đã chốt của đội cho mức chứa cặp đấu (Swiss/tranh suất); null nếu không có. */
+  async levelBotFor(tx: Tx, pairingId: string, teamId: string): Promise<string | null> {
+    const p = await this.repo.findPairing(pairingId, tx);
+    if (!p?.levelId) return null;
+    const [row] = await this.repo.levelBots({ levelId: p.levelId, teamId }, tx);
+    return row?.botVersionId ?? null;
+  }
+
+  /** Đội xem bot dùng cho mức sơ loại hiện tại/sắp tới và có được đổi không. */
+  async myLevelBot(user: SessionUser, tournamentId: string): Promise<LevelBotView> {
+    const t = await this.repo.findTournament(tournamentId);
+    if (!t) throw notFound('giải đấu');
+    const level = this.botLevel(t);
+    const empty = { allowedBots: [], current: null, canChoose: false };
+    if (!user.teamId) return { level: null, ...empty, reason: 'Bạn chưa thuộc đội nào.' };
+    if (!level) return { level: null, ...empty, reason: 'Không có mức sơ loại nào sắp diễn ra.' };
+    const head = {
+      ord: level.ord,
+      name: level.name,
+      status: level.status as LevelView['status'],
+      botLockAt: level.botLockAt?.toISOString() ?? null,
+    };
+    const stageId = t.stages.find((s) => s.kind === 'qualifier')?.id ?? null;
+    const [{ bots }, team, [row]] = await Promise.all([
+      this.bots.botsForMatch(user.teamId, stageId),
+      this.accounts.team(user.teamId),
+      this.repo.levelBots({ levelId: level.id, teamId: user.teamId }),
+    ]);
+    const labels = new Map(bots.map((b) => [b.id, `v${b.version} · ${b.label}`]));
+    let current: LevelBotView['current'] = null;
+    if (row?.botVersionId) {
+      const label =
+        labels.get(row.botVersionId) ??
+        (await this.bots.botLabels([row.botVersionId])).get(row.botVersionId) ??
+        row.botVersionId;
+      current = { botVersionId: row.botVersionId, label, source: row.auto ? 'auto' : 'chosen' };
+    } else if (level.status === 'planned') {
+      const id = await this.defaultLevelBot(t, level.ord, user.teamId, bots);
+      if (id) current = { botVersionId: id, label: labels.get(id) ?? id, source: 'default' };
+    }
+    const isCaptain = team.members.some((m) => m.id === user.id && m.isCaptain);
+    let reason: string | null = null;
+    if (level.status !== 'planned') reason = 'Mức đã khóa: bot của đội đã chốt cho mọi trận trong mức này.';
+    else if (!isCaptain) reason = 'Chỉ đội trưởng chọn bot cho mức sơ loại.';
+    else if (!bots.length) reason = 'Đội chưa có bot hợp lệ trong bộ bot đã khóa của giai đoạn sơ loại.';
+    return { level: head, allowedBots: bots, current, canChoose: reason === null, reason };
+  }
+
+  /** Đội trưởng chọn bot cho mức sơ loại sắp tới. Chỉ khi mức còn "planned"; khóa mức thì chốt. */
+  async chooseLevelBot(user: SessionUser, tournamentId: string, input: LevelBotRequest, requestId: string) {
+    const view = await this.myLevelBot(user, tournamentId);
+    if (!view.canChoose) throw conflict(view.reason ?? 'Không chọn được bot lúc này.');
+    if (!view.allowedBots.some((b) => b.id === input.botVersionId))
+      throw forbidden('Bot không thuộc bộ bot được phép của đội.');
+    const teamId = user.teamId!;
+    return this.repo.transaction(tournamentId, async (tx, t) => {
+      const level = t && this.botLevel(t);
+      if (!level || level.ord !== view.level!.ord || level.status !== 'planned')
+        throw conflict('Mức vừa khóa, bot đã chốt. Tải lại trang.');
+      await tx.levelBot.upsert({
+        where: { levelId_teamId: { levelId: level.id, teamId } },
+        update: { botVersionId: input.botVersionId, auto: false, chosenById: user.id },
+        create: { levelId: level.id, teamId, botVersionId: input.botVersionId, chosenById: user.id },
+      });
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'qualifier.level_bot.choose',
+          target: tournamentId,
+          requestId,
+          data: { level: level.ord, teamId, botVersionId: input.botVersionId },
+        },
+        tx,
+      );
+      return { level: level.ord, botVersionId: input.botVersionId };
+    });
+  }
+
   // ================================================================== lập kế hoạch mức
 
   async plan(tournamentId: string, input: QualifierPlanRequest, actor: Actor) {
@@ -394,6 +524,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
           });
           await tx.tournament.update({ where: { id: tournamentId }, data: { status: 'running' } });
           await this.setStageStatus(tx, t, 'qualifier', 'running');
+          await this.freezeLevelBots(tx, t, l, entrants);
           return { level: l.ord, teams: entrants.length, skipped };
         }
         throw conflict('Không còn mức sơ loại nào chờ khóa.');
@@ -889,6 +1020,8 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
       await tx.appeal.deleteMany({ where: { pairingId: { in: pairings.map((p) => p.id) } } });
       await tx.pairing.deleteMany({ where: { tournamentId } });
       await tx.bracketRound.deleteMany({ where: { tournamentId } });
+      // Bỏ các bot hệ thống tự chốt khi khóa mức; giữ lựa chọn của đội trưởng.
+      await tx.levelBot.deleteMany({ where: { level: { tournamentId }, auto: true } });
       await tx.qualifierLevel.updateMany({
         where: { tournamentId },
         data: { status: 'planned', seed: null, teamsIn: null, lockedAt: null, finishedAt: null },

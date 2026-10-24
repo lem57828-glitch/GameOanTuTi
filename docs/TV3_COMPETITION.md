@@ -5,7 +5,7 @@ Phần này nối tiếp [cấu hình giải](TV3_CONFIGURATION.md). Giải ph�
 ## Luồng điều hành
 
 1. **Lập kế hoạch các mức** (BTC). Chọn **số mức** (1–8), rồi mỗi mức một dòng: tên, **số đội giữ lại** và **số vòng Swiss** riêng. Số đội giảm dần; mức cuối cố định 32. Ô báo lỗi ngay khi nhập; mức giữ lại không ít hơn số đội đang có được cảnh báo là sẽ bị bỏ qua khi khóa. Ví dụ 1000 → 500 → 200 → 100 → 32; với 180 đội gợi ý 100 → 32. Nhập thêm số vòng Swiss mỗi mức (đề xuất 3–5) và phạm vi tránh tái đấu (trong một mức hoặc toàn bộ sơ loại).
-2. **Khóa bot và mở mức.** Mức 1 nhận mọi đội đã duyệt; các mức sau nhận các đội đi tiếp của mức trước. Mức không phải mức cuối mà số đội đã ≤ chỉ tiêu thì tự bỏ qua. Nếu đặt mốc khóa bot cho mức, máy chủ tự khóa khi tới giờ (kiểm tra mỗi 30 giây theo giờ máy chủ).
+2. **Khóa bot và mở mức.** Mức 1 nhận mọi đội đã duyệt; các mức sau nhận các đội đi tiếp của mức trước. Mức không phải mức cuối mà số đội đã ≤ chỉ tiêu thì tự bỏ qua. Nếu đặt mốc khóa bot cho mức, máy chủ tự khóa khi tới giờ (kiểm tra mỗi 30 giây theo giờ máy chủ). Khóa mức cũng chốt **bot của từng đội cho cả mức**: đội trưởng chọn trước ở tab "Trận của đội"; đội chưa chọn dùng bot của mức trước, không có thì bot hợp lệ mới nhất. Các trận Swiss/tranh suất trong mức không có bước chọn bot, chạy ngay khi mở phòng.
 3. **Ghép vòng.**
    - Vòng 1 bốc thăm theo seed của mức; các vòng sau ghép đội gần điểm và tránh tái đấu.
    - Số đội lẻ: một đội nhận bye, ưu tiên đội chưa nghỉ rồi đến đội ít điểm. Bye được tính như thắng.
@@ -55,6 +55,7 @@ Trang **Khu vực BTC → Điều hành thi đấu** chỉ hiện đúng một n
 | GET tournaments/:id/standings?level=                        | Công khai     | Bảng xếp hạng một mức, kèm nhãn trạng thái          |
 | GET tournaments/:id/bracket                                 | Công khai     | Nhánh 32 → 4                                        |
 | GET tournaments/:id/my-pairings                             | Đăng nhập     | Cặp của đội mình + quyền khiếu nại                  |
+| GET/POST tournaments/:id/qualifier/my-bot                   | Đội trưởng chọn | Bot của đội cho mức sắp tới (một bot cho mọi trận Swiss của mức); khóa mức thì chốt |
 | POST appeals · GET appeals/mine                             | Đăng nhập     | Gửi/xem khiếu nại của đội                           |
 | GET admin/appeals · POST admin/appeals/:id/decision         | BTC/trọng tài | Danh sách và quyết định                             |
 | POST admin/pairings/:id/result                              | BTC/trọng tài | Nhập kết quả `{games: ['a'\|'b'\|null], reason}`    |

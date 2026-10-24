@@ -42,6 +42,10 @@ export class CompetitionRepository {
     });
   }
 
+  levelBots(where: Prisma.LevelBotWhereInput, tx: Tx = this.prisma) {
+    return tx.levelBot.findMany({ where });
+  }
+
   findPairing(id: string, tx: Tx = this.prisma) {
     return tx.pairing.findUnique({ where: { id } });
   }

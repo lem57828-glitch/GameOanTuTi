@@ -290,3 +290,19 @@ export const MyPairingView = PairingView.extend({
   appealBlockedReason: z.string().nullable(),
 });
 export type MyPairingView = z.infer<typeof MyPairingView>;
+
+/** Đội trưởng chọn bot dùng cho mọi trận Swiss/tranh suất của mức sơ loại sắp tới (trước khi mức khóa). */
+export const LevelBotRequest = z.object({ botVersionId: Id }).strict();
+export type LevelBotRequest = z.infer<typeof LevelBotRequest>;
+export const LevelBotView = z.object({
+  /** Mức đang thi (bot đã chốt) hoặc mức sắp tới (còn chọn được); null khi sơ loại chưa lập/đã xong. */
+  level: z.object({ ord: Count, name: z.string(), status: LevelStatus, botLockAt: OptionalTime }).nullable(),
+  allowedBots: z.array(z.object({ id: Id, label: z.string(), version: Count })),
+  /** Bot đang áp dụng. `source`: đội chọn, mặc định (mức trước / mới nhất) hoặc hệ thống chốt khi khóa mức. */
+  current: z
+    .object({ botVersionId: Id, label: z.string(), source: z.enum(['chosen', 'default', 'auto']) })
+    .nullable(),
+  canChoose: z.boolean(),
+  reason: z.string().nullable(),
+});
+export type LevelBotView = z.infer<typeof LevelBotView>;

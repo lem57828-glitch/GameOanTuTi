@@ -1,4 +1,5 @@
-// TV4 trên PostgreSQL/Redis và worker thật: phòng theo cặp TV3 → chọn kín bot/quân thứ 10 → khóa (sẵn sàng hoặc hết giờ)
+// TV4 trên PostgreSQL/Redis và worker thật: phòng theo cặp TV3. Sơ loại dùng bot đội chốt cho cả mức (chạy ngay);
+// loại trực tiếp chọn kín bot/quân thứ 10 từng hiệp → khóa (sẵn sàng hoặc hết giờ)
 // → tung xu → worker chạy từng hiệp → trận đủ hiệp → kết quả về TV3 (nguồn 'match'). Kèm loại trực tiếp 5+2 hiệp,
 // quyền đội trưởng, không lộ lựa chọn chưa khóa, và mở lại trận trong cùng phòng sau khi chấp nhận khiếu nại.
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -162,7 +163,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 }, 60_000);
 
-it('sơ loại: phòng theo cặp, chọn kín của đội trưởng, khóa khi hết giờ, kết quả trận về TV3', async () => {
+it('sơ loại: đội trưởng chốt một bot cho cả mức, trận Swiss chạy ngay không chờ chọn, kết quả trận về TV3', async () => {
   // 17 đội → mức 1 chọn 32 (tất cả đi tiếp) → cây 32 chỉ có một cặp thật (hạt giống 16 gặp 17).
   expect(
     (await call('acc_admin', `/admin/tournaments/${tid}/demo/teams`, 'POST', { count: 17 })).data.created,
@@ -171,17 +172,42 @@ it('sơ loại: phòng theo cặp, chọn kín của đội trưởng, khóa khi
   // acc_an làm đội trưởng đội đầu tiên trong giải kiểm thử (giải mới nhất đang chạy = giải hiện tại của phiên).
   await prisma.team.update({ where: { id: teams[0]!.id }, data: { captainId: 'acc_an' } });
   await prisma.membership.create({ data: { teamId: teams[0]!.id, accountId: 'acc_an', tournamentId: tid } });
+  // Đội có hai bot: v2 mới hơn là mặc định; đội trưởng chủ động chọn v1.
+  const v1 = await prisma.botVersion.findFirstOrThrow({ where: { teamId: teams[0]!.id } });
+  const v2 = await prisma.botVersion.create({
+    data: { ...v1, id: `${v1.id}_v2`, version: v1.version + 1, label: 'v2', createdAt: new Date() },
+  });
   await call('acc_admin', `/admin/tournaments/${tid}/qualifier/plan`, 'POST', {
     targets: [32],
     rounds: 1,
     ...reason,
   });
-  await call('acc_admin', `/admin/tournaments/${tid}/qualifier/lock`, 'POST', reason);
   await login('acc_an');
+  const before = (await call('acc_an', `/tournaments/${tid}/qualifier/my-bot`)).data;
+  expect(before).toMatchObject({ level: { ord: 1, status: 'planned' }, canChoose: true });
+  expect(before.current).toMatchObject({ botVersionId: v2.id, source: 'default' });
+  const other = await prisma.botVersion.findFirstOrThrow({ where: { teamId: teams[5]!.id } });
+  expect(
+    (await call('acc_an', `/tournaments/${tid}/qualifier/my-bot`, 'POST', { botVersionId: other.id })).status,
+  ).toBe(403);
+  expect(
+    (await call('acc_an', `/tournaments/${tid}/qualifier/my-bot`, 'POST', { botVersionId: v1.id })).status,
+  ).toBe(201);
+
+  // Khóa mức: bot được chốt cho cả 17 đội (đội chưa chọn: tự chốt), không đổi được nữa.
+  await call('acc_admin', `/admin/tournaments/${tid}/qualifier/lock`, 'POST', reason);
+  const locked = (await call('acc_an', `/tournaments/${tid}/qualifier/my-bot`)).data;
+  expect(locked).toMatchObject({ canChoose: false, current: { botVersionId: v1.id, source: 'chosen' } });
+  expect(
+    (await call('acc_an', `/tournaments/${tid}/qualifier/my-bot`, 'POST', { botVersionId: v2.id })).status,
+  ).toBe(409);
+  const level = await prisma.qualifierLevel.findFirstOrThrow({ where: { tournamentId: tid, ord: 1 } });
+  expect(await prisma.levelBot.count({ where: { levelId: level.id } })).toBe(17);
+  expect(await prisma.levelBot.count({ where: { levelId: level.id, auto: true } })).toBe(16);
+
   expect(
     (await call('acc_admin', `/admin/tournaments/${tid}/qualifier/rounds`, 'POST', reason)).data,
   ).toMatchObject({ pairs: 8 });
-
   // Sinh viên không mở phòng được; BTC mở phòng cho 8 cặp, mở lại không tạo trận trùng.
   expect((await call('acc_an', `/admin/tournaments/${tid}/matches/open`, 'POST')).status).toBe(403);
   expect((await call('acc_admin', `/admin/tournaments/${tid}/matches/open`, 'POST')).data.opened).toBe(8);
@@ -191,28 +217,13 @@ it('sơ loại: phòng theo cặp, chọn kín của đội trưởng, khóa khi
     where: { tournamentId: tid, kind: 'swiss', OR: [{ teamAId: teams[0]!.id }, { teamBId: teams[0]!.id }] },
   });
   const roomId = pairingRoomId(mine.id);
+  // Không có bước chọn theo hiệp ở sơ loại.
   const sel = (await call('acc_an', `/rooms/${roomId}/my-selection`)).data;
-  expect(sel).toMatchObject({ isCaptain: true, canChoose: true, gameNo: 1 });
-  expect(sel.allowedBots.length).toBeGreaterThan(0);
-  // Bot của đội khác bị từ chối; đội trưởng chọn bot của đội, chưa bấm sẵn sàng.
-  const other = await prisma.botVersion.findFirstOrThrow({ where: { teamId: teams[5]!.id } });
-  expect((await call('acc_an', `/rooms/${roomId}/choices`, 'POST', { botVersionId: other.id })).status).toBe(
-    403,
-  );
-  const chosen = sel.allowedBots[0].id;
-  expect(
-    (await call('acc_an', `/rooms/${roomId}/choices`, 'POST', { botVersionId: chosen, ready: false })).status,
-  ).toBe(201);
-  // Khán giả chỉ thấy "đã chọn", không thấy bot đã chọn.
-  const spectator = await call(null, `/rooms/${roomId}`);
-  const side = mine.teamAId === teams[0]!.id ? 'a' : 'b';
-  expect(spectator.data.match.selection[side]).toEqual({ chosen: true, ready: false });
-  expect(spectator.text).not.toContain(chosen);
-  expect(
-    (await call('acc_referee', `/rooms/${roomId}/choices`, 'POST', { botVersionId: chosen })).status,
-  ).toBe(403);
+  expect(sel).toMatchObject({ isCaptain: true, canChoose: false });
+  expect(sel.reason).toMatch(/Sơ loại/);
+  expect((await call('acc_an', `/rooms/${roomId}/choices`, 'POST', { botVersionId: v2.id })).status).toBe(409);
 
-  // Hết hạn 2 giây: đội chưa chọn dùng lựa chọn dự phòng; worker chạy 2 ván đổi màu cho mỗi cặp.
+  // Hạn chọn 2 giây không liên quan: các trận chạy ngay; worker chạy 2 ván đổi màu cho mỗi cặp.
   await waitFor(
     async () => (await overview()).levels[0].roundsDetail[0]?.done === 8,
     150_000,
@@ -225,13 +236,14 @@ it('sơ loại: phòng theo cặp, chọn kín của đội trưởng, khóa khi
   }
   const match = await prisma.match.findFirstOrThrow({
     where: { pairId: mine.id },
-    include: { games: { include: { choices: true } } },
+    include: { games: { include: { choices: true } }, selections: true },
   });
   expect(match.status).toBe('completed');
   expect(match.games).toHaveLength(2);
-  // Ván 2 đổi màu so với ván 1; lựa chọn của đội trưởng được dùng ở hiệp 1.
+  // Ván 2 đổi màu so với ván 1; cả hai hiệp dùng đúng bot đội trưởng đã chốt cho mức, không có lựa chọn tự động.
   expect(match.games[0]!.blueTeamId).not.toBe(match.games[1]!.blueTeamId);
-  expect(match.games[0]!.choices.find((c) => c.teamId === teams[0]!.id)!.botVersionId).toBe(chosen);
+  for (const g of match.games) expect(g.choices.find((c) => c.teamId === teams[0]!.id)!.botVersionId).toBe(v1.id);
+  expect(match.selections.every((x) => !x.auto)).toBe(true);
   const snap = (await call(null, `/rooms/${roomId}`)).data;
   expect(snap.match).toMatchObject({ status: 'completed', kind: 'swiss', mainGames: 2, chooseExtra: false });
   expect(snap.match.games).toHaveLength(2);

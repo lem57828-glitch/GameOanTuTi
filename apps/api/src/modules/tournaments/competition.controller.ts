@@ -5,6 +5,7 @@ import {
   DemoTeamsRequest,
   Id,
   KnockoutPhase,
+  LevelBotRequest,
   LevelUpdateRequest,
   PairingResultRequest,
   QualifierPlanRequest,
@@ -48,6 +49,26 @@ export class CompetitionController {
   @Authenticated()
   async myPairings(@Param('id') id: string, @CurrentUser() user: SessionUser) {
     return ok(await this.competition.myPairings(user, parse(Id, id)));
+  }
+
+  /** Bot của đội cho mức sơ loại hiện tại/sắp tới: dùng cho mọi trận Swiss/tranh suất trong mức. */
+  @Get('tournaments/:id/qualifier/my-bot')
+  @Authenticated()
+  async myLevelBot(@Param('id') id: string, @CurrentUser() user: SessionUser) {
+    return ok(await this.competition.myLevelBot(user, parse(Id, id)));
+  }
+
+  @Post('tournaments/:id/qualifier/my-bot')
+  @Authenticated()
+  async chooseLevelBot(
+    @Param('id') id: string,
+    @CurrentUser() user: SessionUser,
+    @Body() body: unknown,
+    @Req() req: ArenaRequest,
+  ) {
+    return ok(
+      await this.competition.chooseLevelBot(user, parse(Id, id), parse(LevelBotRequest, body), req.requestId),
+    );
   }
 
   @Post('appeals')

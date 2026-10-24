@@ -18,6 +18,7 @@ import type { AppealView, MyPairingView } from '@arena/contracts';
 import { api } from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { KIND_LABEL, PairingLine, pairingLabel } from './competition-ui';
+import { LevelBotCard } from './LevelBotCard';
 
 export const APPEAL_STATUS: Record<
   AppealView['status'],
@@ -116,6 +117,7 @@ export function MyPairings({ tournamentId }: { tournamentId: string }) {
   if (!user.teamId) return <EmptyState title="Bạn chưa có đội trong giải hiện tại" />;
   return (
     <div className="flex flex-col gap-4">
+      <LevelBotCard tournamentId={tournamentId} />
       {mine.isLoading && <Spinner label="Đang tải trận của đội" />}
       {mine.error && (
         <Alert tone="error" title="Không tải được trận của đội">
