@@ -1,0 +1,135 @@
+﻿/* Module identities share a crisp core, narrow halo and soft signal tail. */
+.led-framed {
+  position: relative;
+}
+.led-accent {
+  --led-a: 62 217 245;
+  --led-b: 117 155 255;
+  --led-core: 233 252 255;
+  --led-brightness: 0.8;
+  --led-lap-seconds: 6;
+  --led-phase: 0;
+  --led-direction: 1;
+  --led-tail: 0.25;
+  --led-stroke: 2;
+  --led-cell-gap: 8;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  overflow: clip;
+  contain: paint;
+}
+.led-accent--line {
+  position: relative;
+  width: 100%;
+  height: 6px;
+}
+.led-accent--frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  z-index: 2;
+}
+.led-canvas {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.led-accent[data-led-variant='header'] {
+  --led-a: 111 208 255;
+  --led-b: 230 249 255;
+  --led-lap-seconds: 11;
+  --led-phase: 0.12;
+  --led-tail: 0.12;
+  --led-stroke: 2;
+  --led-brightness: 0.6;
+  --led-cell-gap: 14;
+}
+.led-accent[data-led-variant='home'] {
+  --led-a: 255 183 79;
+  --led-b: 65 225 239;
+  --led-lap-seconds: 5.8;
+  --led-phase: 0.43;
+  --led-direction: -1;
+  --led-tail: 0.34;
+  --led-stroke: 3;
+}
+.led-accent[data-led-variant='bot'] {
+  --led-a: 178 132 255;
+  --led-b: 88 157 255;
+  --led-lap-seconds: 3.6;
+  --led-tail: 0.4;
+}
+.led-accent[data-led-variant='team'] {
+  --led-a: 68 224 160;
+  --led-b: 68 219 215;
+  --led-lap-seconds: 6.4;
+  --led-tail: 0.34;
+}
+.led-accent[data-led-variant='tournament'] {
+  --led-a: 255 207 99;
+  --led-b: 105 163 255;
+  --led-lap-seconds: 4.4;
+  --led-tail: 0.3;
+}
+.led-accent:is([data-led-variant='rooms'], [data-led-variant='room-card'], [data-led-variant='replay']) {
+  --led-a: 96 165 250;
+  --led-b: 244 114 182;
+}
+.led-accent[data-led-variant='rooms'] {
+  --led-lap-seconds: 5.2;
+  --led-tail: 0.32;
+}
+.led-accent[data-led-variant='room-card'] {
+  --led-lap-seconds: 7.6;
+  --led-tail: 0.5;
+  --led-brightness: 0.5;
+  --led-stroke: 1.5;
+}
+.led-accent[data-led-variant='replay'] {
+  --led-lap-seconds: 5.4;
+  --led-tail: 0.22;
+  --led-stroke: 2.5;
+}
+.led-accent[data-led-variant='account'] {
+  --led-a: 118 191 255;
+  --led-b: 151 224 217;
+  --led-lap-seconds: 8.4;
+  --led-tail: 0.2;
+  --led-brightness: 0.65;
+}
+.led-accent[data-led-variant='library'] {
+  --led-a: 107 221 220;
+  --led-b: 218 227 255;
+  --led-lap-seconds: 6.8;
+  --led-tail: 0.4;
+}
+.led-accent[data-led-variant='control'] {
+  --led-a: 132 179 214;
+  --led-b: 224 243 255;
+  --led-lap-seconds: 7.2;
+  --led-tail: 0.24;
+  --led-brightness: 0.65;
+}
+/* Only the illustration bounds the sector LED, never its copy or action region. */
+.sector-led-art {
+  position: relative;
+  isolation: isolate;
+}
+.room-card.led-framed {
+  isolation: isolate;
+}
+.led-accent--line[data-led-fallback='true'] {
+  background: rgb(var(--led-a) / 0.3);
+}
+.led-accent--frame[data-led-fallback='true'] {
+  box-shadow: inset 0 0 0 1px rgb(var(--led-a) / 0.3);
+}

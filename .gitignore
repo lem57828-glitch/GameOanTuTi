@@ -20,3 +20,6 @@ test-results/
 .idea/
 .pnpm-store/
 apps/api/src/generated/
+
+artifacts/
+sample-bots/

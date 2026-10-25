@@ -1,0 +1,14 @@
+[
+  {
+    "id": "hero",
+    "query": "misty limestone karst mountains river fog vietnam",
+    "status": "ok",
+    "provider": "pexels",
+    "path": "landscape.jpg",
+    "alt": "Explore the lush limestone mountains and calm river in Nam Hoa Lu, Ninh Binh, Vietnam.",
+    "author": "Toon Van Dyck",
+    "authorUrl": "https://www.pexels.com/@toon",
+    "sourceUrl": "https://www.pexels.com/photo/scenic-view-of-limestone-mountains-in-ninh-binh-38336566/",
+    "license": "Pexels License (https://www.pexels.com/license/)"
+  }
+]

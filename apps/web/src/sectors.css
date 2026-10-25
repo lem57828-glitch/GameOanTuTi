@@ -1,0 +1,1201 @@
+/* Shared visual language for working screens. The landing page is intentionally outside this scope. */
+.workspace {
+  --sector-ink: rgb(var(--c-text));
+  --sector-blue: rgb(var(--c-blue));
+  --sector-pink: rgb(var(--c-pink));
+  --sector-accent: rgb(var(--c-accent));
+  --sector-line: rgb(var(--c-border));
+  --sector-muted: rgb(var(--c-muted));
+  --sector-paper: rgb(var(--c-surface));
+  --sector-deep: rgb(var(--c-bg-deep));
+  --sector-space: 32px;
+  --sector-motion: 240ms;
+  --identity-size: 72px;
+}
+.workspace-content .sector-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  align-items: center;
+  gap: var(--sector-space);
+  padding: var(--sector-space);
+  min-width: 0;
+  border: 1px solid var(--sector-line);
+  border-radius: 8px;
+  background: var(--sector-deep);
+  isolation: isolate;
+}
+.sector-hero-copy {
+  min-width: 0;
+}
+.sector-hero-heading {
+  min-width: 0;
+}
+.workspace-content .sector-hero h1 {
+  font-size: clamp(28px, 3.2vw, 44px);
+  line-height: 1.3;
+  letter-spacing: -1.2px;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+  max-width: 22ch;
+}
+.sector-hero-heading > div {
+  min-width: 0;
+}
+.sector-hero-heading > .ui-button {
+  margin-top: 24px;
+}
+.sector-hero-heading > div > p:first-child,
+.sector-hero-heading > p:first-child:not(.sector-slogan) {
+  color: var(--sector-accent);
+  font-size: 12px;
+  line-height: 1.7;
+  letter-spacing: 1.2px;
+  font-weight: 600;
+}
+.sector-hero-heading > div > h1 + p {
+  margin-top: 16px;
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--sector-muted);
+  max-width: 56ch;
+}
+.workspace-content .sector-slogan {
+  font-size: 16px;
+  color: var(--sector-muted);
+  line-height: 1.75;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--sector-line);
+  max-width: 60ch;
+}
+.sector-hero-visual {
+  min-width: 0;
+  width: 100%;
+  max-width: 480px;
+  justify-self: end;
+  border-left: 1px solid var(--sector-line);
+  padding-left: 24px;
+}
+.sector-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 12 / 7;
+  color: var(--sector-muted);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.art-grid {
+  stroke: var(--sector-line);
+  stroke-opacity: 0.2;
+  stroke-width: 1;
+}
+.art-frame {
+  stroke: var(--sector-line);
+}
+.art-landscape {
+  stroke: var(--sector-muted);
+  stroke-opacity: 0.2;
+}
+.art-plate {
+  fill: var(--sector-paper);
+  stroke: var(--sector-line);
+}
+.art-surface {
+  fill: var(--sector-deep);
+  stroke: var(--sector-line);
+}
+.art-circuit {
+  stroke: var(--sector-muted);
+  stroke-opacity: 0.6;
+}
+.art-accent {
+  stroke: var(--sector-accent);
+}
+.art-accent-fill {
+  fill: var(--sector-accent);
+  fill-opacity: 0.15;
+  stroke: var(--sector-accent);
+}
+.art-blue {
+  stroke: var(--sector-blue);
+  color: var(--sector-blue);
+}
+.art-blue-fill {
+  fill: var(--sector-blue);
+  fill-opacity: 0.2;
+  stroke: var(--sector-blue);
+}
+.art-pink {
+  stroke: var(--sector-pink);
+  color: var(--sector-pink);
+}
+.art-pink-fill {
+  fill: var(--sector-pink);
+  fill-opacity: 0.2;
+  stroke: var(--sector-pink);
+}
+.art-white {
+  stroke: var(--sector-ink);
+  stroke-width: 2.5;
+}
+.art-chip-label {
+  fill: var(--sector-accent);
+  font:
+    600 18px 'JetBrains Mono',
+    monospace;
+  stroke: none;
+}
+.art-caption {
+  fill: var(--sector-muted);
+  font:
+    500 12px 'Be Vietnam Pro',
+    sans-serif;
+  letter-spacing: 1px;
+  stroke: none;
+}
+.workspace-content .sector-hero--compact {
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.35fr);
+  padding-top: 24px;
+  padding-bottom: 24px;
+}
+.sector-hero--compact .sector-hero-visual {
+  max-width: 280px;
+}
+.workspace-content .sector-hero--compact h1 {
+  font-size: clamp(28px, 2.8vw, 36px);
+  max-width: 30ch;
+}
+.workspace-content .sector-hero--compact .sector-slogan {
+  margin-top: 16px;
+}
+.sector-hero--compact .art-caption {
+  display: none;
+}
+.workspace-content > .mx-auto:has(> .sector-hero) {
+  width: 100%;
+  max-width: 100%;
+}
+.workspace-content > .mx-auto:has(> .sector-hero) > .ui-card:not(.publication-card):not(.notification-card),
+.workspace-content > .mx-auto:has(> .sector-hero) > .ui-field {
+  width: 100%;
+}
+/* Diagrams and navigation speak the same language; no fake percentages or simulated activity. */
+.identity-mark {
+  display: block;
+  width: var(--identity-size, 72px);
+  height: var(--identity-size, 72px);
+  flex: none;
+  color: var(--sector-accent);
+}
+.identity-base {
+  fill: var(--sector-deep);
+  stroke: var(--sector-line);
+  stroke-width: 1.5;
+}
+.identity-etch {
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+.identity-mark text {
+  font:
+    700 20px 'Be Vietnam Pro',
+    sans-serif;
+  fill: var(--sector-ink);
+}
+.identity-mark--blue {
+  color: var(--sector-blue);
+}
+.identity-mark--pink {
+  color: var(--sector-pink);
+}
+.bot-process {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  list-style: none;
+  padding: 24px 0;
+  border-block: 1px solid var(--sector-line);
+}
+.bot-process li {
+  min-width: 0;
+  display: flex;
+  align-items: start;
+  gap: 20px;
+  padding-inline: 24px;
+}
+.bot-process li:first-child {
+  padding-left: 0;
+}
+.bot-process li:last-child {
+  padding-right: 0;
+}
+.bot-process li + li {
+  border-left: 1px solid var(--sector-line);
+}
+.process-glyph,
+.process-symbol {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  color: var(--sector-accent);
+  stroke: var(--sector-accent);
+  stroke-width: 1.5;
+}
+.process-glyph {
+  font:
+    500 24px/1 'JetBrains Mono',
+    monospace;
+}
+.bot-process small {
+  display: block;
+  font:
+    500 11px/1.8 'JetBrains Mono',
+    monospace;
+  color: var(--sector-muted);
+  letter-spacing: 1px;
+}
+.bot-process strong {
+  display: block;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--sector-ink);
+  margin-top: 4px;
+}
+.bot-process p {
+  font-size: 14px;
+  line-height: 1.8;
+  margin-top: 8px;
+  color: var(--sector-muted);
+}
+.bot-label-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.bot-label-cell .identity-mark {
+  --identity-size: 40px;
+}
+.bot-label-cell strong {
+  overflow-wrap: anywhere;
+}
+.workspace .ui-summary {
+  border: 1px solid var(--sector-line);
+  border-radius: 8px;
+  background: var(--sector-paper);
+}
+.workspace .ui-summary dd {
+  font-size: clamp(28px, 3vw, 40px);
+  letter-spacing: -1.2px;
+}
+.workspace .ui-summary dt {
+  font-size: 14px;
+}
+/* Team: identity, occupied slots and management controls share one real roster. */
+.team-roster-card.ui-card {
+  padding: 32px;
+}
+.team-crest-heading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.team-crest-heading span {
+  font:
+    500 12px/1.8 'JetBrains Mono',
+    monospace;
+  color: var(--sector-muted);
+  letter-spacing: 1.2px;
+}
+.team-roster-card .ui-card-header h2 {
+  font-size: 28px;
+  overflow-wrap: anywhere;
+}
+.roster-members {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  list-style: none;
+  padding: 0;
+}
+.roster-member {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--sector-line);
+  background: var(--sector-deep);
+  border-radius: 4px;
+}
+.roster-member > .ui-badge {
+  margin-left: auto;
+}
+.roster-person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+.roster-person .identity-mark {
+  --identity-size: 48px;
+}
+.roster-person > div {
+  min-width: 0;
+}
+.roster-person strong {
+  display: block;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.roster-role {
+  display: block;
+  font:
+    500 10px/1.8 'JetBrains Mono',
+    monospace;
+  color: var(--sector-muted);
+  letter-spacing: 1px;
+}
+.roster-member > div:last-child:not(.roster-person) {
+  width: 100%;
+  padding-top: 12px;
+  border-top: 1px solid var(--sector-line);
+}
+.roster-availability {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--sector-muted);
+}
+.roster-availability > span {
+  font:
+    400 28px/1 'JetBrains Mono',
+    monospace;
+  color: var(--sector-accent);
+}
+/* Tournament route: the stage status is always supplied by the API. */
+.stage-journey {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  list-style: none;
+  padding: 8px 0;
+}
+.stage-journey > li {
+  flex: 1 1 200px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px 0;
+  border-bottom: 2px solid var(--sector-line);
+}
+.stage-node {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--sector-line);
+  background: var(--sector-deep);
+  font:
+    500 16px 'JetBrains Mono',
+    monospace;
+  color: var(--sector-muted);
+  border-radius: 50%;
+}
+.stage-journey li[data-stage-state='running'],
+.stage-journey li[data-stage-state='open'] {
+  border-color: var(--sector-accent);
+}
+.stage-journey li[data-stage-state='running'] .stage-node,
+.stage-journey li[data-stage-state='open'] .stage-node {
+  color: var(--sector-accent);
+  border-color: var(--sector-accent);
+}
+.stage-journey li[data-stage-state='confirmed'] .stage-node,
+.stage-journey li[data-stage-state='finished'] .stage-node {
+  color: rgb(var(--c-success));
+}
+.stage-journey strong {
+  display: block;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  margin-bottom: 8px;
+}
+.tournament-calendar.ui-card {
+  padding: 28px;
+}
+.tournament-calendar dl {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+}
+.tournament-calendar dl > div {
+  padding-top: 16px;
+  border-top: 1px solid var(--sector-line);
+}
+.tournament-calendar dt {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 8px;
+}
+.tournament-calendar dd {
+  font:
+    500 14px/1.8 'JetBrains Mono',
+    monospace;
+}
+.stage-detail-card.ui-card {
+  padding: 24px;
+}
+.stage-detail-card > .ui-card-header h2 {
+  font-size: 20px;
+}
+.stage-detail-card > .ui-card-header {
+  min-height: 80px;
+}
+.leader-strip {
+  padding: 24px;
+  border: 1px solid var(--sector-line);
+  background: var(--sector-deep);
+  border-radius: 8px;
+}
+.leader-strip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.leader-strip h2 {
+  font-size: 20px;
+  font-weight: 700;
+}
+.leader-strip ol {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  padding: 0;
+  list-style: none;
+}
+.leader-strip li {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  min-width: 0;
+}
+.leader-strip .identity-mark {
+  --identity-size: 56px;
+}
+.leader-strip li > div {
+  min-width: 0;
+}
+.leader-strip small {
+  display: block;
+  color: var(--sector-accent);
+  font:
+    500 12px/1.8 'JetBrains Mono',
+    monospace;
+}
+.leader-strip strong {
+  display: block;
+  font-size: 16px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.leader-strip li span {
+  display: block;
+  color: var(--sector-muted);
+  margin-top: 4px;
+  font-size: 14px;
+}
+.finalists {
+  padding: 24px;
+  border: 1px solid var(--sector-accent);
+  background: var(--sector-deep);
+  border-radius: 8px;
+}
+.finalists > p {
+  font:
+    500 12px/1.8 'JetBrains Mono',
+    monospace;
+  color: var(--sector-accent);
+  letter-spacing: 1px;
+}
+.finalists h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 8px 0 24px;
+}
+.finalists ul {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+  list-style: none;
+  padding: 0;
+}
+.finalists li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.finalists strong {
+  overflow-wrap: anywhere;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.finalists .identity-mark {
+  --identity-size: 56px;
+}
+.workspace .bracket-viewport {
+  background: var(--sector-deep);
+  border-radius: 8px;
+}
+.workspace .bracket-round-column > header {
+  background: var(--sector-paper);
+}
+.workspace .bracket-node {
+  border-radius: 4px;
+  background: var(--sector-paper);
+}
+.workspace .bracket-match-id {
+  color: var(--sector-accent);
+  letter-spacing: 1px;
+}
+.workspace .pairing-team-line {
+  gap: 12px;
+}
+.pairing-identity {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+.pairing-identity .identity-mark {
+  --identity-size: 28px;
+}
+/* Spectator views: visual identity does not claim a side until the coin toss assigns it. */
+.workspace .room-card.ui-card {
+  padding: 24px;
+  background: var(--sector-deep);
+}
+.room-card--running.ui-card {
+  border-color: rgb(var(--c-success) / 0.65);
+}
+.workspace .room-versus.duel-line {
+  grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr);
+  padding: 24px 0;
+  margin-top: 8px;
+  gap: 16px;
+}
+.duel-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+.duel-team .identity-mark {
+  --identity-size: 88px;
+}
+.duel-team > small {
+  color: var(--sector-muted);
+  font:
+    500 10px/1.8 'JetBrains Mono',
+    monospace;
+  letter-spacing: 1px;
+}
+.duel-team > strong {
+  font-size: 18px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+.duel-divider {
+  display: grid;
+  place-items: center;
+  gap: 12px;
+}
+.workspace .duel-divider > span {
+  font:
+    italic 700 20px/1.5 'JetBrains Mono',
+    monospace;
+  color: var(--sector-accent);
+}
+.duel-divider > i {
+  width: 1px;
+  height: 40px;
+  background: var(--sector-line);
+}
+.workspace .battle-board-card.ui-card {
+  background: var(--sector-deep);
+  padding: 24px;
+}
+.battle-board-heading {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  padding-bottom: 24px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--sector-line);
+}
+.battle-contender {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+.battle-contender:last-child {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+.battle-contender .identity-mark {
+  --identity-size: 56px;
+}
+.battle-contender > div {
+  min-width: 0;
+}
+.battle-contender small {
+  font:
+    500 10px/1.8 'JetBrains Mono',
+    monospace;
+  letter-spacing: 1px;
+  color: var(--sector-muted);
+}
+.battle-contender strong {
+  display: block;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.battle-team-name {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+.battle-team-name .identity-mark {
+  --identity-size: 40px;
+}
+.battle-team-name strong {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+/* Forms and reading screens get their own visual anchors. */
+.auth-sector-art {
+  width: min(100%, 400px);
+  margin-top: 24px;
+}
+.workspace--auth .workspace-auth-aside ol {
+  margin-top: 24px;
+}
+.workspace--auth .workspace-auth-aside h2 {
+  margin-top: 16px;
+}
+.workspace .profile-identity {
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--sector-line);
+}
+.profile-identity .identity-mark {
+  --identity-size: 80px;
+}
+.library-paths {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.library-paths a {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--sector-line);
+  background: var(--sector-deep);
+  border-radius: 4px;
+  color: var(--sector-ink);
+  text-decoration: none;
+  transition:
+    border-color var(--sector-motion) var(--ui-ease),
+    transform var(--sector-motion) var(--ui-ease);
+  min-height: 96px;
+}
+.library-paths a > span {
+  font:
+    500 18px 'JetBrains Mono',
+    monospace;
+  color: var(--sector-accent);
+}
+.library-paths a > div {
+  min-width: 0;
+}
+.library-paths strong {
+  display: block;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.library-paths small {
+  display: block;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--sector-muted);
+  margin-top: 4px;
+}
+.library-paths b {
+  margin-left: auto;
+  color: var(--sector-muted);
+  font-size: 20px;
+  font-weight: 400;
+}
+.guide-checklist > ol {
+  list-style: none;
+  counter-reset: guide-step;
+  padding: 0;
+  display: grid;
+  gap: 0;
+}
+.guide-checklist > ol > li {
+  counter-increment: guide-step;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--sector-line);
+  font-size: 16px;
+  line-height: 1.8;
+}
+.guide-checklist > ol > li:last-child {
+  border: 0;
+}
+.guide-checklist > ol > li:before {
+  content: counter(guide-step, decimal-leading-zero);
+  color: var(--sector-accent);
+  font:
+    500 14px/2 'JetBrains Mono',
+    monospace;
+  display: block;
+}
+.publication-card.ui-card {
+  padding: 28px;
+}
+.publication-card .ui-badge {
+  margin-bottom: 4px;
+}
+.publication-card > h2 {
+  font-size: 24px;
+  max-width: 54ch;
+  overflow-wrap: anywhere;
+}
+.publication-card > p {
+  font-size: 16px;
+  max-width: 75ch;
+  line-height: 1.85;
+}
+.notification-card.ui-card {
+  padding: 24px;
+}
+.notification-card--unread.ui-card {
+  border-color: rgb(var(--c-accent) / 0.6);
+  background: var(--sector-deep);
+}
+.notification-card > p {
+  max-width: 75ch;
+  font-size: 16px;
+  line-height: 1.8;
+}
+.system-service.ui-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+}
+.system-service .service-symbol {
+  display: block;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  color: var(--sector-blue);
+}
+.system-service > div {
+  min-width: 0;
+}
+.system-service p {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.workspace .ui-card-header h2 {
+  overflow-wrap: anywhere;
+}
+.workspace :is(.library-paths a, .bracket-node, .room-card) {
+  transition: border-color 200ms var(--ui-ease);
+}
+@media (hover: hover) {
+  .library-paths a:hover {
+    border-color: var(--sector-accent);
+    transform: translateY(-2px);
+  }
+  .workspace .room-card:hover {
+    border-color: var(--sector-accent);
+  }
+  .workspace .bracket-node:hover {
+    border-color: var(--sector-blue);
+  }
+}
+@media (max-width: 1199px) {
+  .workspace-content .sector-hero {
+    gap: 24px;
+    padding: 24px;
+  }
+  .sector-hero-visual {
+    padding-left: 16px;
+  }
+  .bot-process li {
+    gap: 12px;
+    padding-inline: 16px;
+  }
+  .process-glyph,
+  .process-symbol {
+    width: 40px;
+    height: 40px;
+  }
+  .library-paths {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .finalists ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .tournament-calendar dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 900px) {
+  .workspace-content .sector-hero {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.6fr);
+  }
+  .workspace-content .sector-hero h1 {
+    font-size: 32px;
+  }
+  .workspace-content .sector-hero--compact {
+    grid-template-columns: minmax(0, 1fr) 160px;
+  }
+  .roster-members {
+    grid-template-columns: 1fr;
+  }
+  .bot-process {
+    grid-template-columns: 1fr;
+    padding: 0;
+  }
+  .bot-process li {
+    padding: 24px 0;
+  }
+  .bot-process li + li {
+    border-left: 0;
+    border-top: 1px solid var(--sector-line);
+  }
+  .bot-process p {
+    max-width: 65ch;
+  }
+  .auth-sector-art {
+    max-width: 220px;
+    margin: 16px 0 0;
+  }
+  .workspace--auth .workspace-auth-aside {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 180px;
+    column-gap: 16px;
+    align-items: center;
+  }
+  .workspace-auth-aside > .workspace-eyebrow {
+    grid-column: 1;
+  }
+  .workspace-auth-aside > h2 {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .workspace-auth-aside > .auth-sector-art {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin: 0;
+  }
+  .leader-strip ol {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .leader-strip li + li {
+    padding-top: 16px;
+    border-top: 1px solid var(--sector-line);
+  }
+}
+@media (max-width: 767px) {
+  .workspace-content .sector-hero,
+  .workspace-content .sector-hero--compact {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding: 24px 20px;
+  }
+  .workspace-content .sector-hero h1 {
+    font-size: 28px;
+    letter-spacing: -0.8px;
+    max-width: none;
+  }
+  .sector-hero-visual {
+    border-left: 0;
+    border-bottom: 1px solid var(--sector-line);
+    padding: 0 0 8px;
+    width: 100%;
+    max-width: 320px;
+    justify-self: center;
+    grid-row: 1;
+  }
+  .sector-hero--compact .sector-hero-visual {
+    max-width: 200px;
+  }
+  .workspace-content .sector-hero--compact {
+    grid-template-columns: minmax(0, 1fr) 88px;
+  }
+  .sector-hero--compact .sector-hero-visual {
+    border: 0;
+    padding: 0;
+    grid-row: auto;
+  }
+  .sector-hero--compact .sector-hero-copy {
+    grid-column: 1;
+  }
+  .workspace-content .sector-slogan {
+    font-size: 14px;
+    margin-top: 20px;
+    padding-top: 16px;
+  }
+  .sector-hero-heading > div > h1 + p {
+    font-size: 14px;
+  }
+  .team-roster-card.ui-card,
+  .tournament-calendar.ui-card {
+    padding: 20px;
+  }
+  .team-crest-heading {
+    gap: 12px;
+  }
+  .team-crest-heading .identity-mark {
+    --identity-size: 64px;
+  }
+  .team-crest-heading span {
+    font-size: 10px;
+  }
+  .roster-member {
+    padding: 16px;
+  }
+  .library-paths {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .library-paths a {
+    min-height: 80px;
+  }
+  .library-paths small {
+    font-size: 14px;
+  }
+  .stage-journey {
+    gap: 0;
+  }
+  .stage-journey > li {
+    flex-basis: 100%;
+    border-bottom-width: 1px;
+  }
+  .stage-node {
+    width: 40px;
+    height: 40px;
+  }
+  .stage-journey > li > div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+  .stage-journey strong {
+    margin: 0;
+  }
+  .tournament-calendar dl {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .workspace .room-versus.duel-line {
+    padding-block: 20px;
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1fr);
+  }
+  .duel-team .identity-mark {
+    --identity-size: 72px;
+  }
+  .duel-team > strong {
+    font-size: 16px;
+  }
+  .workspace .battle-board-card.ui-card {
+    padding: 12px;
+  }
+  .battle-board-heading {
+    gap: 16px;
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+  }
+  .battle-contender {
+    flex-direction: column;
+    align-items: start;
+  }
+  .battle-contender:last-child {
+    flex-direction: column;
+    align-items: end;
+  }
+  .battle-contender .identity-mark {
+    --identity-size: 48px;
+  }
+  .finalists {
+    padding: 20px;
+  }
+  .finalists ul {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .publication-card.ui-card {
+    padding: 20px;
+  }
+  .publication-card > h2 {
+    font-size: 20px;
+  }
+  .guide-checklist > ol > li {
+    gap: 12px;
+    grid-template-columns: 32px minmax(0, 1fr);
+    font-size: 15px;
+  }
+}
+@media (max-width: 374px) {
+  .workspace-content .sector-hero--compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sector-hero--compact .sector-hero-visual {
+    display: none;
+  }
+  .workspace--auth .workspace-auth-aside {
+    grid-template-columns: 1fr;
+  }
+  .workspace-auth-aside > .auth-sector-art {
+    display: none;
+  }
+  .duel-team .identity-mark {
+    --identity-size: 56px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace :is(.library-paths a, .bracket-node, .room-card) {
+    transition: none;
+  }
+  .library-paths a:hover {
+    transform: none;
+  }
+}
+
+.workspace .sector-empty.ui-empty > div:first-child {
+  width: min(100%, 280px);
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.workspace .sector-empty.ui-empty {
+  border-style: solid;
+}
+.workspace .sector-empty.ui-empty h3 {
+  font-size: 20px;
+}
+.workspace .sector-empty.ui-empty > div:not(:first-child) {
+  font-size: 16px;
+  line-height: 1.7;
+}
+.standings-team-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.standings-team-name .identity-mark {
+  --identity-size: 36px;
+}
+.standings-team-name strong {
+  overflow-wrap: anywhere;
+}
+.service-topology {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+.operations-phases {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  list-style: none;
+  padding: 24px;
+  gap: 24px;
+  border: 1px solid var(--sector-line);
+  border-radius: 8px;
+  background: var(--sector-deep);
+}
+.operations-phases > li {
+  min-width: 0;
+}
+.operations-phases > li > span {
+  display: block;
+  color: var(--sector-accent);
+  font:
+    500 14px/1.8 'JetBrains Mono',
+    monospace;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--sector-line);
+}
+.operations-phases strong {
+  display: block;
+  font-size: 18px;
+  line-height: 1.6;
+  margin-top: 12px;
+}
+.operations-phases small {
+  display: block;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--sector-muted);
+  margin-top: 8px;
+}
+@media (max-width: 900px) {
+  .service-topology {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .operations-phases {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 767px) {
+  .workspace .sector-empty.ui-empty > div:first-child {
+    max-width: 220px;
+  }
+  .operations-phases {
+    padding: 20px;
+    gap: 20px;
+  }
+  .operations-phases strong {
+    font-size: 16px;
+  }
+}
