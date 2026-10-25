@@ -1,6 +1,8 @@
+import { FeatureHero, IdentityMark } from '../../components/WorkspaceVisuals';
+import { LoadingState } from '@arena/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Alert, Badge, Card, EmptyState, Spinner } from '@arena/ui';
+import { Alert, Badge, Card, EmptyState } from '@arena/ui';
 import type { ProfileView, MailView } from '@arena/contracts';
 import { api } from '../../lib/api';
 import { useSession, sessionKey } from '../../lib/session';
@@ -23,17 +25,23 @@ export function ProfilePage() {
     await qc.invalidateQueries({ queryKey: ['profile'] });
     await qc.invalidateQueries({ queryKey: sessionKey });
   }
-  if (isLoading || (user && q.isLoading)) return <Spinner />;
+  if (isLoading || (user && q.isLoading)) return <LoadingState />;
   if (!user)
     return <EmptyState title="Cần đăng nhập" action={<Link to="/login?next=/profile">Đăng nhập</Link>} />;
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      <h1 className="text-3xl font-black">Hồ sơ của tôi</h1>
+      <FeatureHero variant="account" compact slogan="Dấu ấn của bạn trong từng cuộc đấu.">
+        <div>
+          <p className="feature-eyebrow">BOT ARENA / TÀI KHOẢN</p>
+          <h1 className="text-3xl font-black">Hồ sơ của tôi</h1>
+        </div>
+      </FeatureHero>
       <ErrorMessage error={q.error} />
       {q.data && (
         <>
           <Card>
-            <div className="mb-5 flex flex-wrap items-center gap-3">
+            <div className="profile-identity mb-5 flex flex-wrap items-center gap-3">
+              <IdentityMark seed={user.id} label={user.displayName} />
               <strong className="break-all">{q.data.email}</strong>
               <Badge tone={q.data.emailVerified ? 'success' : 'warning'}>
                 {q.data.emailVerified ? 'Đã xác minh' : 'Chưa xác minh'}
@@ -181,13 +189,15 @@ export function MailboxPage() {
     );
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-5">
-      <h1 className="text-3xl font-black">Hộp thư thử nghiệm</h1>
+      <FeatureHero variant="library" compact slogan="Theo dõi email trong môi trường thử nghiệm.">
+        <h1 className="text-3xl font-black">Hộp thư thử nghiệm</h1>
+      </FeatureHero>
       <Alert title="Email trên máy phát triển">
         Email được lưu tại đây khi chạy cục bộ. Khi cấu hình SMTP, hệ thống gửi tới email thật và đóng hộp thư
         này.
       </Alert>
       <ErrorMessage error={q.error} />
-      {q.isLoading && <Spinner />}
+      {q.isLoading && <LoadingState />}
       {q.data?.length === 0 && <EmptyState title="Chưa có email" />}
       {q.data?.map((mail) => (
         <Card key={mail.id}>

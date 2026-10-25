@@ -1,9 +1,11 @@
+import { FeatureHero, SectorArt, IdentityMark } from '../../components/WorkspaceVisuals';
+import { LoadingState } from '@arena/ui';
 import { ActionButton } from './Forms';
 // Lập đội, tham gia bằng mã và quản lý thành viên.
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Badge, Card, CardHeader, EmptyState, Spinner, Button, Input } from '@arena/ui';
+import { Alert, Badge, Card, CardHeader, EmptyState, Button, Input } from '@arena/ui';
 import { CreateTeamRequest, JoinTeamRequest, TEAM_MEMBER_LIMIT, type TeamView } from '@arena/contracts';
 import { api } from '../../lib/api';
 import { sessionKey, useSession } from '../../lib/session';
@@ -65,20 +67,36 @@ export function MyTeamPage() {
   }
   const isCaptain = q.data?.team?.members.some((m) => m.id === user?.id && m.isCaptain);
   const canManage = !!user && (user.demo || (user.emailVerified && user.profileComplete));
-  if (isLoading) return <Spinner label="Kiểm tra phiên đăng nhập" />;
+  if (isLoading) return <LoadingState label="Kiểm tra phiên đăng nhập" />;
   if (!user)
     return (
       <EmptyState
+        className="sector-empty"
+        icon={<SectorArt variant="team" />}
         title="Bạn cần đăng nhập để quản lý đội"
         action={<Link to="/login?next=/team">Đăng nhập</Link>}
       />
     );
   return (
     <div className="flex flex-col gap-6">
-      <header>
+      <FeatureHero variant="team" slogan="Một đội hình. Nhiều ý tưởng. Cùng một chiến thuật.">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Tài khoản & đội</p>
         <h1 className="mt-1 text-2xl font-extrabold text-ink sm:text-3xl">Đội của tôi</h1>
-      </header>
+      </FeatureHero>
+      {user.role === 'student' && q.data && (
+        <div className="team-progress" aria-label="Tiến độ chuẩn bị đội">
+          <span className={!canManage ? 'is-current' : ''}>
+            01 / TÀI KHOẢN<strong>{canManage ? 'Sẵn sàng' : 'Cần hoàn thiện'}</strong>
+          </span>
+          <span className={canManage && !q.data.team ? 'is-current' : ''}>
+            02 / ĐỘI HÌNH
+            <strong>{q.data.team ? `${q.data.team.members.length} thành viên` : 'Chưa có đội'}</strong>
+          </span>
+          <span className={q.data.team && !q.data.team.tournamentId ? 'is-current' : ''}>
+            03 / GIẢI ĐẤU<strong>{q.data.team?.tournamentId ? 'Đã đăng ký' : 'Chưa đăng ký'}</strong>
+          </span>
+        </div>
+      )}
       {!canManage && user.role === 'student' && (
         <Alert tone="warning" title="Hoàn tất hồ sơ và xác minh email">
           <Link className="text-accent underline" to="/profile">
@@ -86,7 +104,7 @@ export function MyTeamPage() {
           </Link>
         </Alert>
       )}
-      {q.isLoading && <Spinner label="Đang tải đội" />}
+      {q.isLoading && <LoadingState label="Đang tải đội" />}
       {q.error && (
         <Alert tone="error" title="Không tải được thông tin đội">
           {(q.error as Error).message}
@@ -155,12 +173,18 @@ export function MyTeamPage() {
           </>
         ) : (
           <EmptyState
+            className="sector-empty"
+            icon={<SectorArt variant="team" />}
             title="Bạn không phải thí sinh"
             description="Chức năng lập và tham gia đội dành cho tài khoản sinh viên."
           />
         ))}
       {q.data?.team && (
-        <Card>
+        <Card className="team-roster-card">
+          <div className="team-crest-heading">
+            <IdentityMark seed={q.data.team.id} label={q.data.team.name} />
+            <span>ĐỘI HÌNH / BOT ARENA</span>
+          </div>
           <CardHeader
             title={q.data.team.name}
             subtitle={`${q.data.team.members.length}/${TEAM_MEMBER_LIMIT} thành viên · ${q.data.team.tournamentId ? 'Đã đăng ký giải' : 'Chưa đăng ký giải'}`}
@@ -200,10 +224,16 @@ export function MyTeamPage() {
               </Alert>
             </div>
           )}
-          <ul className="divide-y divide-line/70 rounded-md border border-line">
+          <ul className="roster-members">
             {q.data.team.members.map((m) => (
-              <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <span className="font-medium text-ink">{m.displayName}</span>
+              <li key={m.id} className="roster-member">
+                <div className="roster-person">
+                  <IdentityMark seed={m.id} label={m.displayName} />
+                  <div>
+                    <span className="roster-role">{m.isCaptain ? 'ĐỘI TRƯỞNG' : 'THÀNH VIÊN'}</span>
+                    <strong>{m.displayName}</strong>
+                  </div>
+                </div>
                 {m.isCaptain && <Badge tone="accent">Đội trưởng</Badge>}
                 {isCaptain && !m.isCaptain && !q.data!.team!.rosterLocked && (
                   <div className="flex flex-wrap gap-2">
@@ -226,6 +256,13 @@ export function MyTeamPage() {
               </li>
             ))}
           </ul>
+          {q.data.team.members.length < TEAM_MEMBER_LIMIT && (
+            <p className="roster-availability">
+              <span aria-hidden="true">+</span>
+              {TEAM_MEMBER_LIMIT - q.data.team.members.length} vị trí còn trống
+              {q.data.team.rosterLocked ? ' · Đội hình đã khóa' : ' · Mời đồng đội bằng mã tham gia ở trên'}
+            </p>
+          )}
           {!q.data.team.rosterLocked && (
             <div className="mt-5 flex flex-col gap-5">
               <ActionButton

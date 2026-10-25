@@ -31,6 +31,7 @@ import {
   pairingLabel,
 } from './competition-ui';
 import { APPEAL_STATUS, TextArea } from './MyPairings';
+import { refreshRoomLists, roomOpenFeedback, type OpenRoomsResult } from '../rooms-matches/room-actions';
 
 type Outcome = 'a' | 'b' | null;
 type RoomsSummary = {
@@ -86,8 +87,12 @@ export function CompetitionAdmin() {
     mutationFn: ({ path, json }: { path: string; json?: unknown; label: string }) =>
       api<unknown>(path, { method: 'POST', json: json ?? { reason } }),
     onSuccess: (_d, v) => {
-      toast({ title: v.label, tone: 'success' });
-      void qc.invalidateQueries({ queryKey: ['competition'] });
+      toast(
+        v.path.endsWith('/matches/open')
+          ? roomOpenFeedback(_d as OpenRoomsResult)
+          : { title: v.label, tone: 'success' },
+      );
+      void refreshRoomLists(qc);
       void qc.invalidateQueries({ queryKey: ['standings'] });
       void qc.invalidateQueries({ queryKey: ['admin-appeals'] });
     },
@@ -268,7 +273,34 @@ export function CompetitionAdmin() {
       )}
       {c && (
         <>
-          <Card className="border-accent/40">
+          <ol className="operations-phases" aria-label="Các giai đoạn điều hành">
+            <li>
+              <span>01</span>
+              <strong>Chuẩn bị</strong>
+              <small>{c.eligibleTeams} đội đủ điều kiện</small>
+            </li>
+            <li>
+              <span>02</span>
+              <strong>Sơ loại</strong>
+              <small>
+                {c.levels.filter((l) => l.status === 'done' || l.status === 'skipped').length} /{' '}
+                {c.levels.length} mức đã chốt hoặc bỏ qua
+              </small>
+            </li>
+            <li>
+              <span>03</span>
+              <strong>Loại trực tiếp</strong>
+              <small>
+                {c.bracket.filter((r) => r.status === 'done').length} / {c.bracket.length} vòng đã chốt
+              </small>
+            </li>
+            <li>
+              <span>04</span>
+              <strong>Bán kết</strong>
+              <small>{c.top4 ? `${c.top4.length} đội đi tiếp` : 'Chưa xác định đội đi tiếp'}</small>
+            </li>
+          </ol>
+          <Card className="next-step-card border-accent/40">
             <CardHeader
               title="Bước tiếp theo"
               subtitle={`Máy chủ: ${new Date(c.serverTime).toLocaleString('vi-VN')} · ${c.eligibleTeams} đội đủ điều kiện`}

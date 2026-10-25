@@ -11,3 +11,6 @@ export { Tabs, type TabItem } from './components/Tabs.js';
 export { ToastProvider, useToast } from './components/Toast.js';
 export { EmptyState } from './components/EmptyState.js';
 export { Card, CardHeader, Alert } from './components/Card.js';
+
+export { Icon, type IconName } from './components/Icon.js';
+export { LoadingState } from './components/LoadingState.js';

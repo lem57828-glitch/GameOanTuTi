@@ -43,7 +43,15 @@ function useCountdown(deadline: string | null, serverTime: string) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function MatchPanel({ s, onChanged }: { s: RoomSnapshot; onChanged: () => void }) {
+export function MatchPanel({
+  s,
+  onChanged,
+  hideResults = false,
+}: {
+  s: RoomSnapshot;
+  onChanged: () => void;
+  hideResults?: boolean;
+}) {
   const m = s.match!;
   const { user } = useSession();
   const staff = user?.role === 'admin';
@@ -73,12 +81,15 @@ export function MatchPanel({ s, onChanged }: { s: RoomSnapshot; onChanged: () =>
       />
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-md bg-bg-deep/50 p-3 text-center">
         <p className="truncate font-semibold">{name('a')}</p>
-        <p className="font-mono text-2xl font-black" aria-label={`Tỉ số ${m.scoreA} – ${m.scoreB}`}>
-          {m.scoreA} – {m.scoreB}
+        <p
+          className="font-mono text-2xl font-black"
+          aria-label={hideResults ? 'Tỉ số đang ẩn khi xem lại' : `Tỉ số ${m.scoreA} – ${m.scoreB}`}
+        >
+          {hideResults ? '— : —' : `${m.scoreA} – ${m.scoreB}`}
         </p>
         <p className="truncate font-semibold">{name('b')}</p>
       </div>
-      {m.status === 'completed' && (
+      {!hideResults && m.status === 'completed' && (
         <p className="mt-2 text-center text-sm font-semibold text-success">
           {m.winnerTeamId
             ? `${m.winnerTeamId === teamId('a') ? name('a') : name('b')} thắng trận`
@@ -90,7 +101,7 @@ export function MatchPanel({ s, onChanged }: { s: RoomSnapshot; onChanged: () =>
           </span>
         </p>
       )}
-      {m.pauseReason && (
+      {m.pauseReason && !hideResults && (
         <Alert
           tone={adjudicated ? 'warning' : 'error'}
           title={adjudicated ? 'Quyết định của BTC' : 'Trận cần BTC xử lý'}
@@ -136,13 +147,16 @@ export function MatchPanel({ s, onChanged }: { s: RoomSnapshot; onChanged: () =>
         <ol className="mt-4 flex flex-col gap-2" aria-label="Các hiệp của trận">
           {m.games.map((g, i) => {
             const blueIsA = g.blueTeamId === teamId('a');
-            const result = !g.finished
-              ? g.status === 'failed'
-                ? 'Lỗi khi chạy'
-                : 'Đang thi'
-              : g.outcome === null
-                ? 'Hòa'
-                : `${g.outcome === 'a' ? name('a') : name('b')} thắng`;
+            const result =
+              hideResults && g.finished
+                ? 'Ván đã lưu'
+                : !g.finished
+                  ? g.status === 'failed'
+                    ? 'Lỗi khi chạy'
+                    : 'Đang thi'
+                  : g.outcome === null
+                    ? 'Hòa'
+                    : `${g.outcome === 'a' ? name('a') : name('b')} thắng`;
             return (
               <li key={g.gameId} className="rounded-md border border-line p-3 text-xs">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -154,7 +168,11 @@ export function MatchPanel({ s, onChanged }: { s: RoomSnapshot; onChanged: () =>
                     {result}
                   </Badge>
                   {g.finished && (
-                    <Link className="font-semibold text-accent" to={`/rooms/${s.roomId}?game=${g.gameId}`}>
+                    <Link
+                      data-ui-sound
+                      className="font-semibold text-accent"
+                      to={`/rooms/${s.roomId}?game=${g.gameId}`}
+                    >
                       Xem lại ván {i + 1} →
                     </Link>
                   )}

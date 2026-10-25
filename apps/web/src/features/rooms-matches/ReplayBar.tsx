@@ -1,118 +1,215 @@
-// Thanh điều khiển xem ván: Play/Pause, lùi/tiến một nước, về đầu/cuối, thanh tua, tốc độ.
-// Phím tắt khi thanh đang được focus: Space = chạy/dừng, ←/→ = lùi/tiến một nước, Home/End = đầu/cuối.
-import { Button, cn, focusRing } from '@arena/ui';
+import { useId, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { Button, Icon, cn, focusRing } from '@arena/ui';
 import { SPEEDS, type Replay } from './useReplay';
 
-export function ReplayBar({ r }: { r: Replay }) {
+export function ReplayBar({
+  r,
+  focused,
+  onFocusToggle,
+}: {
+  r: Replay;
+  focused?: boolean;
+  onFocusToggle?: () => void;
+}) {
+  const [preview, setPreview] = useState<number | null>(null);
+  const helpId = useId();
   if (!r.available) return null;
-  const onKey = (e: React.KeyboardEvent) => {
-    if (e.target instanceof HTMLInputElement && e.key !== ' ') return; // thanh tua tự xử lý phím mũi tên
-    if (e.key === ' ') {
-      e.preventDefault();
+  const behind = r.live ? Math.max(0, r.total - r.cursor) : 0;
+  const onKey = (event: KeyboardEvent) => {
+    if (event.target instanceof Element && event.target.closest('input,select,textarea')) return;
+    if (event.key === ' ') {
+      if (event.target instanceof Element && event.target.closest('button,a')) return;
+      event.preventDefault();
       r.toggle();
-    } else if (e.key === 'ArrowLeft') r.step(-1);
-    else if (e.key === 'ArrowRight') r.step(1);
-    else if (e.key === 'Home') r.seek(0);
-    else if (e.key === 'End') r.seek(r.total);
+    } else if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      r.step(-1);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      r.step(1);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      r.seek(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      r.seek(r.total);
+    }
   };
-  const behind = r.live && r.total > r.cursor ? r.total - r.cursor : 0;
   return (
     <div
       role="group"
+      tabIndex={0}
       aria-label="Điều khiển xem ván"
       onKeyDown={onKey}
-      className="mt-3 flex flex-col gap-2 rounded-md border border-line bg-bg-deep/40 p-3"
+      className="replay-toolbar replay-deck"
     >
-      <div className="flex flex-wrap items-center gap-2">
-        {r.live && (
-          <Button size="sm" variant="secondary" onClick={r.followLive}>
-            Theo dõi trực tiếp
-          </Button>
-        )}
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-label="Về nước đầu"
-          onClick={() => r.seek(0)}
-          disabled={r.cursor === 0}
-        >
-          ⏮
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-label="Lùi một nước"
-          onClick={() => r.step(-1)}
-          disabled={r.cursor === 0}
-        >
-          ◀
-        </Button>
-        <Button
-          size="sm"
-          aria-label={r.playing ? 'Dừng' : 'Chạy'}
-          onClick={r.playing ? r.pause : r.play}
-          disabled={r.total === 0 && !r.live}
-          className="min-w-[88px]"
-        >
-          {r.playing ? '⏸ Dừng' : '▶ Chạy'}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-label="Tiến một nước"
-          onClick={() => r.step(1)}
-          disabled={r.atEnd}
-        >
-          ▶
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-label="Tới nước cuối"
-          onClick={() => r.seek(r.total)}
-          disabled={r.atEnd}
-        >
-          ⏭
-        </Button>
-        <span className="ml-auto font-mono text-sm" aria-live="polite">
-          Nước {r.cursor}/{r.total}
+      <div className="replay-deck-status">
+        <span>
+          <i aria-hidden="true" className={r.playing ? 'is-playing' : ''} />
+          {r.following ? 'THEO SÁT TRỰC TIẾP' : r.playing ? 'ĐANG PHÁT LẠI' : 'BÀN ĐIỀU KHIỂN REPLAY'}
         </span>
-        <label className="flex items-center gap-1 text-xs text-ink-muted">
-          Tốc độ
-          <select
-            value={r.speedMs}
-            onChange={(e) => r.setSpeed(Number(e.target.value))}
-            className={cn('rounded border border-line bg-surface px-1.5 py-1 text-xs text-ink', focusRing)}
+        <strong>
+          Nước <b>{r.cursor}</b>
+          <small> / {r.total}</small>
+        </strong>
+      </div>
+      <div
+        className="replay-timeline"
+        onPointerMove={(event) => {
+          const bounds = event.currentTarget.getBoundingClientRect();
+          setPreview(
+            Math.round(Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)) * r.total),
+          );
+        }}
+        onPointerLeave={() => setPreview(null)}
+      >
+        {preview !== null && (
+          <output
+            className="replay-preview"
+            style={
+              {
+                '--preview-at': `${Math.max(6, Math.min(94, r.total ? (preview / r.total) * 100 : 6))}%`,
+              } as CSSProperties
+            }
           >
-            {SPEEDS.map((s) => (
-              <option key={s.ms} value={s.ms}>
-                {s.label}
+            Nước {preview}
+          </output>
+        )}
+        <div className="replay-timeline-track" aria-hidden="true">
+          <span style={{ transform: `scaleX(${r.total ? r.cursor / r.total : 0})` }} />
+          {r.history
+            .filter((move) => move.capture && move.ply <= r.seen)
+            .map((move) => (
+              <i key={move.ply} style={{ left: `${(move.ply / Math.max(1, r.total)) * 100}%` }} />
+            ))}
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={r.total}
+          step={1}
+          value={r.cursor}
+          onChange={(event) => r.seek(Number(event.target.value))}
+          onFocus={() => setPreview(r.cursor)}
+          onBlur={() => setPreview(null)}
+          onKeyUp={() => setPreview(r.cursor)}
+          aria-label="Tua tới nước"
+          aria-valuetext={`Nước ${r.cursor} trên ${r.total}`}
+          aria-describedby={helpId}
+          disabled={r.total === 0}
+          className={cn('replay-range', focusRing)}
+        />
+      </div>
+      <div className="replay-control-row">
+        <div className="replay-transport">
+          <Button
+            size="sm"
+            variant="ghost"
+            data-ui-sound
+            aria-label="Về nước đầu"
+            onClick={() => r.seek(0)}
+            disabled={r.cursor === 0}
+          >
+            <Icon name="first" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            data-ui-sound
+            aria-label="Lùi một nước"
+            onClick={() => r.step(-1)}
+            disabled={r.cursor === 0}
+          >
+            <Icon name="previous" />
+          </Button>
+          <Button
+            size="sm"
+            data-ui-sound
+            aria-label={r.playing ? 'Dừng phát lại' : 'Phát lại'}
+            onClick={r.playing ? r.pause : r.play}
+            disabled={r.total === 0 && !r.live}
+            className="replay-play"
+          >
+            <Icon name={r.playing ? 'pause' : 'play'} />
+            <span className="replay-play-label">{r.playing ? 'Dừng' : 'Phát lại'}</span>
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            data-ui-sound
+            aria-label="Tiến một nước"
+            onClick={() => r.step(1)}
+            disabled={r.atEnd}
+          >
+            <Icon name="next" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            data-ui-sound
+            aria-label="Tới nước cuối"
+            onClick={() => r.seek(r.total)}
+            disabled={r.atEnd}
+          >
+            <Icon name="last" />
+          </Button>
+        </div>
+        <label className="replay-speed">
+          <span>Tốc độ</span>
+          <select
+            data-ui-sound
+            value={r.speedMs}
+            onChange={(event) => r.setSpeed(Number(event.target.value))}
+          >
+            {SPEEDS.map((speed) => (
+              <option key={speed.ms} value={speed.ms}>
+                {speed.label}
               </option>
             ))}
           </select>
         </label>
-      </div>
-      <input
-        type="range"
-        min={0}
-        max={Math.max(r.total, 0)}
-        step={1}
-        value={r.cursor}
-        onChange={(e) => r.seek(Number(e.target.value))}
-        aria-label="Tua tới nước"
-        aria-valuetext={`Nước ${r.cursor} trên ${r.total}`}
-        disabled={r.total === 0}
-        className={cn('w-full accent-[rgb(var(--c-accent))]', focusRing)}
-      />
-      {behind > 0 && (
-        <p className="text-xs text-ink-muted">
-          Ván đang diễn ra: còn {behind} nước mới phía sau.{' '}
-          <button
-            type="button"
-            className={cn('font-semibold text-accent underline', focusRing)}
-            onClick={() => r.seek(r.total)}
+        {onFocusToggle && (
+          <Button size="sm" variant="secondary" data-ui-sound aria-pressed={focused} onClick={onFocusToggle}>
+            <svg
+              className="ui-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              aria-hidden="true"
+            >
+              <path
+                d={focused ? 'M9 3v6H3m18 0h-6V3M3 15h6v6m6 0v-6h6' : 'M3 9V3h6m6 0h6v6M3 15v6h6m6 0h6v-6'}
+              />
+            </svg>
+            {focused ? 'Thu gọn' : 'Tập trung'}
+          </Button>
+        )}
+        {r.live && (
+          <Button
+            size="sm"
+            variant={r.following ? 'secondary' : 'ghost'}
+            data-ui-sound
+            aria-pressed={r.following}
+            onClick={r.followLive}
           >
-            Tới nước mới nhất
+            Theo dõi trực tiếp
+          </Button>
+        )}
+      </div>
+      <div className="replay-deck-footer">
+        <p id={helpId}>
+          Space: phát/dừng · ← →: từng nước
+          {r.history.some((move) => move.capture && move.ply <= r.seen)
+            ? ' · Mốc cam: nước ăn quân đã xem'
+            : ''}
+        </p>
+      </div>
+      {behind > 0 && (
+        <p className="replay-behind">
+          Có {behind} nước mới phía sau.{' '}
+          <button type="button" data-ui-sound onClick={r.followLive}>
+            Theo kịp trận đang diễn ra <Icon name="arrow" />
           </button>
         </p>
       )}

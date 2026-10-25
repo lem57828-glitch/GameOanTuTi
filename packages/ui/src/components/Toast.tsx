@@ -1,3 +1,4 @@
+import { Icon, type IconName } from './Icon.js';
 import * as RToast from '@radix-ui/react-toast';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { cn, focusRing } from '../cn.js';
@@ -21,7 +22,7 @@ const toneClass: Record<Tone, string> = {
   success: 'border-success/60',
   error: 'border-danger/70',
 };
-const toneIcon: Record<Tone, string> = { info: 'ℹ', success: '✓', error: '!' };
+const toneIcon: Record<Tone, IconName> = { info: 'info', success: 'check', error: 'warning' };
 
 /** Thông báo ngắn ở góc màn hình; trình đọc màn hình đọc qua vùng live của Radix Toast. */
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -55,7 +56,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                     : 'bg-surface-2 text-ink',
               )}
             >
-              {toneIcon[t.tone]}
+              <Icon name={toneIcon[t.tone]} />
             </span>
             <div className="min-w-0 flex-1">
               <RToast.Title className="text-sm font-semibold text-ink">{t.title}</RToast.Title>
@@ -69,7 +70,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               aria-label="Đóng thông báo"
               className={cn('rounded-sm px-1 text-ink-muted hover:text-ink', focusRing)}
             >
-              ✕
+              <Icon name="close" />
             </RToast.Close>
           </RToast.Root>
         ))}

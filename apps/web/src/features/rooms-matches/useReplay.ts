@@ -1,9 +1,13 @@
-// Phòng hiện tại theo sát nước mới; replay ván cũ bắt đầu từ nước 0, bấm Play để phát lại.
-// Bàn cờ ở nước thứ n được dựng lại từ bàn cờ ban đầu của ván (đã gồm quân thứ 10) + n nước đầu trong lịch sử.
-// Chỉ là cách HIỂN THỊ phía trình duyệt: không đổi trạng thái ván trên máy chủ.
-import { useEffect, useMemo, useState } from 'react';
+// Replay presentation never changes a match, its selection state or its saved moves.
+import { useEffect, useMemo, useReducer } from 'react';
 import type { Board, MoveRecord, RoomSnapshot } from '@arena/contracts';
-
+import {
+  clampPly,
+  initialReplayState,
+  replayReducer,
+  replayTravelMs,
+  type ReplayIntent,
+} from './replay-state';
 export const SPEEDS = [
   { label: '0.5×', ms: 1200 },
   { label: '1×', ms: 600 },
@@ -25,11 +29,16 @@ export function boardAt(initial: Board, history: readonly MoveRecord[], n: numbe
 
 export interface Replay {
   available: boolean;
+  streamKey: string | null;
   cursor: number;
   total: number;
+  seen: number;
+  history: readonly MoveRecord[];
   playing: boolean;
+  following: boolean;
   speedMs: number;
-  /** Ván còn đang chạy trên máy chủ (có thể có thêm nước mới). */
+  travelMs: number;
+  intent: ReplayIntent;
   live: boolean;
   atEnd: boolean;
   board: Board;
@@ -42,84 +51,69 @@ export interface Replay {
   setSpeed: (ms: number) => void;
   followLive: () => void;
 }
-
 export type ReplaySource = Pick<RoomSnapshot, 'streamId' | 'history' | 'status' | 'initialBoard' | 'board'>;
-
 export function useReplay(s: ReplaySource | null, followByDefault = false): Replay {
-  const streamId = s?.streamId ?? null;
+  const stream = s?.streamId ?? null;
+  const [saved, dispatch] = useReducer(replayReducer, undefined, () =>
+    initialReplayState(stream, followByDefault),
+  );
+  // Derive a clean frame immediately on a source change, before effects run.
+  const state =
+    saved.stream === stream
+      ? saved
+      : { ...initialReplayState(stream, followByDefault), speedMs: saved.speedMs };
   const history = useMemo(() => s?.history ?? [], [s?.history]);
   const total = history.length;
-  const live = !!s && (s.status === 'running' || s.status === 'waiting');
-  const [position, setCursor] = useState(0);
-  const [following, setFollowing] = useState(followByDefault);
-  const cursor = following ? total : position;
-  const [playing, setPlaying] = useState(false);
-  const [speedMs, setSpeed] = useState<number>(SPEEDS[1].ms);
-
-  // Ván mới: theo sát trực tiếp hoặc dừng ở nước 0 theo chế độ của màn hình.
+  const cursor = clampPly(state.following ? total : state.position, total);
+  const live = s?.status === 'running' || s?.status === 'waiting';
   useEffect(() => {
-    setCursor(0);
-    setPlaying(false);
-    setFollowing(followByDefault);
-  }, [streamId, followByDefault]);
-
-  // Đang chạy: tiến một nước mỗi `speedMs`. Hết nước: ván xong thì dừng; ván còn chạy thì chờ nước mới.
+    dispatch({ type: 'source', stream, follow: followByDefault });
+  }, [stream, followByDefault]);
   useEffect(() => {
-    if (!playing) return;
+    dispatch({ type: 'seen', cursor });
+  }, [cursor, stream]);
+  useEffect(() => {
+    if (!state.playing) return;
     if (cursor >= total) {
-      if (!live) setPlaying(false);
+      if (!live) dispatch({ type: 'pause', cursor, total, live });
       return;
     }
-    const t = setTimeout(() => setCursor((c) => Math.min(c + 1, total)), speedMs);
-    return () => clearTimeout(t);
-  }, [playing, cursor, total, speedMs, live]);
-
-  const initial = s?.initialBoard;
+    const timer = setTimeout(() => dispatch({ type: 'tick', total, stream }), state.speedMs);
+    return () => clearTimeout(timer);
+  }, [state.playing, state.speedMs, cursor, total, live, stream]);
+  useEffect(() => {
+    const hide = () => {
+      if (document.hidden && state.playing) dispatch({ type: 'pause', cursor, total, live });
+    };
+    document.addEventListener('visibilitychange', hide);
+    return () => document.removeEventListener('visibilitychange', hide);
+  }, [cursor, total, live, state.playing]);
   const board = useMemo(
-    () => (initial ? boardAt(initial, history, cursor) : (s?.board ?? {})),
-    [initial, history, cursor, s?.board],
+    () => (s?.initialBoard ? boardAt(s.initialBoard, history, cursor) : (s?.board ?? {})),
+    [s?.initialBoard, s?.board, history, cursor],
   );
-  const clamp = (n: number) => Math.max(0, Math.min(n, total));
   return {
-    available: !!initial,
-    cursor: Math.min(cursor, total),
+    available: !!s?.initialBoard,
+    streamKey: stream,
+    cursor,
     total,
-    playing,
-    speedMs,
+    history,
+    seen: Math.min(total, Math.max(state.seen, cursor)),
+    playing: state.playing,
+    following: state.following,
+    speedMs: state.speedMs,
+    travelMs: replayTravelMs(state.speedMs),
+    intent: state.following ? 'forward' : state.intent,
     live,
     atEnd: cursor >= total,
     board,
     lastMove: cursor > 0 ? (history[cursor - 1] ?? null) : null,
-    play: () => {
-      setFollowing(false);
-      setCursor(cursor);
-      if (cursor >= total && !live) setCursor(0); // xem lại từ đầu khi đã ở cuối ván đã xong
-      setPlaying(true);
-    },
-    pause: () => {
-      setFollowing(false);
-      setCursor(cursor);
-      setPlaying(false);
-    },
-    toggle: () => {
-      setFollowing(false);
-      setCursor(cursor >= total && !live && !playing ? 0 : cursor);
-      setPlaying((p) => !p);
-    },
-    seek: (n) => {
-      setFollowing(false);
-      setPlaying(false);
-      setCursor(clamp(n));
-    },
-    step: (delta) => {
-      setFollowing(false);
-      setPlaying(false);
-      setCursor(clamp(cursor + delta));
-    },
-    setSpeed,
-    followLive: () => {
-      setFollowing(true);
-      setPlaying(false);
-    },
+    play: () => dispatch({ type: 'play', cursor, total, live }),
+    pause: () => dispatch({ type: 'pause', cursor, total, live }),
+    toggle: () => dispatch({ type: 'toggle', cursor, total, live }),
+    seek: (value) => dispatch({ type: 'seek', value, cursor, total }),
+    step: (value) => dispatch({ type: 'step', value, cursor, total }),
+    setSpeed: (value) => dispatch({ type: 'speed', value }),
+    followLive: () => dispatch({ type: 'follow', total }),
   };
 }

@@ -6,6 +6,7 @@ import {
   RegistrationEmailRequest,
   REGISTRATION_CODE_TTL_SECONDS,
 } from '@arena/contracts';
+import { Input, Button } from '@arena/ui';
 import { api, ApiError } from '../../lib/api';
 
 const STORAGE = 'arena-registration-countdown';
@@ -24,17 +25,7 @@ function Field({
   error,
   ...props
 }: InputHTMLAttributes<HTMLInputElement> & { label: string; error?: string }) {
-  return (
-    <label className="flex flex-col gap-1.5 text-[18px] font-semibold leading-7 text-[#092e3a]">
-      {label}
-      <input
-        {...props}
-        aria-invalid={!!error}
-        className={`h-[54px] w-full rounded-[10px] border bg-white px-[15px] text-[18px] font-normal text-[#092e3a] outline-none placeholder:text-[#71818a] focus:border-[#4f9596] focus:ring-2 focus:ring-[#4f9596]/20 ${error ? 'border-red-500' : 'border-[#d2e2e7]'}`}
-      />
-      {error && <span className="text-sm font-normal leading-5 text-red-700">{error}</span>}
-    </label>
-  );
+  return <Input label={label} error={error} {...props} />;
 }
 export function RegistrationPage() {
   const nav = useNavigate();
@@ -143,9 +134,12 @@ export function RegistrationPage() {
     register.mutate(parsed.data);
   }
   return (
-    <section className="mx-auto max-w-[632px] rounded-[18px] bg-[#f5f9f9] p-2 sm:p-4">
-      <div className="rounded-[16px] border border-[#d2e2e7] bg-white px-6 py-6 text-[#092e3a] shadow-[0_2px_5px_rgba(15,45,58,0.08)]">
+    <section className="registration-panel ui-card">
+      <div className="registration-content">
         <h1 className="mb-4 text-[36px] font-extrabold leading-tight tracking-[-0.5px]">Tạo tài khoản</h1>
+        <p className="mb-6 text-sm text-ink-muted">
+          Hoàn thiện thông tin và xác minh email trường để kết nối với đội của bạn.
+        </p>
         <form onSubmit={submit} className="flex flex-col gap-4">
           <Field
             label="Họ tên"
@@ -187,22 +181,23 @@ export function RegistrationPage() {
             error={errors.password}
           />
           <div className="flex flex-wrap items-center gap-3">
-            <button
+            <Button
               type="button"
               onClick={requestCode}
               disabled={send.isPending || register.isPending || seconds > 0}
-              className="min-h-[54px] rounded-[10px] border border-[#d2e2e7] bg-white px-5 text-[18px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+              variant="secondary"
+              loading={send.isPending}
             >
               {send.isPending ? 'Đang gửi mã…' : matches ? 'Gửi lại mã' : 'Gửi mã xác minh'}
-            </button>
+            </Button>
             {matches && (
-              <p role="status" className="text-sm text-[#42616c]">
+              <p role="status" className="text-sm text-ink-muted">
                 {seconds > 0 ? `Mã còn hiệu lực: ${seconds} giây` : 'Mã đã hết hạn. Vui lòng gửi lại mã.'}
               </p>
             )}
           </div>
           {send.error && (
-            <p role="alert" className="text-sm text-red-700">
+            <p role="alert" className="text-sm text-danger">
               {send.error.message}
             </p>
           )}
@@ -220,24 +215,24 @@ export function RegistrationPage() {
             error={errors.verificationCode}
           />
           {register.error && (
-            <p role="alert" className="text-sm text-red-700">
+            <p role="alert" className="text-sm text-danger">
               {register.error.message}
             </p>
           )}
-          <button
+          <Button
             type="submit"
             disabled={!matches || seconds === 0 || code.length !== 6 || register.isPending || send.isPending}
-            className="h-[54px] rounded-[10px] bg-[#438d8e] text-[18px] font-bold text-white hover:bg-[#347879] disabled:cursor-not-allowed disabled:bg-[#86bcbc]"
+            loading={register.isPending}
           >
             {register.isPending ? 'Đang đăng ký…' : 'Đăng ký'}
-          </button>
+          </Button>
         </form>
-        <p className="mt-4 text-xs text-[#58727c]">
+        <p className="mt-4 text-xs text-ink-muted">
           MSSV được lấy tự động từ email trường. Mã xác minh có hiệu lực {REGISTRATION_CODE_TTL_SECONDS} giây.
         </p>
-        <p className="mt-3 text-sm text-[#42616c]">
+        <p className="mt-3 text-sm text-ink-muted">
           Đã có tài khoản?{' '}
-          <Link className="font-semibold text-[#267577] underline" to="/login">
+          <Link className="font-semibold text-accent underline" to="/login">
             Đăng nhập
           </Link>
         </p>

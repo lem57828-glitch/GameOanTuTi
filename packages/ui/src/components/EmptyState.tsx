@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
+import { Icon } from './Icon.js';
 import { cn } from '../cn.js';
 
 export function EmptyState({
-  icon = '◇',
+  icon = <Icon name="empty" />,
   title,
   description,
   action,
@@ -17,7 +18,7 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center gap-3 rounded-lg border border-dashed border-line px-6 py-10 text-center',
+        'ui-empty flex flex-col items-center gap-3 rounded-lg border border-dashed border-line px-6 py-10 text-center',
         className,
       )}
     >

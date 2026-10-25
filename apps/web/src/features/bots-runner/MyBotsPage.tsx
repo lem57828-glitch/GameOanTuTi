@@ -1,7 +1,24 @@
+import { FeatureHero, SectorArt, BotProcess, IdentityMark } from '../../components/WorkspaceVisuals';
 // Bot của tôi. TV2 — Gói việc 1: Nộp bot, quản lý phiên bản, kiểm tra tính hợp lệ & xem mã nguồn.
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useRef } from 'react';
-import { Alert, Badge, Button, Card, CardHeader, Dialog, EmptyState, Input, Spinner, Table } from '@arena/ui';
+import { Link, useSearchParams } from 'react-router-dom';
+import { matchesSearch } from '../../lib/workspace-navigation';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  Dialog,
+  EmptyState,
+  Input,
+  LoadingState,
+  Select,
+  Spinner,
+  Table,
+  useToast,
+} from '@arena/ui';
 import type { BotSourceDetail, BotVersion, PieceType, TestRunDetail } from '@arena/contracts';
 import { SubmitBotInput } from '@arena/contracts';
 import { api } from '../../lib/api';
@@ -18,12 +35,53 @@ const STATUS: Record<BotVersion['status'], { label: string; tone: 'neutral' | 's
 export function MyBotsPage() {
   const { user } = useSession();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [filters, setFilters] = useSearchParams();
+  const search = filters.get('q') ?? '';
+  const statusFilter = ['pending', 'valid', 'invalid'].includes(filters.get('status') ?? '')
+    ? filters.get('status')!
+    : 'all';
+  const sourceFilter = ['github', 'direct', 'demo'].includes(filters.get('source') ?? '')
+    ? filters.get('source')!
+    : 'all';
+  function setFilter(name: string, value: string) {
+    setFilters(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        if (!value || value === 'all') next.delete(name);
+        else next.set(name, value);
+        return next;
+      },
+      { replace: true },
+    );
+  }
+  function clearFilters() {
+    setFilters(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        for (const key of ['q', 'status', 'source']) next.delete(key);
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
   const q = useQuery({
     queryKey: ['bots', user?.id],
     queryFn: () => api<BotVersion[]>('/bots'),
     refetchInterval: (query) => (query.state.data?.some((bot) => bot.status === 'pending') ? 1000 : false),
   });
 
+  const visibleBots = (q.data ?? []).filter(
+    (bot) =>
+      matchesSearch(`${bot.label} v${bot.version} ${bot.version}`, search) &&
+      (statusFilter === 'all' || bot.status === statusFilter) &&
+      (sourceFilter === 'all' ||
+        (sourceFilter === 'direct'
+          ? bot.submissionMethod !== 'github' && bot.submissionMethod !== 'demo'
+          : bot.submissionMethod === sourceFilter)),
+  );
+  const hasFilters = Boolean(search || statusFilter !== 'all' || sourceFilter !== 'all');
   // State cho xem chi tiết & mã nguồn
   const [selectedBot, setSelectedBot] = useState<BotVersion | null>(null);
   const sourceQuery = useQuery({
@@ -145,7 +203,11 @@ export function MyBotsPage() {
 
   const handleOpenSubmit = () => {
     if (!user?.teamId && !staff) {
-      alert('Bạn cần tham gia hoặc tạo một đội để có thể nộp bot.');
+      toast({
+        title: 'Cần có đội trước khi nộp bot',
+        description: 'Mở Đội của tôi để lập hoặc tham gia đội.',
+        tone: 'info',
+      });
       return;
     }
     setSubmitError(null);
@@ -153,18 +215,81 @@ export function MyBotsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+    <div
+      className="flex flex-col gap-6"
+      data-motion-state={q.data?.some((bot) => bot.status === 'pending') ? 'processing' : 'idle'}
+    >
+      <FeatureHero variant="bot" slogan="Biến từng dòng code thành lợi thế trên bàn cờ.">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Bot & runner (TV2)</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
+            CHIẾN THUẬT / BOT PYTHON
+          </p>
           <h1 className="mt-1 text-2xl font-extrabold text-ink sm:text-3xl">
             {staff ? 'Tất cả phiên bản bot' : 'Bot của tôi'}
           </h1>
         </div>
         <Button onClick={handleOpenSubmit}>+ Nộp phiên bản mới</Button>
-      </header>
+      </FeatureHero>
 
-      {q.isLoading && <Spinner label="Đang tải bot" />}
+      {q.data && (
+        <dl className="ui-summary">
+          <div>
+            <dt>Phiên bản</dt>
+            <dd>{q.data.length}</dd>
+          </div>
+          <div>
+            <dt>Hợp lệ</dt>
+            <dd>{q.data.filter((bot) => bot.status === 'valid').length}</dd>
+          </div>
+          <div>
+            <dt>Chờ kiểm thử</dt>
+            <dd>{q.data.filter((bot) => bot.status === 'pending').length}</dd>
+          </div>
+          <div>
+            <dt>Cần kiểm tra lại</dt>
+            <dd>{q.data.filter((bot) => bot.status === 'invalid').length}</dd>
+          </div>
+        </dl>
+      )}
+      {!user?.teamId && !staff && (
+        <Alert title="Kết nối với đội để bắt đầu">
+          <Link className="text-accent underline" to="/team">
+            Mở Đội của tôi
+          </Link>{' '}
+          trước khi nộp phiên bản đầu tiên.
+        </Alert>
+      )}
+      <BotProcess />
+      <Card className="filter-toolbar">
+        <Input
+          label="Tìm bot hoặc phiên bản"
+          type="search"
+          value={search}
+          onChange={(event) => setFilter('q', event.target.value)}
+          placeholder="Tên bot hoặc v2…"
+        />
+        <Select
+          label="Kiểm thử"
+          value={statusFilter}
+          onValueChange={(value) => setFilter('status', value)}
+          options={[
+            { value: 'all', label: 'Tất cả trạng thái' },
+            ...Object.entries(STATUS).map(([value, item]) => ({ value, label: item.label })),
+          ]}
+        />
+        <Select
+          label="Nguồn nộp"
+          value={sourceFilter}
+          onValueChange={(value) => setFilter('source', value)}
+          options={[
+            { value: 'all', label: 'Tất cả nguồn' },
+            { value: 'github', label: 'GitHub · chính thức' },
+            { value: 'direct', label: 'Trực tiếp · tập luyện' },
+            { value: 'demo', label: 'Bot mẫu' },
+          ]}
+        />
+      </Card>
+      {q.isLoading && <LoadingState label="Đang tải bot" />}
       {q.error && (
         <Alert tone="error" title="Không tải được danh sách bot">
           {(q.error as Error).message}
@@ -177,17 +302,44 @@ export function MyBotsPage() {
             title="Phiên bản đã nộp"
             subtitle="Mỗi phiên bản là bất biến: muốn sửa, nộp phiên bản mới."
           />
+          <div className="list-toolbar">
+            <p role="status">
+              {visibleBots.length} / {q.data.length} phiên bản
+            </p>
+            {hasFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                Xóa bộ lọc
+              </Button>
+            )}
+          </div>
           <Table
             label="Danh sách phiên bản bot"
-            rows={q.data}
+            rows={visibleBots}
             rowKey={(b) => b.id}
             empty={
               <EmptyState
-                title="Chưa có phiên bản bot nào"
+                className="sector-empty"
+                icon={<SectorArt variant="bot" />}
+                title={hasFilters ? 'Không có bot phù hợp' : 'Chưa có phiên bản bot nào'}
                 description={
-                  user?.teamId
-                    ? 'Đội của bạn chưa có bot. Hãy nộp phiên bản đầu tiên!'
-                    : 'Bạn cần thuộc một đội để có bot.'
+                  hasFilters
+                    ? 'Thử tên khác hoặc bỏ bớt điều kiện lọc.'
+                    : user?.teamId
+                      ? 'Đội của bạn chưa có bot. Hãy nộp phiên bản đầu tiên!'
+                      : 'Bạn cần thuộc một đội để có bot.'
+                }
+                action={
+                  hasFilters ? (
+                    <Button variant="secondary" onClick={clearFilters}>
+                      Xóa bộ lọc
+                    </Button>
+                  ) : user?.teamId || staff ? (
+                    <Button onClick={handleOpenSubmit}>Nộp phiên bản đầu tiên</Button>
+                  ) : (
+                    <Button asChild variant="secondary">
+                      <Link to="/team">Mở Đội của tôi</Link>
+                    </Button>
+                  )
                 }
               />
             }
@@ -197,7 +349,16 @@ export function MyBotsPage() {
                 header: 'Phiên bản',
                 cell: (b) => <span className="font-mono font-bold text-accent">v{b.version}</span>,
               },
-              { key: 'label', header: 'Nhãn mô tả', cell: (b) => b.label },
+              {
+                key: 'label',
+                header: 'Nhãn mô tả',
+                cell: (b) => (
+                  <span className="bot-label-cell">
+                    <IdentityMark seed={b.id} label={b.label} />
+                    <strong>{b.label}</strong>
+                  </span>
+                ),
+              },
               {
                 key: 'submission',
                 header: 'Nguồn nộp',
@@ -215,9 +376,15 @@ export function MyBotsPage() {
                 key: 'status',
                 header: 'Kiểm tra',
                 cell: (b) => (
-                  <Badge tone={STATUS[b.status].tone} dot>
-                    {STATUS[b.status].label}
-                  </Badge>
+                  <span
+                    className="motion-status"
+                    data-motion-stamp={b.status}
+                    data-motion-state={b.status === 'pending' ? 'processing' : 'idle'}
+                  >
+                    <Badge tone={STATUS[b.status].tone} dot>
+                      {STATUS[b.status].label}
+                    </Badge>
+                  </span>
                 ),
               },
               {

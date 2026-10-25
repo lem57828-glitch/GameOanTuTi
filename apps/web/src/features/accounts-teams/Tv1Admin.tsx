@@ -1,7 +1,9 @@
+import { FeatureHero } from '../../components/WorkspaceVisuals';
+import { LoadingState } from '@arena/ui';
 import { TEAM_MEMBER_LIMIT } from '@arena/contracts';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Badge, Button, Card, EmptyState, Input, Spinner } from '@arena/ui';
+import { Alert, Badge, Button, Card, EmptyState, Input } from '@arena/ui';
 import type { AdminAccountView, AdminTeamView, PublicationView } from '@arena/contracts';
 import { api } from '../../lib/api';
 import { useSession } from '../../lib/session';
@@ -91,7 +93,16 @@ export function Tv1Admin() {
   if (user?.role !== 'admin') return <Alert tone="error" title="Chỉ quản trị viên được truy cập" />;
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-3xl font-black">Quản trị tài khoản và nội dung</h1>
+      <FeatureHero
+        variant="control"
+        compact
+        slogan="Tài khoản, đội hình và thông tin — cùng một nhịp vận hành."
+      >
+        <div>
+          <p className="feature-eyebrow">BOT ARENA / QUẢN TRỊ</p>
+          <h1 className="text-3xl font-black">Quản trị tài khoản và nội dung</h1>
+        </div>
+      </FeatureHero>
       <div className="flex flex-wrap gap-2">
         {[
           ['accounts', 'Tài khoản'],
@@ -125,7 +136,7 @@ export function Tv1Admin() {
             }}
           />
           <ErrorMessage error={accounts.error} />
-          {accounts.isLoading && <Spinner />}
+          {accounts.isLoading && <LoadingState />}
           {accounts.data?.items.map((a) => (
             <Card key={a.id}>
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -201,7 +212,7 @@ export function Tv1Admin() {
       {tab === 'teams' && (
         <>
           <ErrorMessage error={teams.error} />
-          {teams.isLoading && <Spinner />}
+          {teams.isLoading && <LoadingState />}
           {teams.data?.map((t) => (
             <Card key={t.id}>
               <h2 className="text-lg font-bold">{t.name}</h2>

@@ -17,14 +17,14 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants: Record<Variant, string> = {
-  primary: 'bg-accent text-accent-on hover:bg-accent-strong shadow-glow',
+  primary: 'bg-accent text-accent-on hover:bg-accent-strong shadow-none',
   secondary: 'bg-surface-2 text-ink border border-line hover:border-accent/60 hover:bg-surface-2/80',
   ghost: 'bg-transparent text-ink hover:bg-surface-2/70',
   danger: 'bg-danger/15 text-danger border border-danger/40 hover:bg-danger/25',
 };
 const sizes: Record<Size, string> = {
-  sm: 'h-8 px-3 text-sm gap-1.5',
-  md: 'h-10 px-4 text-sm gap-2',
+  sm: 'min-h-10 px-3 text-sm gap-1.5',
+  md: 'min-h-11 px-4 text-sm gap-2',
   lg: 'h-12 px-6 text-base gap-2.5',
 };
 
@@ -45,7 +45,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 ) {
   const Comp = asChild ? Slot : 'button';
   const classes = cn(
-    'inline-flex select-none items-center justify-center whitespace-nowrap rounded-md font-semibold transition-colors',
+    'ui-button inline-flex select-none items-center justify-center whitespace-nowrap rounded-md font-semibold transition-colors',
     'disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
     focusRing,
     variants[variant],

@@ -26,7 +26,7 @@ export function Table<T>({ label, columns, rows, rowKey, empty, caption }: Table
       role="region"
       aria-label={label}
       tabIndex={0}
-      className={cn('w-full overflow-x-auto rounded-lg border border-line', focusRing)}
+      className={cn('ui-table w-full overflow-x-auto rounded-lg border border-line', focusRing)}
     >
       <table className="w-full min-w-[560px] border-collapse text-left text-sm">
         {caption && <caption className="px-4 py-3 text-left text-xs text-ink-muted">{caption}</caption>}

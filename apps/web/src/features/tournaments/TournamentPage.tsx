@@ -1,7 +1,9 @@
+import { FeatureHero } from '../../components/WorkspaceVisuals';
+import { LoadingState } from '@arena/ui';
 // Giải đấu. TV3 phát triển tiếp: sơ loại Swiss, tranh suất Top 32, cây 32→4, bảng xếp hạng, khiếu nại.
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { Alert, Badge, Card, CardHeader, EmptyState, Spinner, Tabs } from '@arena/ui';
+import { Alert, Badge, Card, CardHeader, EmptyState, Tabs } from '@arena/ui';
 import type { TournamentView } from '@arena/contracts';
 import type { CompetitionView } from '@arena/contracts';
 import { api, isApiError } from '../../lib/api';
@@ -33,7 +35,7 @@ export function TournamentPage() {
   });
   return (
     <div className="flex flex-col gap-6">
-      <header>
+      <FeatureHero variant="tournament" slogan="Nơi chiến thuật được thử thách. Nơi bản lĩnh lên tiếng.">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Giải đấu</p>
         <h1 className="mt-1 text-2xl font-extrabold text-ink sm:text-3xl">
           {t?.name ?? 'Giải đấu hiện tại'}
@@ -45,16 +47,29 @@ export function TournamentPage() {
           </p>
         )}
         {t?.demoKind && <p className="mt-1 text-sm text-ink-muted">{DEMO_KIND[t.demoKind].hint}</p>}
-      </header>
-      {q.isLoading && <Spinner label="Đang tải giải đấu" />}
+      </FeatureHero>
+      {q.isLoading && <LoadingState label="Đang tải giải đấu" />}
       {isApiError(q.error, 'NOT_FOUND') && <EmptyState title="Chưa có giải đấu nào đang mở" />}
       {q.error && !isApiError(q.error, 'NOT_FOUND') && (
         <Alert tone="error" title="Không tải được giải đấu">
           {(q.error as Error).message}
         </Alert>
       )}
+      {t && t.stages.length > 0 && (
+        <ol className="stage-journey" aria-label="Hành trình các giai đoạn">
+          {t.stages.map((stage, i) => (
+            <li key={stage.id} data-stage-state={stage.status}>
+              <span className="stage-node">{String(i + 1).padStart(2, '0')}</span>
+              <div>
+                <strong>{stage.name}</strong>
+                <Badge>{STAGE_STATUS[stage.status] ?? stage.status}</Badge>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
       {t && (
-        <Card>
+        <Card className="tournament-calendar">
           <CardHeader
             title="Lịch đăng ký và mốc khóa"
             subtitle="Trạng thái do máy chủ xác định theo lịch đã lưu."
@@ -102,7 +117,7 @@ export function TournamentPage() {
                 <ol className="grid gap-3 md:grid-cols-2">
                   {t.stages.map((s) => (
                     <li key={s.id}>
-                      <Card className="h-full">
+                      <Card className="stage-detail-card h-full">
                         <CardHeader
                           title={`${s.ord}. ${s.name}`}
                           subtitle={s.kind === 'qualifier' ? 'Vòng sơ loại' : 'Loại trực tiếp'}

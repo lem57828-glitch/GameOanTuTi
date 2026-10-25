@@ -1,6 +1,8 @@
+import { FeatureHero } from '../../components/WorkspaceVisuals';
+import { LoadingState } from '@arena/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Alert, Badge, Button, Card, CardHeader, EmptyState, Spinner } from '@arena/ui';
+import { Alert, Badge, Button, Card, CardHeader, EmptyState } from '@arena/ui';
 import type { MyPairingView, StandingsView, TeamView, TournamentView } from '@arena/contracts';
 import { api, isApiError } from '../../lib/api';
 import { useSession } from '../../lib/session';
@@ -38,7 +40,7 @@ export function TeamCompetitionPage() {
     enabled: !!own && own.tournamentId === t?.id,
     refetchInterval: 10000,
   });
-  if (isLoading) return <Spinner label="Kiểm tra phiên đăng nhập" />;
+  if (isLoading) return <LoadingState label="Kiểm tra phiên đăng nhập" />;
   if (error)
     return (
       <Alert tone="error" title="Không tải được phiên">
@@ -63,7 +65,7 @@ export function TeamCompetitionPage() {
   );
   return (
     <div className="flex flex-col gap-6">
-      <header>
+      <FeatureHero variant="tournament" slogan="Chuẩn bị kỹ từng bước. Bứt phá trong từng trận.">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Giải đấu</p>
         <h1 className="mt-1 text-2xl font-extrabold text-ink sm:text-3xl">Thi đấu của đội</h1>
         <p className="mt-2 text-sm text-ink-muted">
@@ -76,9 +78,9 @@ export function TeamCompetitionPage() {
             {DEMO_KIND[t.demoKind].hint}
           </p>
         )}
-      </header>
+      </FeatureHero>
       {(team.isLoading || tournament.isLoading || pairings.isLoading) && (
-        <Spinner label="Đang tải trạng thái thi đấu" />
+        <LoadingState label="Đang tải trạng thái thi đấu" />
       )}
       {[team.error, tournament.error, pairings.error]
         .filter((e) => e && !isApiError(e, 'NOT_FOUND'))
@@ -97,7 +99,7 @@ export function TeamCompetitionPage() {
         (t || isApiError(tournament.error, 'NOT_FOUND')) &&
         !pairings.isLoading &&
         !pairings.error && (
-          <Card className="border-accent/40">
+          <Card className="next-step-card border-accent/40">
             <CardHeader
               title={step.title}
               subtitle={step.detail}

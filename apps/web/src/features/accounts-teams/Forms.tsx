@@ -1,6 +1,6 @@
-import { type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Alert, Button, Input } from '@arena/ui';
+import { Alert, Button, Input, Dialog } from '@arena/ui';
 import { ApiError } from '../../lib/api';
 
 export interface Field {
@@ -117,6 +117,7 @@ export function ActionButton({
   confirm?: string;
   disabled?: boolean;
 }) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const action = useMutation({
     mutationFn: run,
     onSuccess: async () => {
@@ -131,12 +132,39 @@ export function ActionButton({
         disabled={disabled || action.isPending}
         loading={action.isPending}
         onClick={() => {
-          if (!confirm || window.confirm(confirm)) action.mutate();
+          if (confirm) setConfirmOpen(true);
+          else action.mutate();
         }}
       >
         {children}
       </Button>
-      <ErrorMessage error={action.error} />
+      {confirm && (
+        <Dialog
+          open={confirmOpen}
+          onOpenChange={(open) => {
+            if (!action.isPending) setConfirmOpen(open);
+          }}
+          title="Xác nhận thao tác"
+          description={confirm}
+          footer={
+            <>
+              <Button variant="secondary" disabled={action.isPending} onClick={() => setConfirmOpen(false)}>
+                Hủy
+              </Button>
+              <Button
+                loading={action.isPending}
+                disabled={disabled}
+                onClick={() => action.mutate(undefined, { onSuccess: () => setConfirmOpen(false) })}
+              >
+                Xác nhận
+              </Button>
+            </>
+          }
+        >
+          <ErrorMessage error={action.error} />
+        </Dialog>
+      )}
+      {!confirmOpen && <ErrorMessage error={action.error} />}
       {action.isSuccess && (
         <p role="status" className="text-xs text-success">
           Đã thực hiện.

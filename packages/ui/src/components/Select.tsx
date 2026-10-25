@@ -1,3 +1,4 @@
+import { Icon } from './Icon.js';
 import * as RSelect from '@radix-ui/react-select';
 import { useId } from 'react';
 import { cn, focusRing } from '../cn.js';
@@ -37,14 +38,14 @@ export function Select({
         <RSelect.Trigger
           aria-labelledby={`${id}-label`}
           className={cn(
-            'inline-flex h-10 items-center justify-between gap-2 rounded-md border border-line bg-bg-deep/60 px-3 text-sm text-ink',
+            'ui-select inline-flex h-11 items-center justify-between gap-2 rounded-md border border-line bg-bg-deep/60 px-3 text-sm text-ink',
             'hover:border-ink-muted/60 disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-ink-muted',
             focusRing,
           )}
         >
           <RSelect.Value placeholder={placeholder} />
           <RSelect.Icon aria-hidden className="text-ink-muted">
-            ▾
+            <Icon name="chevron" />
           </RSelect.Icon>
         </RSelect.Trigger>
         <RSelect.Portal>
@@ -61,7 +62,9 @@ export function Select({
                   disabled={o.disabled}
                   className="relative flex h-9 cursor-pointer select-none items-center rounded-sm px-3 pl-7 text-sm text-ink outline-none data-[disabled]:cursor-not-allowed data-[highlighted]:bg-accent/15 data-[disabled]:opacity-50"
                 >
-                  <RSelect.ItemIndicator className="absolute left-2 text-accent">✓</RSelect.ItemIndicator>
+                  <RSelect.ItemIndicator className="absolute left-2 text-accent">
+                    <Icon name="check" />
+                  </RSelect.ItemIndicator>
                   <RSelect.ItemText>{o.label}</RSelect.ItemText>
                 </RSelect.Item>
               ))}

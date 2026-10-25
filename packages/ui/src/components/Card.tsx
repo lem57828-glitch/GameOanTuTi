@@ -1,9 +1,10 @@
 import type { HTMLAttributes, ReactNode } from 'react';
+import { Icon, type IconName } from './Icon.js';
 import { cn } from '../cn.js';
 
 export function Card({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('rounded-lg border border-line bg-surface/80 p-5 shadow-deep', className)} {...rest} />
+    <div className={cn('ui-card rounded-lg border border-line bg-surface/80 p-5', className)} {...rest} />
   );
 }
 
@@ -17,7 +18,7 @@ export function CardHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <div className="ui-card-header mb-4 flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
         <h2 className="text-base font-bold text-ink">{title}</h2>
         {subtitle && <p className="mt-0.5 text-sm text-ink-muted">{subtitle}</p>}
@@ -34,7 +35,12 @@ const alertTone: Record<AlertTone, string> = {
   error: 'border-danger/60 bg-danger/10',
   success: 'border-success/50 bg-success/10',
 };
-const alertIcon: Record<AlertTone, string> = { info: 'ℹ', warning: '⚠', error: '✕', success: '✓' };
+const alertIcon: Record<AlertTone, IconName> = {
+  info: 'info',
+  warning: 'warning',
+  error: 'close',
+  success: 'check',
+};
 
 /** Khối thông báo trong trang (lỗi tải dữ liệu, cảnh báo demo...). */
 export function Alert({
@@ -53,10 +59,14 @@ export function Alert({
   return (
     <div
       role={tone === 'error' ? 'alert' : 'status'}
-      className={cn('flex flex-wrap items-start gap-3 rounded-md border p-4', alertTone[tone], className)}
+      className={cn(
+        'ui-alert flex flex-wrap items-start gap-3 rounded-md border p-4',
+        alertTone[tone],
+        className,
+      )}
     >
       <span aria-hidden className="mt-0.5 text-sm font-bold">
-        {alertIcon[tone]}
+        <Icon name={alertIcon[tone]} />
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-ink">{title}</p>

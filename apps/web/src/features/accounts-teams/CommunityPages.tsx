@@ -1,9 +1,12 @@
+import { FeatureHero, LibraryPaths, SectorArt } from '../../components/WorkspaceVisuals';
+import { LoadingState } from '@arena/ui';
 import { TEAM_MEMBER_LIMIT } from '@arena/contracts';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Alert, Badge, Button, Card, EmptyState, Spinner } from '@arena/ui';
+import { Alert, Badge, Button, Card, EmptyState, Input } from '@arena/ui';
 import type { NotificationView, PublicationView } from '@arena/contracts';
+import { matchesSearch } from '../../lib/workspace-navigation';
 import { api } from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { ActionButton, ErrorMessage } from './Forms';
@@ -31,19 +34,26 @@ export function NotificationsPage() {
     );
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <FeatureHero variant="library" compact slogan="Thông tin cần thiết. Đúng lúc bạn cần.">
         <h1 className="text-3xl font-black">
           Thông báo {q.data && <span className="text-accent">({q.data.unread})</span>}
         </h1>
         <ActionButton run={() => api('/notifications/read-all', { method: 'POST' })} onDone={refresh}>
           Đọc tất cả
         </ActionButton>
-      </div>
+      </FeatureHero>
       <ErrorMessage error={q.error} />
-      {q.isLoading && <Spinner />}
-      {q.data?.items.length === 0 && <EmptyState title="Chưa có thông báo" />}
+      {q.isLoading && <LoadingState />}
+      {q.data?.items.length === 0 && (
+        <EmptyState
+          className="sector-empty"
+          icon={<SectorArt variant="library" />}
+          title="Chưa có thông báo"
+          description="Thông báo về lịch và hoạt động của bạn sẽ xuất hiện tại đây."
+        />
+      )}
       {q.data?.items.map((n) => (
-        <Card key={n.id}>
+        <Card key={n.id} className={`notification-card${!n.readAt ? ' notification-card--unread' : ''}`}>
           <div className="flex items-start justify-between gap-3">
             <h2 className="font-bold">{n.title}</h2>
             {!n.readAt && <Badge tone="accent">Mới</Badge>}
@@ -85,12 +95,28 @@ export function NotificationsPage() {
 export function NewsPage({ kind }: { kind?: 'guide' }) {
   const q = useQuery({ queryKey: ['publications'], queryFn: () => api<PublicationView[]>('/publications') });
   const [filter, setFilter] = useState('all');
-  const items = q.data?.filter((p) => (kind ? p.kind === 'guide' : filter === 'all' || p.kind === filter));
+  const [search, setSearch] = useState('');
+  const items = q.data
+    ?.filter((p) => (kind ? p.kind === 'guide' : filter === 'all' || p.kind === filter))
+    .filter((p) => matchesSearch(`${p.title} ${p.body}`, search));
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      <h1 className="text-3xl font-black">{kind ? 'Hướng dẫn tham gia' : 'Thông báo và tài liệu BTC'}</h1>
+      <FeatureHero
+        variant="library"
+        slogan={
+          kind
+            ? 'Hiểu luật chơi. Làm chủ chiến thuật.'
+            : 'Kết nối với nhịp thi đấu. Sẵn sàng cho bước tiếp theo.'
+        }
+      >
+        <div>
+          <p className="feature-eyebrow">BOT ARENA / TRI THỨC & THÔNG TIN</p>
+          <h1 className="text-3xl font-black">{kind ? 'Hướng dẫn tham gia' : 'Thông báo và tài liệu BTC'}</h1>
+        </div>
+      </FeatureHero>
+      {kind && <LibraryPaths />}
       {kind && (
-        <Card>
+        <Card className="guide-checklist">
           <ol className="list-decimal space-y-3 pl-5 text-sm leading-relaxed text-ink-muted">
             <li>
               Điền họ tên, email mssv@vnu.edu.vn, lớp, khoa và mật khẩu. MSSV được lấy tự động từ email.
@@ -124,6 +150,13 @@ export function NewsPage({ kind }: { kind?: 'guide' }) {
           </Alert>
         </Card>
       )}
+      <Input
+        label="Tìm trong thông báo và tài liệu"
+        type="search"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="Từ khóa, tiêu đề…"
+      />
       {!kind && (
         <div className="flex flex-wrap gap-2">
           {[
@@ -144,10 +177,21 @@ export function NewsPage({ kind }: { kind?: 'guide' }) {
         </div>
       )}
       <ErrorMessage error={q.error} />
-      {q.isLoading && <Spinner />}
-      {items?.length === 0 && <EmptyState title="Chưa có nội dung được công bố" />}
+      {q.isLoading && <LoadingState />}
+      {items?.length === 0 && (
+        <EmptyState
+          title={search ? 'Không có nội dung phù hợp' : 'Chưa có nội dung được công bố'}
+          action={
+            search ? (
+              <Button variant="secondary" onClick={() => setSearch('')}>
+                Xóa tìm kiếm
+              </Button>
+            ) : undefined
+          }
+        />
+      )}
       {items?.map((p) => (
-        <Card key={p.id} id={p.id}>
+        <Card key={p.id} id={p.id} className={`publication-card publication-card--${p.kind}`}>
           <Badge>{p.kind === 'document' ? 'Tài liệu' : p.kind === 'guide' ? 'Hướng dẫn' : 'Thông báo'}</Badge>
           <h2 className="mt-3 text-xl font-bold">{p.title}</h2>
           <time className="text-xs text-ink-muted">{new Date(p.updatedAt).toLocaleString('vi-VN')}</time>

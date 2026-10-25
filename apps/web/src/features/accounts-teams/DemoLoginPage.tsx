@@ -1,7 +1,7 @@
 // Đăng nhập mẫu — CHỈ dùng khi phát triển (DEMO_MODE). Đăng nhập thật (email trường) là việc của TV1 sau M0.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Alert, Badge, Button, Card, EmptyState, Spinner, useToast } from '@arena/ui';
+import { Alert, Badge, Button, Card, EmptyState, LoadingState, useToast } from '@arena/ui';
 import type { DemoAccount, SessionUser } from '@arena/contracts';
 import { api, isApiError } from '../../lib/api';
 import { ROLE_LABEL, sessionKey, useSession } from '../../lib/session';
@@ -57,7 +57,7 @@ export function DemoLoginPage() {
           Chọn tài khoản khác để đổi.
         </p>
       )}
-      {accounts.isLoading && <Spinner label="Đang tải tài khoản mẫu" />}
+      {accounts.isLoading && <LoadingState label="Đang tải tài khoản mẫu" />}
       {disabled && (
         <EmptyState
           icon="⏻"

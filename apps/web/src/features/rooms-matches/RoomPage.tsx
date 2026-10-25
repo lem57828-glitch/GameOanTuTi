@@ -1,9 +1,12 @@
+import { useState } from 'react';
+import { ReplayHistory, ReplayReadout, RoundNavigator } from './ReplayDetails';
+import { FeatureHero, IdentityMark } from '../../components/WorkspaceVisuals';
 // Phòng đấu (chỉ đọc cho người xem). TV4 phát triển tiếp: chọn bot/quân kín, tung xu chính thức, replay chính thức.
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Badge, Button, Card, CardHeader, EmptyState, Spinner, cn } from '@arena/ui';
 import type { RoomSnapshot, Side } from '@arena/contracts';
-import { Board, PIECE_GLYPH, PIECE_LABEL, SideTag } from '../../components/Board';
+import { Board, SideTag } from '../../components/Board';
 import { CoinToss } from '../../components/CoinToss';
 import { usePublicHealth } from '../../lib/health';
 import { api } from '../../lib/api';
@@ -23,6 +26,7 @@ const CONN: Record<ConnectionState, { label: string; tone: 'success' | 'warning'
 
 export function RoomPage() {
   const { roomId = '' } = useParams();
+  const [focused, setFocused] = useState(false);
   const { snapshot: current, connection, error, resync, coinFor, dismissCoin } = useRoomStream(roomId);
   const [params] = useSearchParams();
   const gameId = params.get('game');
@@ -53,7 +57,6 @@ export function RoomPage() {
     if (error?.code === 'NOT_FOUND') {
       return (
         <EmptyState
-          icon="⌕"
           title="Không có phòng này"
           description="Phòng có thể đã bị xóa hoặc đường dẫn bị sai."
           action={
@@ -107,12 +110,24 @@ export function RoomPage() {
   const conn = gameId ? { label: 'Xem lại', tone: 'neutral' as const } : CONN[connection];
 
   return (
-    <div className="flex flex-col gap-6">
+    <div
+      className={`room-workspace flex flex-col gap-6${focused ? ' is-replay-focus' : ''}`}
+      onKeyDown={(event) => {
+        if (
+          event.key === 'Escape' &&
+          focused &&
+          !(event.target instanceof Element && event.target.closest('[role="dialog"]'))
+        ) {
+          setFocused(false);
+        }
+      }}
+      data-motion-state={!gameId && connection === 'live' && s.status === 'running' ? 'live' : 'idle'}
+    >
       {!gameId && coinFor === s.gameId && s.coinResult && (
         <CoinToss coin={s.coinResult} teamName={(id) => teamName(id)} onDone={dismissCoin} />
       )}
 
-      <header className="flex flex-wrap items-end justify-between gap-4">
+      <FeatureHero variant="rooms" slogan="Hai chiến thuật gặp nhau trên một bàn cờ." compact>
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Phòng đấu</p>
           <h1 className="mt-1 text-2xl font-extrabold text-ink sm:text-3xl">{s.title}</h1>
@@ -123,7 +138,12 @@ export function RoomPage() {
             {s.isDemo && (
               <Badge tone="warning">Dữ liệu mô phỏng{s.rulesetId ? ` — ruleset ${s.rulesetId}` : ''}</Badge>
             )}
-            <span aria-live="polite">
+            <span
+              className="motion-status"
+              aria-live="polite"
+              data-motion-stamp={connection}
+              data-motion-state={!gameId && connection === 'live' && s.status === 'running' ? 'live' : 'idle'}
+            >
               <Badge tone={conn.tone} dot>
                 {conn.label}
               </Badge>
@@ -135,7 +155,7 @@ export function RoomPage() {
             <Link to="/admin">{health.data?.demoMode ? 'Tạo ván mô phỏng' : 'Điều hành giải'}</Link>
           </Button>
         )}
-      </header>
+      </FeatureHero>
 
       {connection === 'reconnecting' || connection === 'offline' ? (
         <Alert tone="warning" title="Đang mất kết nối trực tiếp">
@@ -159,17 +179,47 @@ export function RoomPage() {
           Việc xem lại không làm thay đổi trận đang thi.
         </Alert>
       )}
-      {current?.match && <MatchPanel s={current} onChanged={() => void resync()} />}
+      {current?.match && (
+        <div className="replay-match-panel">
+          <MatchPanel s={current} hideResults={!!gameId || !replay.atEnd} onChanged={() => void resync()} />
+        </div>
+      )}
+      {(current?.match ?? s.match) && (
+        <RoundNavigator roomId={roomId} activeGameId={s.gameId} match={(current?.match ?? s.match)!} />
+      )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-        <Card className="p-3 sm:p-5">
-          <Board board={replay.board} lastMove={replay.lastMove} label={`Bàn cờ ${s.title}`} size="lg" />
-          <ReplayBar r={replay} />
+      <div className="replay-layout grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <Card className="battle-board-card p-3 sm:p-5">
+          <div className="battle-board-heading">
+            {[s.teams.a, s.teams.b].map((t, i) => (
+              <div className="battle-contender" key={t.id}>
+                <IdentityMark seed={t.id} label={t.name} side={sideOf(t.id) ?? undefined} />
+                <div>
+                  <small>ĐỘI {i === 0 ? 'A' : 'B'}</small>
+                  <strong>{t.name}</strong>
+                  {sideOf(t.id) && <SideTag side={sideOf(t.id)!} />}
+                </div>
+              </div>
+            ))}
+          </div>
+          <Board
+            board={replay.board}
+            lastMove={replay.lastMove}
+            motion={{
+              streamKey: replay.streamKey,
+              durationMs: replay.travelMs,
+              animate: replay.intent === 'forward',
+            }}
+            label={`Bàn cờ ${s.title}`}
+            size="lg"
+          />
+          <ReplayReadout r={replay} />
+          <ReplayBar r={replay} focused={focused} onFocusToggle={() => setFocused((value) => !value)} />
           <TurnLine s={s} teamName={teamName} replay={replay} />
         </Card>
 
-        <div className="flex min-w-0 flex-col gap-4">
-          <Card>
+        <div className="replay-sidebar flex min-w-0 flex-col gap-4">
+          <Card className="room-team-summary">
             <CardHeader
               title="Hai đội"
               subtitle={
@@ -186,7 +236,10 @@ export function RoomPage() {
                     key={t.id}
                     className="flex items-center justify-between gap-3 rounded-md border border-line bg-bg-deep/40 px-3 py-2.5"
                   >
-                    <span className="truncate font-semibold text-ink">{t.name}</span>
+                    <span className="battle-team-name">
+                      <IdentityMark seed={t.id} label={t.name} side={side ?? undefined} />
+                      <strong>{t.name}</strong>
+                    </span>
                     {side ? (
                       <SideTag side={side} />
                     ) : (
@@ -205,42 +258,9 @@ export function RoomPage() {
             s.result && <p className="text-xs text-ink-muted">Kết quả ván sẽ hiện khi xem tới nước cuối.</p>
           )}
 
-          <Card>
-            <CardHeader title="Lịch sử nước đi" subtitle={`${s.history.length} nước`} />
-            {s.history.length === 0 ? (
-              <p className="text-sm text-ink-muted">Chưa có nước nào.</p>
-            ) : (
-              <ol
-                aria-label="Lịch sử nước đi"
-                tabIndex={0}
-                className="max-h-72 overflow-y-auto rounded-md border border-line font-mono text-xs focus-visible:shadow-focus focus-visible:outline-none"
-              >
-                {[...s.history].reverse().map((m) => (
-                  <li
-                    key={m.ply}
-                    onClick={() => replay.seek(m.ply)}
-                    title="Xem bàn cờ sau nước này"
-                    className={cn(
-                      'flex cursor-pointer items-center gap-3 border-b border-line/60 px-3 py-1.5 last:border-0 hover:bg-surface-2/60',
-                      m.ply > replay.cursor && 'opacity-40',
-                      m.ply === replay.cursor && 'bg-accent/15',
-                    )}
-                  >
-                    <span className="w-8 text-right text-ink-muted">{m.ply}.</span>
-                    <SideTag side={m.side} className="w-16 text-xs" />
-                    <span className="text-ink">
-                      {PIECE_GLYPH[m.type]} {m.from}→{m.to}
-                    </span>
-                    {m.capture && (
-                      <span className="ml-auto text-accent-strong">ăn {PIECE_LABEL[m.capture]}</span>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            )}
-          </Card>
+          <ReplayHistory r={replay} />
 
-          {s.job && (
+          {user?.role === 'admin' && s.job && (
             <p className="text-xs text-ink-muted">
               Job <span className="font-mono">{s.job.id.slice(0, 10)}…</span> ·{' '}
               {JOB_STATUS[s.job.status]?.label ?? s.job.status} · lần chạy {s.job.attempts} · stream{' '}
