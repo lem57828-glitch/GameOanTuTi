@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { STANDARD_LIMITS, STANDARD_RULESET_ID } from '@arena/game-engine';
+import { STANDARD_LIMITS, STANDARD_RULESET_ID, isStandardFamily } from '@arena/game-engine';
 import type { GameRunner } from './runner/game-runner.js';
 
 /** Runtime validation is independent of syntax validation; infrastructure errors remain retryable. */
@@ -34,7 +34,8 @@ export async function validateBot(prisma: PrismaClient, runner: GameRunner, id: 
           contractVersion: 1,
           requestKey: `validation:${id}:${side}`,
           gameId: `validation:${id}`,
-          rulesetId: STANDARD_RULESET_ID,
+          // Bot nhận qua USB ở bán kết/chung kết được kiểm thử ngay trên luật mới của vòng đó.
+          rulesetId: isStandardFamily(bot.rulesetId) ? bot.rulesetId : STANDARD_RULESET_ID,
           seed: 317,
           choices: {
             blue: { botVersionId: side === 'blue' ? id : 'demo:greedy', extraType: 'PAPER' },

@@ -35,7 +35,8 @@
     "test:integration": "pnpm --filter @arena/api test:integration",
     "check": "pnpm format:check && pnpm lint && pnpm build && pnpm typecheck && pnpm test",
     "test:e2e": "playwright test --config tests/e2e/playwright.config.ts",
-    "tv2:acceptance": "node scripts/tv2-acceptance.mjs"
+    "tv2:acceptance": "node scripts/tv2-acceptance.mjs",
+    "test:features": "node scripts/test-features.mjs"
   },
   "devDependencies": {
     "@eslint/js": "9.19.0",

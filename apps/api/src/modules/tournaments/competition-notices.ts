@@ -224,4 +224,36 @@ export class CompetitionNotices {
       })),
     );
   }
+
+  /** Bán kết/chung kết: báo các đội của vòng một mốc offline (khóa bài, kết quả kiểm tra bot...). */
+  async finals(tx: Tx, key: string, teamIds: string[], title: string, body: string) {
+    await this.send(
+      tx,
+      teamIds.map((teamId) => ({ teamId, key: `comp:finals:${key}`, title, body, href: COMPETE })),
+    );
+  }
+
+  /** Chung kết đã chốt: báo đội vô địch và á quân. */
+  async champion(tx: Tx, tournamentId: string, champion: string, runnerUp: string | null) {
+    await this.send(tx, [
+      {
+        teamId: champion,
+        key: `comp:champion:${tournamentId}`,
+        title: 'Đội bạn vô địch Bot Arena!',
+        body: 'Chúc mừng! BTC đã chốt kết quả chung kết: đội bạn giành chức vô địch.',
+        href: COMPETE,
+      },
+      ...(runnerUp
+        ? [
+            {
+              teamId: runnerUp,
+              key: `comp:champion:${tournamentId}`,
+              title: 'Đội bạn giành ngôi á quân',
+              body: 'BTC đã chốt kết quả chung kết. Chúc mừng đội bạn về nhì toàn giải.',
+              href: COMPETE,
+            },
+          ]
+        : []),
+    ]);
+  }
 }

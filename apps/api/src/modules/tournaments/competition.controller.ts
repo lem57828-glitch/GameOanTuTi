@@ -3,6 +3,8 @@ import {
   AppealDecisionRequest,
   AppealRequest,
   DemoTeamsRequest,
+  FinalSubmissionRequest,
+  FinalsPhase,
   Id,
   KnockoutPhase,
   LevelBotRequest,
@@ -279,6 +281,56 @@ export class CompetitionController {
         parse(ReasonRequest, body).reason,
       ),
     );
+  }
+
+  // ---------------------------------------------------------------- bán kết, chung kết offline
+
+  @Get('admin/tournaments/:id/finals')
+  @Roles('admin')
+  async finals(@Param('id') id: string) {
+    return ok(await this.competition.finalsAdmin(parse(Id, id)));
+  }
+
+  /** Nhập bài từ USB của BTC (nội dung file .py đọc trên máy nhận bài cách ly). */
+  @Post('admin/tournaments/:id/finals/:phase/submissions')
+  @Roles('admin')
+  async submitFinal(
+    @Param('id') id: string,
+    @Param('phase') phase: string,
+    @CurrentUser() user: SessionUser,
+    @Body() body: unknown,
+    @Req() req: ArenaRequest,
+  ) {
+    return ok(
+      await this.competition.submitFinal(
+        parse(Id, id),
+        parse(FinalsPhase, phase),
+        parse(FinalSubmissionRequest, body),
+        actor(user, req),
+      ),
+    );
+  }
+
+  @Post('admin/tournaments/:id/finals/:phase/:step')
+  @Roles('admin')
+  async finalsStep(
+    @Param('id') id: string,
+    @Param('phase') phase: string,
+    @Param('step') step: string,
+    @CurrentUser() user: SessionUser,
+    @Body() body: unknown,
+    @Req() req: ArenaRequest,
+  ) {
+    const args = [
+      parse(Id, id),
+      parse(FinalsPhase, phase),
+      actor(user, req),
+      parse(ReasonRequest, body).reason,
+    ] as const;
+    const which = parse(z.enum(['lock', 'start', 'confirm']), step);
+    if (which === 'lock') return ok(await this.competition.lockFinals(...args));
+    if (which === 'start') return ok(await this.competition.startFinals(...args));
+    return ok(await this.competition.confirmFinals(...args));
   }
 
   @Post('admin/tournaments/:id/competition/reset')

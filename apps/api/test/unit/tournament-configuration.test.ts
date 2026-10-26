@@ -18,6 +18,7 @@ const row = (): TournamentRow => ({
   revision: 0,
   avoidRematch: 'level',
   top4: null,
+  champion: null,
   createdAt: date(0),
   registrationOpensAt: date(1),
   registrationClosesAt: date(2),

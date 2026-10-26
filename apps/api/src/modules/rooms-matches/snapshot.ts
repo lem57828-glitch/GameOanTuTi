@@ -88,6 +88,7 @@ export function buildSnapshot(input: SnapshotInput): RoomSnapshot {
     board: state.board,
     initialBoard: newGame(rules, game.maxPlies).board,
     maxPlies: game.maxPlies,
+    variant: rules.variant ?? null,
     turn: finished || status === 'failed' ? null : { side: state.toMove, ply: state.ply },
     history,
     result: r

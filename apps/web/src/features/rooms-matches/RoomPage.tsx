@@ -6,7 +6,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Badge, Button, Card, CardHeader, EmptyState, Spinner, cn } from '@arena/ui';
 import type { RoomSnapshot, Side } from '@arena/contracts';
-import { Board, SideTag } from '../../components/Board';
+import { Board, SideTag, VariantLegend } from '../../components/Board';
 import { CoinToss } from '../../components/CoinToss';
 import { usePublicHealth } from '../../lib/health';
 import { api } from '../../lib/api';
@@ -212,7 +212,10 @@ export function RoomPage() {
             }}
             label={`Bàn cờ ${s.title}`}
             size="lg"
+            variant={s.variant}
+            ply={replay.cursor}
           />
+          {s.variant && <VariantLegend variant={s.variant} />}
           <ReplayReadout r={replay} />
           <ReplayBar r={replay} focused={focused} onFocusToggle={() => setFocused((value) => !value)} />
           <TurnLine s={s} teamName={teamName} replay={replay} />

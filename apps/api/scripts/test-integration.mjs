@@ -30,6 +30,8 @@ try {
     '--no-file-parallelism',
     '--dir',
     'test/integration',
+    // Lọc theo tên file: pnpm test:integration -- finals autopilot
+    ...process.argv.slice(2),
   ]);
 } catch (error) {
   console.error(error.message);

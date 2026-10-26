@@ -64,6 +64,8 @@ export const KIND_LABEL: Record<PairingView['kind'], string> = {
   bye: 'Lượt nghỉ',
   tiebreak: 'Tranh suất',
   knockout: 'Loại trực tiếp',
+  semifinal: 'Bán kết',
+  final: 'Chung kết',
 };
 
 const DECIDED: Record<string, string> = {
@@ -75,6 +77,8 @@ const DECIDED: Record<string, string> = {
 };
 
 export function pairingLabel(p: PairingView): string {
+  if (p.kind === 'final') return 'Chung kết';
+  if (p.kind === 'semifinal') return `Bán kết · cặp ${(p.slot ?? 0) + 1}`;
   if (p.kind === 'knockout') return `${p.phase?.toUpperCase()} · cặp ${(p.slot ?? 0) + 1}`;
   if (p.kind === 'tiebreak') return `Tranh suất bước ${p.round - 1000}`;
   return `Mức ${p.levelOrd ?? ''} · vòng ${p.round}`.replace('Mức  · ', '');

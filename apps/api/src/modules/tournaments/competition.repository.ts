@@ -42,6 +42,20 @@ export class CompetitionRepository {
     });
   }
 
+  /** Bài nộp USB bán kết/chung kết kèm thông tin phiên bản bot (hash, trạng thái kiểm tra). */
+  async finalSubmissions(tournamentId: string, tx: Tx = this.prisma) {
+    const subs = await tx.finalSubmission.findMany({ where: { tournamentId }, orderBy: { receivedAt: 'asc' } });
+    const bots = await tx.botVersion.findMany({
+      where: { id: { in: subs.map((s) => s.botVersionId) } },
+      select: { id: true, version: true, sourceHash: true, status: true, validationLog: true },
+    });
+    const byId = new Map(bots.map((b) => [b.id, b]));
+    return subs.flatMap((s) => {
+      const bot = byId.get(s.botVersionId);
+      return bot ? [{ ...s, bot }] : [];
+    });
+  }
+
   /** Transaction ngắn không khóa giải (vd. ghi thông báo nhắc lịch). */
   run<T>(fn: (tx: Tx) => Promise<T>) {
     return this.prisma.$transaction(fn);

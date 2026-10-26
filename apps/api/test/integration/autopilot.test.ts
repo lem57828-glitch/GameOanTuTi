@@ -155,6 +155,7 @@ afterAll(async () => {
     prisma.matchSelection.deleteMany({ where: { matchId: { in: matches.map((m) => m.id) } } }),
     prisma.match.deleteMany({ where: { roomId: { in: roomIds } } }),
     prisma.room.deleteMany({ where: { id: { in: roomIds } } }),
+    prisma.finalSubmission.deleteMany({ where: { tournamentId: tid } }),
     prisma.pairing.deleteMany({ where: { tournamentId: tid } }),
     prisma.bracketRound.deleteMany({ where: { tournamentId: tid } }),
     prisma.qualifierLevel.deleteMany({ where: { tournamentId: tid } }),
@@ -208,6 +209,12 @@ it('thí sinh chỉ bấm "Tiếp theo": đi trọn Swiss → loại trực ti�
 
   const t = await prisma.tournament.findUniqueOrThrow({ where: { id: tid } });
   expect((t.top4 as string[]).length).toBe(4);
+  // Sau Top 4, "Tiếp theo" đi tiếp bán kết → chung kết (thu bài USB được giả lập bằng bot hợp lệ của mỗi đội).
+  expect(t.champion).toBeTruthy();
+  const finals = await prisma.pairing.findMany({
+    where: { tournamentId: tid, kind: { in: ['semifinal', 'final'] } },
+  });
+  expect(finals.map((p) => p.kind).sort()).toEqual(['final', 'semifinal', 'semifinal']);
   const all = await prisma.pairing.findMany({ where: { tournamentId: tid } });
   // Không có kết quả mô phỏng: Swiss/tứ kết từ phòng đấu, các vòng thiếu đối thủ là xử thắng vắng mặt.
   expect(all.some((p) => p.source === 'simulation')).toBe(false);

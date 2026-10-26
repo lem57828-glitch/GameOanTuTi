@@ -33,7 +33,8 @@ export function applyRoomEvent(s: RoomSnapshot, ev: RoomEvent): ApplyResult {
       if (!piece || piece.side !== m.side)
         return { kind: 'resync', reason: `nước ${m.from}-${m.to} không khớp bàn cờ` };
       delete board[m.from];
-      board[m.to] = piece;
+      // Chung kết: quân dừng ở ô đổi loại đổi sang loại mới (engine ghi trong promoted).
+      board[m.to] = m.promoted ? { ...piece, type: m.promoted } : piece;
       return {
         kind: 'applied',
         snapshot: {

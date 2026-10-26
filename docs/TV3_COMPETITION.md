@@ -126,4 +126,4 @@ Các giá trị dưới đây đang dùng để chạy được, nhưng chưa ph
 - Rút đội bằng giao diện (đội `withdrawn` vẫn được xử lý đúng nếu TV1 đặt trạng thái).
 - Sửa lịch hoặc nhánh sau khi đã chốt.
 - Chứng nhận/giải thưởng.
-- Bán kết và chung kết: ngoài phạm vi 32 → 4.
+- Bán kết và chung kết: không thuộc cây 32 → 4; chốt tứ kết tạo bán kết offline — xem [BAN_KET_CHUNG_KET.md](BAN_KET_CHUNG_KET.md).

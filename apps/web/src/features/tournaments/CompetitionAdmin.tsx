@@ -31,6 +31,7 @@ import {
   pairingLabel,
 } from './competition-ui';
 import { APPEAL_STATUS, TextArea } from './MyPairings';
+import { FinalsAdmin } from './FinalsAdmin';
 import { refreshRoomLists, roomOpenFeedback, type OpenRoomsResult } from '../rooms-matches/room-actions';
 
 type Outcome = 'a' | 'b' | null;
@@ -178,6 +179,31 @@ export function CompetitionAdmin() {
           {c.next.label}
         </Button>
       );
+    if (a.startsWith('finals-')) {
+      const [step, phase] = a.slice('finals-'.length).split(':') as ['lock' | 'start' | 'confirm', string];
+      const done = { lock: 'Đã khóa bài', start: 'Đã bắt đầu thi đấu', confirm: 'Đã chốt vòng' }[step];
+      return (
+        <>
+          <Button
+            loading={busy}
+            disabled={!isAdmin || !!c.next.blockedReason}
+            onClick={() => {
+              run(`/finals/${phase}/${step}`, done);
+              void qc.invalidateQueries({ queryKey: ['finals-admin', tid] });
+            }}
+          >
+            {step === 'lock'
+              ? `Hết giờ sửa bot: khóa bài ${phase === 'sf' ? 'bán kết' : 'chung kết'}`
+              : c.next.label}
+          </Button>
+          {step === 'lock' && (
+            <p className="w-full text-sm text-ink-muted">
+              Nhận bài từng đội ở khung bán kết/chung kết bên dưới.
+            </p>
+          )}
+        </>
+      );
+    }
     if (a === 'results') {
       const r = rooms.data;
       const unopened = r?.notOpened ?? c.pending.filter((p) => !p.roomId).length;
@@ -490,6 +516,7 @@ export function CompetitionAdmin() {
             <CardHeader title="Nhánh 32 → 4" />
             <BracketPanel bracket={c.bracket} top4={c.top4} />
           </Card>
+          {c.finals && <FinalsAdmin tid={tid} reason={reason} isAdmin={isAdmin} onAdjudicate={setEntry} />}
 
           {isAdmin && health.data?.demoMode && c.demoKind && (
             <Card>
@@ -577,6 +604,11 @@ export function CompetitionAdmin() {
 }
 
 const MAIN: Record<string, number> = { swiss: 2, tiebreak: 2, knockout: 5 };
+/** Loạt BO (bán kết BO5, chung kết BO7): tối thiểu số ván thắng cần đạt, tối đa BO + 2 ván phụ. */
+const SERIES: Record<string, { bestOf: number; need: number }> = {
+  semifinal: { bestOf: 5, need: 3 },
+  final: { bestOf: 7, need: 4 },
+};
 
 function ResultDialog({
   pairing,
@@ -603,7 +635,10 @@ function ResultDialog({
       toast({ title: 'Kết quả không hợp lệ', description: (e as Error).message, tone: 'error' }),
   });
   if (!p) return null;
-  const count = Math.max(MAIN[p.kind] ?? 2, games.length);
+  const series = SERIES[p.kind];
+  const min = series ? series.need : (MAIN[p.kind] ?? 2);
+  const max = series ? series.bestOf + 2 : min + 2;
+  const count = Math.max(min, games.length);
   const extraAllowed = p.kind !== 'swiss';
   const label = (o: Outcome) => (o === 'a' ? p.teamA?.name : o === 'b' ? p.teamB?.name : 'Hòa');
   return (
@@ -624,7 +659,7 @@ function ResultDialog({
           </Button>
           <Button
             loading={save.isPending}
-            disabled={games.length < (MAIN[p.kind] ?? 2) || [...games].some((g) => g === undefined)}
+            disabled={games.length < min || [...games].some((g) => g === undefined)}
             onClick={() => save.mutate()}
           >
             Lưu kết quả
@@ -636,7 +671,11 @@ function ResultDialog({
         {Array.from({ length: count }, (_, i) => (
           <fieldset key={i} className="flex flex-wrap items-center gap-2">
             <legend className="mb-1 w-full text-xs font-semibold text-ink-muted">
-              {i < (MAIN[p.kind] ?? 2) ? `Ván/hiệp ${i + 1}` : `Hiệp phụ ${i + 1 - (MAIN[p.kind] ?? 2)}`}
+              {series
+                ? `Ván ${i + 1}${i >= series.bestOf ? ' (phụ)' : ''}`
+                : i < min
+                  ? `Ván/hiệp ${i + 1}`
+                  : `Hiệp phụ ${i + 1 - min}`}
             </legend>
             {(['a', null, 'b'] as Outcome[]).map((o) => (
               <Button
@@ -655,17 +694,19 @@ function ResultDialog({
             ))}
           </fieldset>
         ))}
-        {extraAllowed && games.length >= (MAIN[p.kind] ?? 2) && games.length < (MAIN[p.kind] ?? 2) + 2 && (
+        {extraAllowed && games.length >= min && games.length < max && (
           <Button size="sm" variant="ghost" onClick={() => setGames([...games, null])}>
-            + Thêm hiệp phụ (chỉ khi bằng điểm)
+            {series ? '+ Thêm ván (tới khi một đội đủ số ván thắng)' : '+ Thêm hiệp phụ (chỉ khi bằng điểm)'}
           </Button>
         )}
         <p className="text-xs text-ink-muted">
-          {p.kind === 'knockout'
-            ? '5 hiệp chính (thắng 3, hòa 1). Bằng điểm thì nhập đúng 2 hiệp phụ; vẫn bằng thì máy chủ bốc thăm theo seed của cặp.'
-            : p.kind === 'tiebreak'
-              ? '2 ván; bằng thì thêm 2 ván phụ; vẫn bằng thì máy chủ bốc thăm.'
-              : '2 ván đổi màu; so số ván thắng để ra thắng/hòa/thua trận.'}
+          {series
+            ? `BO${series.bestOf}: đội thắng ${series.need} ván trước thắng loạt, ván hòa không tính. Hết ${series.bestOf} ván mà bằng số ván thắng thì đấu thêm tối đa 2 ván; vẫn bằng thì máy chủ bốc thăm.`
+            : p.kind === 'knockout'
+              ? '5 hiệp chính (thắng 3, hòa 1). Bằng điểm thì nhập đúng 2 hiệp phụ; vẫn bằng thì máy chủ bốc thăm theo seed của cặp.'
+              : p.kind === 'tiebreak'
+                ? '2 ván; bằng thì thêm 2 ván phụ; vẫn bằng thì máy chủ bốc thăm.'
+                : '2 ván đổi màu; so số ván thắng để ra thắng/hòa/thua trận.'}
         </p>
       </div>
     </Dialog>

@@ -8,6 +8,7 @@ import type { TournamentView } from '@arena/contracts';
 import type { CompetitionView } from '@arena/contracts';
 import { api, isApiError } from '../../lib/api';
 import { BracketPanel, DEMO_KIND, LEVEL_STATUS, StandingsPanel } from './competition-ui';
+import { FinalsPanel } from './finals-ui';
 import { MyPairings } from './MyPairings';
 
 const STAGE_STATUS: Record<string, string> = {
@@ -163,6 +164,18 @@ export function TournamentPage() {
               value: 'bracket',
               label: 'Nhánh 32 → 4',
               content: <BracketPanel bracket={comp.data?.bracket ?? []} top4={comp.data?.top4 ?? null} />,
+            },
+            {
+              value: 'finals',
+              label: 'Bán kết · Chung kết',
+              content: comp.data?.finals ? (
+                <FinalsPanel finals={comp.data.finals} />
+              ) : (
+                <EmptyState
+                  title="Chưa tới bán kết"
+                  description="Bán kết và chung kết thi offline tại trường sau khi xác định Top 4."
+                />
+              ),
             },
             {
               value: 'mine',

@@ -1,6 +1,8 @@
 # Bot Arena
 
-## Demo và chính thức
+> **Thành viên mới / cần chạy thử:** xem [Hướng dẫn chạy và kiểm thử](docs/HUONG_DAN_CHAY_VA_TEST.md) — cài đặt, bật hệ thống, `pnpm test:features`, các luồng thử tay (gồm bán kết/chung kết).
+
+
 
 Dùng chung code, tách dữ liệu và cấu hình. Chạy `pnpm env:init` để tạo `.env.demo` và `.env.official` riêng, sau đó làm theo [hướng dẫn thiết lập và tạo BTC thật](docs/DEMO_VA_CHINH_THUC.md).
 

@@ -262,7 +262,9 @@ it('chạy trọn sơ loại → cây 32 → Top 4 bằng mô phỏng, không b�
   }
   const done = await overview();
   expect(done.top4).toHaveLength(4);
-  expect(done.next.action).toBe('done');
+  // Có Top 4 → bán kết offline mở bước nhận bài USB.
+  expect(done.next.action).toBe('finals-lock:sf');
+  expect(done.finals.rounds[0].pairings).toHaveLength(2);
 }, 120_000);
 
 it('khiếu nại: chỉ đội trưởng của đội trong cặp; khiếu nại mở chặn xác nhận; chấp nhận + thi lại xóa kết quả tạm', async () => {

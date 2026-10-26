@@ -22,7 +22,7 @@ export function boardAt(initial: Board, history: readonly MoveRecord[], n: numbe
     const piece = board[m.from];
     if (!piece) continue;
     delete board[m.from];
-    board[m.to] = piece;
+    board[m.to] = m.promoted ? { ...piece, type: m.promoted } : piece;
   }
   return board;
 }

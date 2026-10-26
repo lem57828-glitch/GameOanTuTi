@@ -1,6 +1,7 @@
 // TV3 — giải, giai đoạn, cấu hình, sơ loại Swiss chia mức, cây 32 → 4, khiếu nại.
 import { z } from 'zod';
 import { Id, IsoDateTime } from './common.js';
+import { PieceType } from './bots.js';
 
 export const StageKind = z.enum(['qualifier', 'knockout']);
 export const StageStatus = z.enum(['planned', 'open', 'running', 'finished', 'confirmed']);
@@ -113,9 +114,12 @@ export type PairAssignment = z.infer<typeof PairAssignment>;
 
 const Count = z.number().int();
 export const LevelStatus = z.enum(['planned', 'locked', 'running', 'cutting', 'done', 'skipped']);
-export const PairingKind = z.enum(['swiss', 'bye', 'tiebreak', 'knockout']);
+export const PairingKind = z.enum(['swiss', 'bye', 'tiebreak', 'knockout', 'semifinal', 'final']);
 export const KnockoutPhase = z.enum(['r32', 'r16', 'qf']);
 export type KnockoutPhase = z.infer<typeof KnockoutPhase>;
+/** Bán kết, chung kết offline (luật mới, BTC nhận mã nguồn qua USB). */
+export const FinalsPhase = z.enum(['sf', 'final']);
+export type FinalsPhase = z.infer<typeof FinalsPhase>;
 export const AvoidRematchScope = z.enum(['level', 'qualifier']);
 /** Kết quả một ván/hiệp: 'a' | 'b' thắng, null = hòa. */
 export const GameOutcome = z.enum(['a', 'b']).nullable();
@@ -142,7 +146,7 @@ export const LevelUpdateRequest = z
   .strict();
 export type LevelUpdateRequest = z.infer<typeof LevelUpdateRequest>;
 export const PairingResultRequest = z
-  .object({ games: z.array(GameOutcome).min(1).max(7), reason: Reason })
+  .object({ games: z.array(GameOutcome).min(1).max(9), reason: Reason })
   .strict();
 export type PairingResultRequest = z.infer<typeof PairingResultRequest>;
 export const DemoTeamsRequest = z.object({ count: Count.min(2).max(256) }).strict();
@@ -150,7 +154,7 @@ export const DemoTeamsRequest = z.object({ count: Count.min(2).max(256) }).stric
 export const AppealRequest = z
   .object({
     pairingId: Id,
-    gameNo: Count.min(1).max(7).nullable().default(null),
+    gameNo: Count.min(1).max(9).nullable().default(null),
     moveNo: Count.min(1).max(2000).nullable().default(null),
     body: z.string().trim().min(10).max(4000),
     evidence: z.string().trim().max(2000).nullable().default(null),
@@ -173,7 +177,7 @@ export const PairingView = z.object({
   kind: PairingKind,
   levelOrd: Count.nullable(),
   round: Count,
-  phase: KnockoutPhase.nullable(),
+  phase: z.union([KnockoutPhase, FinalsPhase]).nullable(),
   slot: Count.nullable(),
   teamA: TeamRef,
   teamB: TeamRef,
@@ -257,6 +261,63 @@ export const BracketView = z.array(
 );
 export type BracketView = z.infer<typeof BracketView>;
 
+// ---------------------------------------------------------------- Bán kết, chung kết offline
+
+/** Bài nộp qua USB của BTC cho một vòng: lưu thành phiên bản bot bất biến (mã nguồn + SHA-256). */
+export const FinalSubmissionView = z.object({
+  teamId: Id,
+  botVersionId: Id,
+  version: Count,
+  fileName: z.string().nullable(),
+  sourceHash: z.string(),
+  /** pending: đang kiểm tra cú pháp/chạy thử trong sandbox; valid / invalid: kết quả kiểm tra. */
+  status: z.enum(['pending', 'valid', 'invalid']),
+  /** Nhật ký kiểm tra — chỉ BTC thấy. */
+  validationLog: z.string().nullable(),
+  extraType: PieceType,
+  receivedAt: IsoDateTime,
+});
+export type FinalSubmissionView = z.infer<typeof FinalSubmissionView>;
+
+export const FinalsRoundView = z.object({
+  phase: FinalsPhase,
+  title: z.string(),
+  rulesetId: z.string(),
+  /** Số ván tối đa của loạt (BO5 / BO7) và số ván thắng cần đạt. */
+  bestOf: Count,
+  winsNeeded: Count,
+  /**
+   * collecting: đang nhận bài (bước 1–4) · locked: đã khóa bài, BTC kiểm tra bot (bước 5) ·
+   * running: thi đấu trực tiếp (bước 6) · finished: đã đấu xong, chờ BTC chốt · done: đã chốt.
+   */
+  status: z.enum(['waiting', 'collecting', 'locked', 'running', 'finished', 'done']),
+  teams: z.array(z.object({ id: Id, name: z.string() })),
+  /** Chỉ trả cho BTC; thí sinh/khán giả nhận mảng rỗng. */
+  submissions: z.array(FinalSubmissionView),
+  pairings: z.array(PairingView),
+  lockedAt: OptionalTime,
+});
+export type FinalsRoundView = z.infer<typeof FinalsRoundView>;
+
+export const FinalsView = z.object({
+  rounds: z.array(FinalsRoundView),
+  champion: TeamRef,
+  runnerUp: TeamRef,
+});
+export type FinalsView = z.infer<typeof FinalsView>;
+
+/** BTC nhập bài từ USB: nội dung file .py (đọc trên máy nhận bài cách ly) + quân thứ 10 đội đăng ký. */
+export const FinalSubmissionRequest = z
+  .object({
+    teamId: Id,
+    fileName: z.string().trim().min(1).max(200),
+    sourceCode: z.string().min(10).max(500_000),
+    extraType: PieceType.default('PAPER'),
+    reason: Reason,
+  })
+  .strict();
+export type FinalSubmissionRequest = z.infer<typeof FinalSubmissionRequest>;
+
 export const CompetitionView = z.object({
   tournamentId: Id,
   demoKind: DemoKind.nullable(),
@@ -270,6 +331,8 @@ export const CompetitionView = z.object({
   next: z.object({ action: z.string(), label: z.string(), blockedReason: z.string().nullable() }),
   bracket: BracketView,
   top4: z.array(z.object({ id: Id, name: z.string() })).nullable(),
+  /** Bán kết/chung kết offline; null khi chưa có Top 4. */
+  finals: FinalsView.nullable(),
   pending: z.array(PairingView),
   serverTime: IsoDateTime,
 });

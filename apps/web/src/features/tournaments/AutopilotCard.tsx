@@ -80,7 +80,7 @@ export function AutopilotCard({ tournamentId }: { tournamentId: string }) {
             disabled={!v.canAdvance || v.needsChoice.length > 0}
             onClick={() => next.mutate(false)}
           >
-            {v.done ? 'Đã có Top 4' : 'Tiếp theo →'}
+            {v.done ? 'Giải đã kết thúc' : 'Tiếp theo →'}
           </Button>
           {v.needsChoice.length > 0 && (
             <Button variant="secondary" loading={next.isPending} onClick={() => next.mutate(true)}>

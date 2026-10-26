@@ -198,6 +198,8 @@ model Tournament {
   avoidRematch         String    @default("level")
   /// Danh sách 4 đội vào bán kết sau khi chốt tứ kết (JSON mảng teamId).
   top4                 Json?
+  /// Đội vô địch sau khi BTC chốt chung kết (teamId).
+  champion             String?
   createdAt            DateTime  @default(now())
   stages               Stage[]
   teams                Team[]
@@ -266,18 +268,35 @@ model LevelBot {
   @@id([levelId, teamId])
 }
 
-/// Vòng loại trực tiếp của cây 32 → 4: r32 | r16 | qf.
+/// Vòng loại trực tiếp: r32 | r16 | qf (cây 32 → 4), sf | final (bán kết, chung kết offline).
 model BracketRound {
   id           String     @id @default(cuid())
   tournamentId String
   phase        String
   ord          Int
   status       String     @default("pending") // pending | running | finished | done
+  /// Bán kết/chung kết: thời điểm BTC khóa bài nộp qua USB (sau đó không nhận/sửa bài).
+  lockedAt     DateTime?
   startedAt    DateTime?
   confirmedAt  DateTime?
   tournament   Tournament @relation(fields: [tournamentId], references: [id])
 
   @@unique([tournamentId, phase])
+}
+
+/// Bài nộp offline qua USB của BTC cho bán kết/chung kết: trỏ tới BotVersion bất biến (mã nguồn + SHA-256).
+/// Nộp lại trước khi khóa thì thay bài hiện hành; mọi bản đã nhận vẫn còn trong BotVersion và AuditLog.
+model FinalSubmission {
+  tournamentId String
+  phase        String // sf | final
+  teamId       String
+  botVersionId String
+  extraType    String   @default("PAPER")
+  fileName     String?
+  receivedById String?
+  receivedAt   DateTime @default(now())
+
+  @@id([tournamentId, phase, teamId])
 }
 
 /// Cặp đấu do TV3 tạo (PairAssignment). TV4 mở trận theo cặp và trả MatchCompleted; TV3 chốt chính thức.

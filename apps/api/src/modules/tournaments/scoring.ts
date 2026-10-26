@@ -5,10 +5,19 @@
 //   tiebreak : 2 ván; vẫn bằng thì tối đa 2 ván phụ; vẫn bằng thì bốc thăm (luôn phân thắng thua).
 //   knockout : đủ 5 hiệp chính, mỗi hiệp thắng 3 / hòa 1 / thua 0; bằng điểm thì đúng 2 hiệp phụ;
 //              so tổng 7 hiệp, vẫn bằng thì bốc thăm công khai (thể lệ 2.0 mục 6).
+//   semifinal: BO5 — ai thắng 3 ván trước thắng loạt; final: BO7 — thắng 4 ván trước (đặc tả bán kết/chung kết).
+//              Ván hòa không tính. Hết số ván tối đa mà chưa ai đủ: hơn số ván thắng thì thắng; bằng nhau thì
+//              đấu thêm từng ván (tối đa 2) tới khi có người dẫn; vẫn bằng thì bốc thăm công khai.
 import { rng } from '@arena/game-engine';
 import { AppError } from '../../core/errors.js';
 
-export type PairingKind = 'swiss' | 'tiebreak' | 'knockout';
+export type PairingKind = 'swiss' | 'tiebreak' | 'knockout' | 'semifinal' | 'final';
+/** Thể thức loạt "best of": bán kết, chung kết. */
+export const SERIES: Partial<Record<PairingKind, { bestOf: number; extra: number }>> = {
+  semifinal: { bestOf: 5, extra: 2 },
+  final: { bestOf: 7, extra: 2 },
+};
+export const winsNeeded = (bestOf: number) => Math.floor(bestOf / 2) + 1;
 /** Kết quả một ván/hiệp: 'a' | 'b' thắng, null = hòa. */
 export type GameOutcome = 'a' | 'b' | null;
 
@@ -31,15 +40,60 @@ export const FORMAT: Record<
   swiss: { main: 2, extra: 0, decisive: false, win: 1, draw: 0 },
   tiebreak: { main: 2, extra: 2, decisive: true, win: 1, draw: 0 },
   knockout: { main: 5, extra: 2, decisive: true, win: 3, draw: 1 },
+  semifinal: { main: 5, extra: 2, decisive: true, win: 1, draw: 0 },
+  final: { main: 7, extra: 2, decisive: true, win: 1, draw: 0 },
 };
 
 const invalid = (message: string) => new AppError('VALIDATION_ERROR', message);
+
+const winsOf = (games: readonly GameOutcome[]) => ({
+  a: games.filter((g) => g === 'a').length,
+  b: games.filter((g) => g === 'b').length,
+});
+
+/** Loạt đã phân định chưa (sau các ván đã chơi). */
+function seriesDecided(s: { bestOf: number; extra: number }, games: readonly GameOutcome[]): boolean {
+  const w = winsOf(games);
+  const need = winsNeeded(s.bestOf);
+  if (w.a >= need || w.b >= need) return true;
+  if (games.length < s.bestOf) return false;
+  return w.a !== w.b || games.length >= s.bestOf + s.extra;
+}
+
+function evaluateSeries(
+  s: { bestOf: number; extra: number },
+  games: readonly GameOutcome[],
+  seed: number,
+): PairingOutcome {
+  for (let i = 0; i < games.length; i++)
+    if (seriesDecided(s, games.slice(0, i)))
+      throw invalid(`Loạt đã phân định sau ${i} ván; không chơi thêm ván ${i + 1}.`);
+  if (!seriesDecided(s, games))
+    throw invalid(
+      games.length < s.bestOf
+        ? `Loạt BO${s.bestOf} chưa phân định: cần chơi tiếp (mới ${games.length} ván).`
+        : 'Bằng số ván thắng sau số ván tối đa: cần đấu thêm ván phụ.',
+    );
+  const w = winsOf(games);
+  const base = { scoreA: w.a, scoreB: w.b, winsA: w.a, winsB: w.b, draws: games.length - w.a - w.b };
+  if (w.a !== w.b)
+    return {
+      ...base,
+      result: w.a > w.b ? 'a' : 'b',
+      decidedBy: games.length > s.bestOf ? 'extra' : 'score',
+      lots: null,
+    };
+  const winner = rng(seed ^ 0x5eed)() < 0.5 ? 'a' : 'b';
+  return { ...base, result: winner, decidedBy: 'lots', lots: { winner, seed } };
+}
 
 export function evaluatePairing(
   kind: PairingKind,
   games: readonly GameOutcome[],
   seed: number,
 ): PairingOutcome {
+  const series = SERIES[kind];
+  if (series) return evaluateSeries(series, games, seed);
   const f = FORMAT[kind];
   const tally = (list: readonly GameOutcome[]) => {
     let a = 0;
@@ -90,6 +144,9 @@ export function evaluatePairing(
 
 /** Số ván/hiệp cần chơi tiếp theo trạng thái hiện tại (dùng cho mô phỏng và giao diện nhập tay). */
 export function gamesNeeded(kind: PairingKind, games: readonly GameOutcome[]): number {
+  // Loạt BO: chơi từng ván một, dừng ngay khi đã phân định.
+  const series = SERIES[kind];
+  if (series) return seriesDecided(series, games) ? 0 : 1;
   const f = FORMAT[kind];
   if (games.length < f.main) return f.main - games.length;
   if (f.decisive && f.extra > 0) {

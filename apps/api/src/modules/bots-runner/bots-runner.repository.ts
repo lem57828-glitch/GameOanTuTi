@@ -26,15 +26,24 @@ export class BotsRunnerRepository {
   deleteBotVersion(id: string, teamId: string) {
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${teamId}))`;
-      const [choices, selections, stages] = await Promise.all([
+      const [choices, selections, stages, levels] = await Promise.all([
         tx.gameChoice.count({ where: { botVersionId: id } }),
         tx.matchSelection.count({ where: { botVersionId: id } }),
         tx.botStageSelection.count({ where: { botVersionIds: { has: id } } }),
+        // Bot đội chọn cho mức sơ loại chưa xong: xóa thì khi khóa mức hệ thống lặng lẽ dùng bot dự phòng.
+        tx.levelBot.findMany({
+          where: { botVersionId: id, level: { status: { in: ['planned', 'locked', 'running', 'cutting'] } } },
+          select: { level: { select: { name: true } } },
+        }),
       ]);
       if (choices || selections)
         throw conflict('Bot đã thi đấu trong giải nên được giữ lại để xem lại ván và giải quyết kháng nghị.');
       if (stages)
         throw conflict('Bot đang nằm trong bộ bot đã chọn cho một giai đoạn. Bỏ bot khỏi bộ trước khi xóa.');
+      if (levels.length)
+        throw conflict(
+          `Bot đang được chọn cho ${levels.map((l) => l.level.name).join(', ')}. Chọn bot khác cho mức trước khi xóa.`,
+        );
       const runs = await tx.botTestRun.deleteMany({ where: { botVersionId: id } });
       await tx.botVersion.delete({ where: { id } });
       return { testRuns: runs.count };
@@ -68,7 +77,7 @@ export class BotsRunnerRepository {
     githubRepo?: string;
     commitSha?: string;
     sourcePath?: string;
-    submittedById: string;
+    submittedById: string | null;
     duplicateOfId?: string | null;
     validationLog?: string | null;
     rulesetId: string;

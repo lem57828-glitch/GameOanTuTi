@@ -8,7 +8,14 @@ import { boardMoveOffset } from '../lib/board-motion';
 // Hai bên phân biệt bằng cả màu, hình dạng (Xanh: tròn, Hồng: vuông xoay) và nhãn đọc màn hình.
 import { PieceGlyph } from './HomeGraphics';
 import { cn } from '@arena/ui';
-import type { Board as BoardState, MoveRecord, PieceType, Side } from '@arena/contracts';
+import {
+  variantObstacles,
+  type Board as BoardState,
+  type BoardVariant,
+  type MoveRecord,
+  type PieceType,
+  type Side,
+} from '@arena/contracts';
 
 const COLS = 'ABCDEFGHI';
 export const PIECE_LABEL: Record<PieceType, string> = { ROCK: 'Búa', PAPER: 'Bao', SCISSORS: 'Kéo' };
@@ -25,7 +32,12 @@ export interface BoardProps {
   showCoords?: boolean;
   className?: string;
   motion?: { streamKey: string | null; durationMs: number; animate: boolean };
+  /** Bán kết/chung kết: vật cản và ô đặc biệt; `ply` = số nước đã đi (vị trí vật cản động trước nước kế tiếp). */
+  variant?: BoardVariant | null;
+  ply?: number;
 }
+
+const SPECIAL_LABEL = { shield: 'ô khiên (không bị ăn)', swap: 'ô đổi loại' } as const;
 
 export function Board({
   board,
@@ -35,8 +47,15 @@ export function Board({
   showCoords = true,
   className,
   motion,
+  variant,
+  ply = 0,
 }: BoardProps) {
   const { enabled } = useArenaMotion();
+  const obstacles = new Set(variant ? variantObstacles(variant, ply) : []);
+  const moving = new Set(
+    variant?.moving.map((o) => o.path[Math.floor(ply / o.every) % o.path.length]!) ?? [],
+  );
+  const special = new Map(variant?.special.map((x) => [x.square, x.kind]) ?? []);
   const figure = useRef<HTMLElement>(null);
   const previous = useRef<{ board: BoardState; stream: string | null; stamp: string } | null>(null);
   const sequence = useRef(0);
@@ -177,9 +196,19 @@ export function Board({
               const goal = GOALS[sq];
               const isFrom = lastMove?.from === sq;
               const isTo = lastMove?.to === sq;
-              const desc = piece
-                ? `${sq}: ${PIECE_LABEL[piece.type]} ${SIDE_LABEL[piece.side]}`
-                : `${sq}: trống${goal ? `, đích của bên ${SIDE_LABEL[goal]}` : ''}`;
+              const blocked = obstacles.has(sq);
+              const cellKind = special.get(sq);
+              const extra = [
+                blocked ? (moving.has(sq) ? 'vật cản động' : 'vật cản') : null,
+                cellKind ? SPECIAL_LABEL[cellKind] : null,
+              ]
+                .filter(Boolean)
+                .join(', ');
+              const desc =
+                (piece
+                  ? `${sq}: ${PIECE_LABEL[piece.type]} ${SIDE_LABEL[piece.side]}`
+                  : `${sq}: trống${goal ? `, đích của bên ${SIDE_LABEL[goal]}` : ''}`) +
+                (extra ? `, ${extra}` : '');
               return (
                 <div
                   key={sq}
@@ -195,8 +224,40 @@ export function Board({
                     goal === 'pink' && 'bg-team-pink/15',
                     isFrom && 'bg-accent/15',
                     isTo && 'bg-accent/30 ring-1 ring-inset ring-accent',
+                    cellKind === 'shield' && 'ring-2 ring-inset ring-success/70',
+                    cellKind === 'swap' && 'ring-2 ring-inset ring-warning/70',
                   )}
+                  data-obstacle={blocked ? (moving.has(sq) ? 'moving' : 'fixed') : undefined}
+                  data-special={cellKind}
                 >
+                  {blocked && !piece && (
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'absolute inset-[12%] rounded-sm border',
+                        moving.has(sq)
+                          ? 'border-warning bg-warning/25 bg-[repeating-linear-gradient(45deg,transparent_0_4px,rgb(0_0_0/0.25)_4px_8px)]'
+                          : 'border-ink-muted bg-ink-muted/40 bg-[repeating-linear-gradient(45deg,transparent_0_4px,rgb(0_0_0/0.3)_4px_8px)]',
+                      )}
+                    />
+                  )}
+                  {blocked && piece && (
+                    <span
+                      aria-hidden
+                      className="absolute inset-0 rounded-sm border-2 border-dashed border-warning"
+                    />
+                  )}
+                  {cellKind && !piece && !blocked && (
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'text-[9px] font-bold uppercase tracking-wide sm:text-[10px]',
+                        cellKind === 'shield' ? 'text-success' : 'text-warning',
+                      )}
+                    >
+                      {cellKind === 'shield' ? 'Khiên' : 'Đổi'}
+                    </span>
+                  )}
                   {goal && !piece && (
                     <span
                       aria-hidden
@@ -250,6 +311,40 @@ export function Board({
         )}
       </div>
     </figure>
+  );
+}
+
+/** Chú thích ký hiệu bàn cờ bán kết/chung kết. */
+export function VariantLegend({ variant }: { variant: BoardVariant }) {
+  const every = variant.moving[0]?.every;
+  const kinds = new Set(variant.special.map((x) => x.kind));
+  const items = [
+    variant.fixed.length > 0 && {
+      swatch: 'border border-ink-muted bg-ink-muted/40',
+      text: 'Vật cản cố định: không quân nào đi vào',
+    },
+    every && {
+      swatch: 'border border-warning bg-warning/25',
+      text: `Vật cản động: tiến một ô sau mỗi ${every} nước`,
+    },
+    kinds.has('shield') && {
+      swatch: 'ring-2 ring-inset ring-success/70',
+      text: 'Ô khiên: quân đứng trên không bị ăn',
+    },
+    kinds.has('swap') && {
+      swatch: 'ring-2 ring-inset ring-warning/70',
+      text: 'Ô đổi loại: Búa → Bao → Kéo → Búa',
+    },
+  ].filter((x): x is { swatch: string; text: string } => !!x);
+  return (
+    <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted" aria-label="Chú thích bàn cờ">
+      {items.map((x) => (
+        <li key={x.text} className="flex items-center gap-1.5">
+          <span aria-hidden className={cn('inline-block h-3 w-3 rounded-sm', x.swatch)} />
+          {x.text}
+        </li>
+      ))}
+    </ul>
   );
 }
 

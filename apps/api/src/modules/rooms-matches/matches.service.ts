@@ -39,10 +39,14 @@ import { MatchesRepository, type MatchRow } from './matches.repository.js';
 import { RoomsRepository } from './rooms.repository.js';
 import { streamIdOf } from './snapshot.js';
 
-type Kind = 'swiss' | 'tiebreak' | 'knockout';
+type Kind = 'swiss' | 'tiebreak' | 'knockout' | 'semifinal' | 'final';
 type Outcome = 'a' | 'b' | null;
-/** Sơ loại: mỗi đội dùng một bot chốt cho cả mức, không có bước chọn kín theo hiệp. */
-const FIXED_BOT: ReadonlySet<string> = new Set(['swiss', 'tiebreak']);
+/**
+ * Không có bước chọn kín theo hiệp — sơ loại: bot đội chốt cho cả mức; bán kết/chung kết: bài nộp USB đã khóa
+ * (kèm quân thứ 10 đội đăng ký khi nộp).
+ */
+const FIXED_BOT: ReadonlySet<string> = new Set(['swiss', 'tiebreak', 'semifinal', 'final']);
+const OFFLINE: ReadonlySet<string> = new Set(['semifinal', 'final']);
 interface Actor {
   id: string | null;
   requestId?: string;
@@ -195,7 +199,9 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
     const { bots } = await this.bots.botsForMatch(teamId, m.stageId);
     const sel = m.selections.find((s) => s.gameNo === m.currentNo && s.teamId === teamId) ?? null;
     let reason: string | null = null;
-    if (FIXED_BOT.has(m.kind))
+    if (OFFLINE.has(m.kind))
+      reason = 'Bán kết/chung kết: dùng bài BTC đã thu qua USB và khóa, không chọn lại trong phòng.';
+    else if (FIXED_BOT.has(m.kind))
       reason = 'Sơ loại: dùng bot đội đã chốt cho cả mức, không chọn lại giữa các hiệp/vòng.';
     else if (m.status !== 'selecting')
       reason = m.status === 'completed' ? 'Trận đã kết thúc.' : 'Chưa tới thời gian chọn cho hiệp tiếp theo.';
@@ -373,11 +379,13 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
             if (auto.has(m.teamBId) && !b?.ready) b = (await this.fallback(tx, m, m.teamBId)) ?? b;
           }
           if (!fixed && !(a?.ready && b?.ready) && !expired) return;
+          const fixedChoice = (teamId: string) =>
+            OFFLINE.has(kind) ? this.offlineChoice(tx, m, teamId) : this.levelChoice(tx, m, teamId);
           const choiceA = fixed
-            ? await this.levelChoice(tx, m, m.teamAId)
+            ? await fixedChoice(m.teamAId)
             : (a ?? (await this.fallback(tx, m, m.teamAId)));
           const choiceB = fixed
-            ? await this.levelChoice(tx, m, m.teamBId)
+            ? await fixedChoice(m.teamBId)
             : (b ?? (await this.fallback(tx, m, m.teamBId)));
           if (!choiceA || !choiceB) {
             const who = !choiceA ? m.teamAId : m.teamBId;
@@ -391,10 +399,11 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
             });
             return;
           }
-          // Tung xu độc lập từng hiệp ở loại trực tiếp; Swiss/tranh suất: xu ở ván 1, các ván sau đổi màu luân phiên.
+          // Tung xu độc lập từng hiệp ở loại trực tiếp (cả bán kết/chung kết); Swiss/tranh suất: xu ở ván 1,
+          // các ván sau đổi màu luân phiên.
           const last = [...m.games].reverse().find((g) => g.status === 'finished');
           let aBlue: boolean;
-          if (kind === 'knockout' || !last) aBlue = randomInt(2) === 0;
+          if ((kind !== 'swiss' && kind !== 'tiebreak') || !last) aBlue = randomInt(2) === 0;
           else aBlue = last.blueTeamId !== m.teamAId;
           const blueTeamId = aBlue ? m.teamAId : m.teamBId;
           const pinkTeamId = aBlue ? m.teamBId : m.teamAId;
@@ -750,6 +759,17 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
     );
   }
 
+  /** Bán kết/chung kết: bài USB đã khóa và qua kiểm tra của đội; không có thì null (trận tạm dừng, BTC xử lý). */
+  private async offlineChoice(tx: Tx, m: MatchRow, teamId: string) {
+    const c = m.pairId ? await this.competition.finalsChoice(tx, m.pairId, teamId) : null;
+    if (!c) return null;
+    return this.repo.upsertSelection(
+      tx,
+      { matchId: m.id, gameNo: m.currentNo, teamId },
+      { botVersionId: c.botVersionId, extraType: c.extraType, ready: true, auto: false },
+    );
+  }
+
   /** Tạo ván cho hiệp hiện tại: lưu tung xu, lựa chọn đã khóa, sự kiện game.created và GameJob trong cùng transaction. */
   private async createGame(
     tx: Tx,
@@ -762,11 +782,12 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
     },
   ) {
     const no = (m.games.at(-1)?.no ?? 0) + 1;
+    const rulesetId = this.competition.rulesetFor(m.kind) ?? STANDARD_RULESET_ID;
     const game = await this.rooms.createGame(tx, {
       matchId: m.id,
       roomId: m.roomId,
       no,
-      rulesetId: STANDARD_RULESET_ID,
+      rulesetId,
       seed: input.seed,
       maxPlies: DEMO_LIMITS.maxPlies,
       blueTeamId: input.blue.teamId,
@@ -795,7 +816,7 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
       streamId: streamIdOf(game.id),
       seq: 1,
       type: 'game.created',
-      payload: { gameId: game.id, rulesetId: STANDARD_RULESET_ID, coin: input.coin },
+      payload: { gameId: game.id, rulesetId, coin: input.coin },
     });
     // Bộ bot đã khóa của cả hai đội → gửi stageId để TV2 kiểm tra lại; demo chưa khóa thì không gửi.
     const [lockA, lockB] = await Promise.all([
@@ -813,7 +834,7 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
           blue: { botVersionId: input.blue.botVersionId, extraType: input.blue.extraType },
           pink: { botVersionId: input.pink.botVersionId, extraType: input.pink.extraType },
         },
-        rulesetId: STANDARD_RULESET_ID,
+        rulesetId,
         seed: input.seed,
         limits: DEMO_LIMITS,
       },

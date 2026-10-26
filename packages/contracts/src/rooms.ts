@@ -17,8 +17,25 @@ export const MoveRecord = z.object({
   to: Square,
   type: PieceType,
   capture: PieceType.nullable(),
+  /** Chung kết: quân dừng ở ô đổi loại → loại mới sau nước đi. Không có ở luật chuẩn. */
+  promoted: PieceType.optional(),
 });
 export type MoveRecord = z.infer<typeof MoveRecord>;
+
+/** Biến thể bàn cờ bán kết/chung kết để client vẽ vật cản và ô đặc biệt ở mọi nước (live và replay). */
+export const BoardVariant = z.object({
+  fixed: z.array(Square),
+  /** Vật cản động: trước nước ply+1 ở path[floor(ply / every) % path.length]. */
+  moving: z.array(z.object({ path: z.array(Square).min(1), every: z.number().int().positive() })),
+  special: z.array(z.object({ square: Square, kind: z.enum(['shield', 'swap']) })),
+});
+export type BoardVariant = z.infer<typeof BoardVariant>;
+
+/** Ô vật cản trước nước ply+1 — cùng công thức với game-engine (obstaclesAt). */
+export function variantObstacles(v: BoardVariant, ply: number): string[] {
+  const moving = v.moving.map((o) => o.path[Math.floor(ply / o.every) % o.path.length]!);
+  return [...new Set([...v.fixed, ...moving])].sort();
+}
 
 /** Kết quả tung đồng xu: do máy chủ quyết định MỘT lần và lưu trước khi chạy ván. */
 export const CoinResult = z.object({
@@ -46,7 +63,7 @@ export const RoomTeam = z.object({ id: Id, name: z.string() });
 /** Phòng của một cặp đấu TV3 có id cố định để các trang khác dẫn link mà không cần tra cứu. */
 export const pairingRoomId = (pairingId: string) => `room_p_${pairingId}`;
 
-export const MatchKind = z.enum(['demo', 'swiss', 'tiebreak', 'knockout']);
+export const MatchKind = z.enum(['demo', 'swiss', 'tiebreak', 'knockout', 'semifinal', 'final']);
 export type MatchKind = z.infer<typeof MatchKind>;
 export const MatchStatus = z.enum(['open', 'selecting', 'running', 'paused', 'completed', 'cancelled']);
 export type MatchStatus = z.infer<typeof MatchStatus>;
@@ -122,6 +139,7 @@ export const RoomSnapshot = z.object({
   board: Board,
   initialBoard: Board.optional(),
   maxPlies: z.number().int().positive().optional(),
+  variant: BoardVariant.nullable().optional(),
   turn: z.object({ side: Side, ply: z.number().int().nonnegative() }).nullable(),
   history: z.array(MoveRecord),
   result: z

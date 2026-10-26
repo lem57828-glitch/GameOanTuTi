@@ -155,5 +155,5 @@ Bot nộp bằng file hoặc dán mã chỉ dùng **đấu thử**. Muốn dự 
 
 - BTC tự động (giai đoạn 2 trong tài liệu bàn giao).
 - Nút cho BTC khóa bộ bot giai đoạn của từng đội. Hiện bộ bot khóa khi tới mốc khóa của giai đoạn (Cấu hình giải). Ở demo, bot cho mức sơ loại vẫn chốt khi BTC khóa mức.
-- Bán kết, chung kết: hệ thống dừng ở Top 4.
+- Bán kết, chung kết (offline, luật mới, nhận bài USB): xem [BAN_KET_CHUNG_KET.md](BAN_KET_CHUNG_KET.md). Ở giải tự điều hành, nút Tiếp theo đi tiếp tới vô địch (thu bài USB được giả lập).
 - Mỗi sinh viên một giải riêng.

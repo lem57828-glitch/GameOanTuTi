@@ -22,6 +22,8 @@ const KIND: Record<MatchView['kind'], string> = {
   swiss: 'Sơ loại · 2 ván đổi màu',
   tiebreak: 'Tranh suất · 2 ván (+2 ván phụ)',
   knockout: 'Loại trực tiếp · 5 hiệp (+2 hiệp phụ)',
+  semifinal: 'Bán kết · BO5 (thắng 3 ván) · luật vật cản cố định',
+  final: 'Chung kết · BO7 (thắng 4 ván) · vật cản động, ô đặc biệt',
 };
 const PIECES: PieceType[] = ['ROCK', 'PAPER', 'SCISSORS'];
 
@@ -61,17 +63,21 @@ export function MatchPanel({
   const adjudicated = m.status === 'cancelled' && m.pauseReason?.startsWith('BTC phân xử:');
   const status = adjudicated ? { label: 'BTC đã phân xử', tone: 'warning' as const } : STATUS[m.status];
   // Sơ loại: mỗi đội dùng bot đã chốt cho cả mức, không có bước chọn kín theo hiệp.
+  // Bán kết/chung kết: bot là bài BTC thu qua USB (kèm quân thứ 10 đăng ký khi nộp), cũng không chọn kín.
   const fixed = m.kind !== 'knockout';
+  const offline = m.kind === 'semifinal' || m.kind === 'final';
   return (
     <Card className="border-accent/40">
       <CardHeader
         title={`Trận · ${KIND[m.kind]}`}
         subtitle={
-          fixed
-            ? 'Sơ loại: mỗi đội dùng bot đã chốt cho cả mức, các hiệp chạy liên tục'
-            : m.status === 'selecting'
-              ? `Hiệp ${m.currentNo}: chọn kín bot${m.chooseExtra ? ' và quân thứ 10' : ''}`
-              : undefined
+          offline
+            ? 'Bot do BTC thu qua USB và đã khóa; các ván chạy liên tục, ai đủ số ván thắng trước thắng loạt'
+            : fixed
+              ? 'Sơ loại: mỗi đội dùng bot đã chốt cho cả mức, các hiệp chạy liên tục'
+              : m.status === 'selecting'
+                ? `Hiệp ${m.currentNo}: chọn kín bot${m.chooseExtra ? ' và quân thứ 10' : ''}`
+                : undefined
         }
         action={
           <Badge tone={status.tone} dot>
@@ -186,7 +192,7 @@ export function MatchPanel({
                         <SideTag side={isBlue ? 'blue' : 'pink'} className="text-xs" />
                         <span className="truncate">{name(side)}:</span>
                         <span className="text-ink-muted">{c.botLabel}</span>
-                        {m.chooseExtra && (
+                        {(m.chooseExtra || offline) && (
                           <span title={`Quân thứ 10: ${PIECE_LABEL[c.extraType]}`}>
                             {PIECE_GLYPH[c.extraType]} <span className="sr-only">Quân thứ 10: </span>
                             {PIECE_LABEL[c.extraType]}

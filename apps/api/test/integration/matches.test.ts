@@ -199,9 +199,32 @@ it('sơ loại: đội trưởng chốt một bot cho cả mức, trận Swiss c
   expect(
     (await call('acc_an', `/tournaments/${tid}/qualifier/my-bot`, 'POST', { botVersionId: other.id })).status,
   ).toBe(403);
+  // Bot GitHub đang được chọn cho mức không xóa được (tránh khóa mức lặng lẽ dùng bot dự phòng); bỏ chọn rồi mới xóa.
+  const v3 = await prisma.botVersion.create({
+    data: {
+      ...v1,
+      id: `${v1.id}_v3`,
+      version: v1.version + 2,
+      label: 'v3 GitHub',
+      sourceHash: 'c'.repeat(64),
+      isDemo: false,
+      demoPolicy: null,
+      githubRepo: 'https://github.com/example/bot',
+      commitSha: 'a'.repeat(40),
+      sourcePath: 'bot.py',
+      createdAt: new Date(),
+    },
+  });
+  expect(
+    (await call('acc_an', `/tournaments/${tid}/qualifier/my-bot`, 'POST', { botVersionId: v3.id })).status,
+  ).toBe(201);
+  const blocked = await call('acc_an', `/bots/${v3.id}`, 'DELETE');
+  expect(blocked.status).toBe(409);
+  expect(blocked.error?.message).toMatch(/đang được chọn cho .*Chọn bot khác/);
   expect(
     (await call('acc_an', `/tournaments/${tid}/qualifier/my-bot`, 'POST', { botVersionId: v1.id })).status,
   ).toBe(201);
+  expect((await call('acc_an', `/bots/${v3.id}`, 'DELETE')).status).toBe(200);
 
   // Khóa mức: bot được chốt cho cả 17 đội (đội chưa chọn: tự chốt), không đổi được nữa.
   await call('acc_admin', `/admin/tournaments/${tid}/qualifier/lock`, 'POST', reason);

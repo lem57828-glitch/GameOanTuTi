@@ -142,6 +142,20 @@ export class DemoAutopilotService {
           if (after.next.action === 'results') break; // có trận thật; vòng toàn xử thắng vắng đối thủ thì đi tiếp
         } else if (action.startsWith('confirm-phase:')) {
           await this.competition.confirmPhase(tournamentId, action.split(':')[1] as Phase, actor, reason);
+        } else if (action.startsWith('finals-')) {
+          // Bán kết/chung kết: giả lập thu bài USB (bot hợp lệ mới nhất của mỗi đội) → khóa → thi → chốt.
+          const [step, phase] = action.slice('finals-'.length).split(':') as [string, 'sf' | 'final'];
+          if (step === 'lock') {
+            await this.competition.demoCollectFinals(tournamentId, phase, actor, reason);
+            await this.competition.lockFinals(tournamentId, phase, actor, reason);
+          } else if (step === 'start') {
+            await this.competition.startFinals(tournamentId, phase, actor, reason);
+            await this.openAll(tournamentId, actor);
+            const after = await this.competition.overview(tournamentId);
+            if (after.next.action === 'results') break;
+          } else {
+            await this.competition.confirmFinals(tournamentId, phase, actor, reason);
+          }
         } else if (action === 'results') {
           // Cặp chưa mở phòng (vd. tranh suất vừa sinh) → mở; đội bạn đồng ý dùng lựa chọn mặc định → khóa ngay.
           await this.openAll(tournamentId, actor);
@@ -183,7 +197,8 @@ export class DemoAutopilotService {
     const { action, label } = c.next;
     let waiting: AutopilotView['waiting'] = null;
     const running = c.levels.find((l) => l.status === 'running');
-    const phase = c.bracket.find((r) => r.status === 'running');
+    const phase =
+      c.bracket.find((r) => r.status === 'running') ?? c.finals?.rounds.find((r) => r.status === 'running');
     if (action === 'results') {
       if (running?.roundsDetail.length) {
         const last = running.roundsDetail.at(-1)!;

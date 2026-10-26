@@ -146,3 +146,38 @@ describe('tính kết quả cặp đấu', () => {
     expect(() => evaluatePairing('knockout', ['a', 'a', 'a', 'a', 'a', 'b', 'b'], 5)).toThrow(/bằng điểm/);
   });
 });
+
+describe('thể thức loạt bán kết BO5 / chung kết BO7', () => {
+  it('dừng ngay khi một đội đủ số ván thắng; ván hòa không tính', () => {
+    expect(gamesNeeded('semifinal', ['a', 'a'])).toBe(1);
+    expect(gamesNeeded('semifinal', ['a', 'a', 'a'])).toBe(0);
+    expect(evaluatePairing('semifinal', ['a', 'b', 'a', 'a'], 1)).toMatchObject({
+      result: 'a',
+      winsA: 3,
+      winsB: 1,
+      decidedBy: 'score',
+    });
+    expect(gamesNeeded('final', ['b', null, 'b', 'b'])).toBe(1);
+    expect(evaluatePairing('final', ['b', null, 'b', 'b', 'a', 'b'], 1)).toMatchObject({ result: 'b', winsB: 4 });
+  });
+
+  it('không nhận ván sau khi đã phân định, không nhận loạt chưa phân định', () => {
+    expect(() => evaluatePairing('semifinal', ['a', 'a', 'a', 'b'], 1)).toThrow(/đã phân định sau 3 ván/);
+    expect(() => evaluatePairing('final', ['a', 'a', 'a'], 1)).toThrow(/chưa phân định/);
+  });
+
+  it('hết số ván tối đa: hơn số ván thắng thì thắng; bằng thì đấu thêm tối đa 2 ván rồi bốc thăm', () => {
+    expect(evaluatePairing('semifinal', ['a', null, null, 'b', 'a'], 1)).toMatchObject({
+      result: 'a',
+      decidedBy: 'score',
+    });
+    const tied = ['a', 'b', null, null, null] as const;
+    expect(gamesNeeded('semifinal', [...tied])).toBe(1);
+    expect(evaluatePairing('semifinal', [...tied, 'b'], 1)).toMatchObject({ result: 'b', decidedBy: 'extra' });
+    expect(gamesNeeded('semifinal', [...tied, null])).toBe(1);
+    expect(gamesNeeded('semifinal', [...tied, null, null])).toBe(0);
+    const lots = evaluatePairing('semifinal', [...tied, null, null], 42);
+    expect(lots.decidedBy).toBe('lots');
+    expect(lots.lots).toEqual({ winner: lots.result, seed: 42 });
+  });
+});

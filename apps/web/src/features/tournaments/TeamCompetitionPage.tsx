@@ -14,6 +14,7 @@ import { api, isApiError } from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { AutopilotCard } from './AutopilotCard';
 import { BracketPanel, DEMO_KIND, StandingsPanel } from './competition-ui';
+import { FinalsPanel } from './finals-ui';
 import { MyPairings } from './MyPairings';
 import { StageBotCard } from './StageBotCard';
 import { teamNextStep } from './team-competition';
@@ -186,6 +187,12 @@ export function TeamCompetitionPage() {
             <section aria-label="Nhánh loại trực tiếp">
               <h2 className="mb-4 text-xl font-bold">Nhánh 32 → 4</h2>
               <BracketPanel bracket={competition.data.bracket} top4={competition.data.top4} />
+            </section>
+          )}
+          {competition.data?.finals && (
+            <section aria-label="Bán kết và chung kết">
+              <h2 className="mb-4 text-xl font-bold">Bán kết · Chung kết (offline)</h2>
+              <FinalsPanel finals={competition.data.finals} myTeamId={own.id} />
             </section>
           )}
         </>

@@ -51,7 +51,7 @@ Giải trải nghiệm và công cụ mô phỏng nhanh cùng tồn tại trong 
 - Mỗi sinh viên có một bản sao giải riêng hoặc nhiều lượt trải nghiệm độc lập chạy đồng thời.
 - Tự động bảo đảm sinh viên thắng hoặc được vào vòng trong.
 - Thay luật, rút ngắn số hiệp hoặc tạo cây 4 đội mới chỉ phục vụ demo.
-- Bán kết/chung kết nếu chưa nằm trong phạm vi hệ thống hiện có (hiện luồng nhánh dừng ở Top 4).
+- Bán kết/chung kết offline: đã có (xem [BAN_KET_CHUNG_KET.md](BAN_KET_CHUNG_KET.md)); thể thức BO5 bán kết và bố trí vật cản là giá trị nhóm tự chọn, cần BTC xác nhận.
 - Thêm hệ thống thách đấu riêng, thiết kế lại giao diện hoặc thay kiến trúc engine/worker.
 
 Repo hiện có khái niệm giải hiện tại và đội trong giải hiện tại. Phiên bản đầu bám theo cơ chế này. Nếu cần giải riêng cho từng người, phải thiết kế lại việc chọn giải, phiên trải nghiệm và phạm vi đội; không chỉ thêm một `sessionId` ở frontend.

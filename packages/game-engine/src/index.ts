@@ -14,6 +14,10 @@ import {
 
 export const DEMO_RULESET_ID = 'demo-ottv2-0';
 export const STANDARD_RULESET_ID = 'standard-32-4';
+/** Bán kết offline: luật chuẩn + vật cản cố định. */
+export const SEMIFINAL_RULESET_ID = 'semifinal-obstacles-1';
+/** Chung kết offline: vật cản di chuyển theo số nước + ô đặc biệt (khiên, đổi loại). */
+export const FINAL_RULESET_ID = 'final-dynamic-1';
 export const COLS = 'ABCDEFGHI';
 export const SIZE = 9;
 export const STANDARD_MAX_PLIES = 200;
@@ -27,12 +31,25 @@ export const STANDARD_LIMITS = {
 const copyBoard = (board: Board): Board =>
   Object.fromEntries(Object.entries(board).map(([sq, piece]) => [sq, { ...piece }]));
 
+/** shield: quân đứng trên ô không bị ăn. swap: quân dừng ở ô đổi sang loại kế tiếp (Búa → Bao → Kéo → Búa). */
+export type SpecialKind = 'shield' | 'swap';
+
+/** Biến thể bàn cờ cho bán kết/chung kết. Mọi vị trí đối xứng tâm qua E5 để hai màu công bằng. */
+export interface ArenaVariant {
+  /** Ô vật cản cố định: không quân nào được đi vào. */
+  fixed: string[];
+  /** Vật cản động: trước nước thứ ply+1 nằm ở path[floor(ply / every) % path.length]. */
+  moving: Array<{ path: string[]; every: number }>;
+  special: Array<{ square: string; kind: SpecialKind }>;
+}
+
 export interface Ruleset {
   id: string;
   /** Loại quân của dòng → các loại nó ăn được. */
   beats: Record<PieceType, PieceType[]>;
   goals: Record<Side, string>;
   setup: Board;
+  variant?: ArenaVariant;
 }
 
 const OTHER: Record<Side, Side> = { blue: 'pink', pink: 'blue' };
@@ -142,21 +159,71 @@ export const STANDARD_RULESET: Ruleset = {
   setup: createStandardBoard('PAPER', 'PAPER'),
 };
 
+/** Bán kết: 5 vật cản cố định quanh tâm, chặn đường thẳng chéo A1–I9. */
+export const SEMIFINAL_VARIANT: ArenaVariant = {
+  fixed: ['C5', 'D6', 'E5', 'F4', 'G5'],
+  moving: [],
+  special: [],
+};
+
+/** Hai vật cản chạy vòng quanh E5, luôn ở hai ô đối xứng nhau; tiến một ô sau mỗi 6 nước. */
+const RING = ['D4', 'E4', 'F4', 'F5', 'F6', 'E6', 'D6', 'D5'];
+export const FINAL_VARIANT: ArenaVariant = {
+  fixed: ['C5', 'G5'],
+  moving: [
+    { path: RING, every: 6 },
+    { path: [...RING.slice(4), ...RING.slice(0, 4)], every: 6 },
+  ],
+  special: [
+    { square: 'E3', kind: 'shield' },
+    { square: 'E7', kind: 'shield' },
+    { square: 'B5', kind: 'swap' },
+    { square: 'H5', kind: 'swap' },
+  ],
+};
+
+const VARIANTS: Record<string, ArenaVariant> = {
+  [SEMIFINAL_RULESET_ID]: SEMIFINAL_VARIANT,
+  [FINAL_RULESET_ID]: FINAL_VARIANT,
+};
+
+/** Ruleset dùng bố trí 10 quân chuẩn, có lựa chọn quân thứ 10 (luật chuẩn và các biến thể bán kết/chung kết). */
+export const isStandardFamily = (id: string) => id === STANDARD_RULESET_ID || id in VARIANTS;
+
 export function getRuleset(
   id: string,
   choices?: { blue?: PieceType | null; pink?: PieceType | null },
 ): Ruleset {
   if (id === DEMO_RULESET_ID) return DEMO_RULESET;
-  if (id === STANDARD_RULESET_ID) {
+  if (isStandardFamily(id)) {
     const blueExtra = choices?.blue ?? 'PAPER';
     const pinkExtra = choices?.pink ?? 'PAPER';
     return {
       ...STANDARD_RULESET,
+      id,
       setup: createStandardBoard(blueExtra, pinkExtra),
+      ...(VARIANTS[id] ? { variant: VARIANTS[id] } : {}),
     };
   }
   throw new Error(`Ruleset chưa được hỗ trợ: ${id}`);
 }
+
+/** Ô bị vật cản chiếm trước nước thứ ply+1 (cố định + động), đã sắp xếp. */
+export function obstaclesAt(rules: Ruleset, ply: number): string[] {
+  const v = rules.variant;
+  if (!v) return [];
+  return [...new Set([...v.fixed, ...movingAt(rules, ply)])].sort();
+}
+
+/** Vị trí vật cản động (cũng dùng trong chữ ký thế cờ; vật cản cố định không đổi nên không cần). */
+function movingAt(rules: Ruleset, ply: number): string[] {
+  return (rules.variant?.moving ?? []).map((o) => o.path[Math.floor(ply / o.every) % o.path.length]!);
+}
+
+const specialAt = (rules: Ruleset, sq: string): SpecialKind | null =>
+  rules.variant?.special.find((x) => x.square === sq)?.kind ?? null;
+
+const SWAP_NEXT: Record<PieceType, PieceType> = { ROCK: 'PAPER', PAPER: 'SCISSORS', SCISSORS: 'ROCK' };
 
 export interface GameState {
   rulesetId: string;
@@ -186,23 +253,24 @@ export interface LegalMove {
  * Tính chữ ký duy nhất cho trạng thái bàn cờ + lượt đi (Board Signature).
  * Dùng để phát hiện lặp lại thế cờ lần thứ 3.
  */
-export function getBoardSignature(board: Board, toMove: Side): string {
+export function getBoardSignature(board: Board, toMove: Side, moving: readonly string[] = []): string {
   const pieces = Object.entries(board)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([sq, p]) => `${sq}:${p.side[0]}:${p.type[0]}`)
     .join(';');
-  return `${toMove[0]}|${pieces}`;
+  // Vật cản động là một phần của thế cờ: cùng vị trí quân nhưng vật cản khác chỗ thì không tính là lặp.
+  return moving.length ? `${toMove[0]}|${pieces}|${moving.join(',')}` : `${toMove[0]}|${pieces}`;
 }
 
 export function newGame(rules: Ruleset, maxPlies = 200): GameState {
   if (
     !Number.isInteger(maxPlies) ||
     maxPlies < 1 ||
-    maxPlies > (rules.id === STANDARD_RULESET_ID ? STANDARD_MAX_PLIES : 2000)
+    maxPlies > (isStandardFamily(rules.id) ? STANDARD_MAX_PLIES : 2000)
   )
     throw new Error('Giới hạn nước không hợp lệ.');
   const initBoard = copyBoard(BoardSchema.parse(rules.setup));
-  const sig = getBoardSignature(initBoard, 'blue');
+  const sig = getBoardSignature(initBoard, 'blue', movingAt(rules, 0));
   return {
     rulesetId: rules.id,
     board: initBoard,
@@ -226,9 +294,13 @@ const DIRS: Array<[number, number]> = [
   [1, 1],
 ];
 
-/** Nước hợp lệ: đi 1 ô theo 8 hướng, vào ô trống hoặc ăn quân đối phương bị khắc. */
+/**
+ * Nước hợp lệ: đi 1 ô theo 8 hướng, vào ô trống hoặc ăn quân đối phương bị khắc.
+ * Biến thể: không vào ô vật cản (kể cả khi vật cản động tới ô đang có quân); không ăn quân đứng trên ô khiên.
+ */
 export function legalMoves(rules: Ruleset, state: GameState, side: Side = state.toMove): LegalMove[] {
   const out: LegalMove[] = [];
+  const blocked = new Set(obstaclesAt(rules, state.ply));
   for (const [from, p] of Object.entries(state.board)) {
     if (p.side !== side) continue;
     const [c, r] = parseSquare(from)!;
@@ -237,9 +309,14 @@ export function legalMoves(rules: Ruleset, state: GameState, side: Side = state.
         nr = r + dr;
       if (nc < 0 || nr < 0 || nc >= SIZE || nr >= SIZE) continue;
       const to = square(nc, nr);
+      if (blocked.has(to)) continue;
       const target = state.board[to];
       if (!target) out.push({ from, to, capture: null });
-      else if (target.side !== side && rules.beats[p.type].includes(target.type))
+      else if (
+        target.side !== side &&
+        rules.beats[p.type].includes(target.type) &&
+        specialAt(rules, to) !== 'shield'
+      )
         out.push({ from, to, capture: target.type });
     }
   }
@@ -265,7 +342,8 @@ export function applyMove(
   const board = copyBoard(state.board);
   const piece = board[legal.from]!;
   delete board[legal.from];
-  board[legal.to] = piece;
+  const promoted = specialAt(rules, legal.to) === 'swap' ? SWAP_NEXT[piece.type] : null;
+  board[legal.to] = promoted ? { ...piece, type: promoted } : piece;
   const nextSide = otherSide(side);
 
   const record: MoveRecord = {
@@ -275,10 +353,11 @@ export function applyMove(
     to: legal.to,
     type: piece.type,
     capture: legal.capture,
+    ...(promoted ? { promoted } : {}),
   };
 
   // Tính chữ ký thế cờ và kiểm tra lặp lại lần 3
-  const currentSig = getBoardSignature(board, nextSide);
+  const currentSig = getBoardSignature(board, nextSide, movingAt(rules, state.ply + 1));
   const repHistory = [...(state.repetitionHistory ?? []), currentSig];
 
   const next: GameState = {
@@ -312,6 +391,11 @@ export function checkEnd(rules: Ruleset, state: GameState, mover: Side): GameEnd
     if (!Object.values(state.board).some((p) => p.side === opp && p.type === type))
       return { winner: mover, reason: 'eliminate' };
   }
+  // Ô đổi loại có thể làm chính bên vừa đi mất hẳn một loại quân → bên đó thua.
+  if (rules.variant)
+    for (const type of Object.keys(rules.beats) as PieceType[])
+      if (!Object.values(state.board).some((p) => p.side === mover && p.type === type))
+        return { winner: opp, reason: 'eliminate' };
 
   if (legalMoves(rules, state, opp).length === 0) return { winner: mover, reason: 'no_moves' };
 
@@ -365,6 +449,11 @@ export interface PythonBotState {
   pieces_left: Record<Side, number>;
   legal_moves: Array<{ from: string; to: string; capture: PieceType | null }>;
   last_move: MoveRecord | null;
+  /** Bán kết/chung kết: vật cản ở nước này, lịch vật cản động, ô đặc biệt. Luật chuẩn không có các trường này. */
+  obstacles?: string[];
+  fixed_obstacles?: string[];
+  moving_obstacles?: Array<{ path: string[]; every: number }>;
+  special_cells?: Array<{ square: string; kind: SpecialKind }>;
 }
 
 /**
@@ -385,6 +474,14 @@ export function toPythonState(rules: Ruleset, state: GameState, side: Side = sta
     pieces_left: countPieces(state.board),
     legal_moves: legalMoves(rules, state, side),
     last_move: state.history.length ? { ...state.history[state.history.length - 1]! } : null,
+    ...(rules.variant
+      ? {
+          obstacles: obstaclesAt(rules, state.ply),
+          fixed_obstacles: [...rules.variant.fixed],
+          moving_obstacles: rules.variant.moving.map((o) => ({ path: [...o.path], every: o.every })),
+          special_cells: rules.variant.special.map((x) => ({ ...x })),
+        }
+      : {}),
   };
 }
 

@@ -173,7 +173,60 @@ except (SyntaxError, ValueError) as e:
           input.teamId,
         )
       : { sourceCode: input.sourceCode!, githubRepo: undefined, commitSha: undefined, sourcePath: undefined };
-    const cleanCode = source.sourceCode.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+    const bot = await this.storeSource(input.teamId, source.sourceCode, {
+      label: input.label,
+      githubRepo: source.githubRepo,
+      commitSha: source.commitSha,
+      sourcePath: source.sourcePath,
+      submittedById: user.id,
+      rulesetId: STANDARD_RULESET_ID,
+    });
+
+    return BotVersion.parse({
+      id: bot.id,
+      teamId: bot.teamId,
+      version: bot.version,
+      label: bot.label,
+      sourceHash: bot.sourceHash,
+      rulesetId: bot.rulesetId,
+      status: BotVersionStatus.parse(bot.status),
+      submissionMethod: submissionMethod(bot),
+      duplicateOfId: bot.duplicateOfId,
+      createdAt: bot.createdAt.toISOString(),
+    });
+  }
+
+  /**
+   * Bán kết/chung kết offline: BTC nhập mã nguồn đọc từ USB của BTC cho một đội. Lưu thành phiên bản bot bất biến
+   * (SHA-256) theo luật của vòng, rồi kiểm tra cú pháp + chạy thử trong sandbox như bài nộp thường.
+   */
+  async submitOffline(
+    actorId: string | null,
+    input: { teamId: string; sourceCode: string; label: string; rulesetId: string },
+  ) {
+    const team = await this.repo.findTeam(input.teamId);
+    if (!team) throw notFound('Đội thi đấu');
+    return this.storeSource(input.teamId, input.sourceCode, {
+      label: input.label,
+      submittedById: actorId,
+      rulesetId: input.rulesetId,
+    });
+  }
+
+  /** Chuẩn hóa, băm, cảnh báo trùng, kiểm tra tĩnh và lưu phiên bản bot mới (đánh số tự tăng theo đội). */
+  private async storeSource(
+    teamId: string,
+    sourceCode: string,
+    meta: {
+      label: string;
+      githubRepo?: string;
+      commitSha?: string;
+      sourcePath?: string;
+      submittedById: string | null;
+      rulesetId: string;
+    },
+  ) {
+    const cleanCode = sourceCode.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
     if (cleanCode.length < 10) {
       throw validationError('Mã nguồn bot quá ngắn.');
     }
@@ -188,10 +241,10 @@ except (SyntaxError, ValueError) as e:
 
     if (existingBot) {
       duplicateOfId = existingBot.id;
-      if (existingBot.teamId !== input.teamId) {
+      if (existingBot.teamId !== teamId) {
         duplicateNote = `\n[Cảnh báo trùng lặp] Mã nguồn trùng khớp 100% với bot của đội khác (BTC sẽ kiểm tra).`;
         this.log.warn(
-          `Phát hiện trùng mã: Đội ${input.teamId} nộp trùng bot với ${existingBot.teamId} (hash: ${sourceHash})`,
+          `Phát hiện trùng mã: Đội ${teamId} nộp trùng bot với ${existingBot.teamId} (hash: ${sourceHash})`,
         );
       } else {
         duplicateNote = `\n[Cảnh báo trùng lặp] Mã nguồn trùng khớp 100% với phiên bản v${existingBot.version} của chính đội bạn.`;
@@ -206,17 +259,17 @@ except (SyntaxError, ValueError) as e:
     // Số phiên bản tự tăng theo đội
 
     const bot = await this.repo.createBotVersion({
-      teamId: input.teamId,
-      label: input.label,
+      teamId,
+      label: meta.label,
       sourceHash,
       sourceCode: cleanCode,
-      githubRepo: source.githubRepo,
-      commitSha: source.commitSha,
-      sourcePath: source.sourcePath,
-      submittedById: user.id,
+      githubRepo: meta.githubRepo,
+      commitSha: meta.commitSha,
+      sourcePath: meta.sourcePath,
+      submittedById: meta.submittedById,
       duplicateOfId,
       validationLog,
-      rulesetId: 'standard-32-4',
+      rulesetId: meta.rulesetId,
       status,
       isDemo: false,
     });
@@ -225,19 +278,7 @@ except (SyntaxError, ValueError) as e:
     this.log.log(
       `Đã tiếp nhận Bot v${bot.version} cho đội ${bot.teamId} (hash: ${bot.sourceHash.slice(0, 10)}…)`,
     );
-
-    return BotVersion.parse({
-      id: bot.id,
-      teamId: bot.teamId,
-      version: bot.version,
-      label: bot.label,
-      sourceHash: bot.sourceHash,
-      rulesetId: bot.rulesetId,
-      status: BotVersionStatus.parse(bot.status),
-      submissionMethod: submissionMethod(bot),
-      duplicateOfId: bot.duplicateOfId,
-      createdAt: bot.createdAt.toISOString(),
-    });
+    return bot;
   }
 
   /**

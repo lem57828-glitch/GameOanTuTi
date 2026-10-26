@@ -1,6 +1,6 @@
 # Demo và chính thức dùng chung code
 
-Hai môi trường dùng cùng chức năng nộp bot, đấu thử, replay, giải đấu và engine. Không copy module hoặc fork luật. Demo thêm tài khoản mẫu, dữ liệu seed và mô phỏng; chính thức dùng tài khoản thật, bot GitHub và phòng đấu thật. Tách môi trường không đồng nghĩa các phần việc còn thiếu (trọng tài xử lý sự cố, bán kết/chung kết...) đã được hoàn thành.
+Hai môi trường dùng cùng chức năng nộp bot, đấu thử, replay, giải đấu và engine. Không copy module hoặc fork luật. Demo thêm tài khoản mẫu, dữ liệu seed và mô phỏng; chính thức dùng tài khoản thật, bot GitHub và phòng đấu thật. Tách môi trường không đồng nghĩa các phần việc còn thiếu (ví dụ trọng tài xử lý sự cố) đã được hoàn thành.
 
 ## Cấu hình riêng
 
