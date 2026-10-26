@@ -45,7 +45,8 @@ export async function fetchGithubSource(
   // Private access is explicitly scoped per team; never lend a server token to arbitrary repositories.
   let allow: Record<string, string[]> = {};
   try {
-    allow = JSON.parse(process.env.GITHUB_BOT_PRIVATE_REPOS ?? '{}');
+    // Profile launcher đặt biến thiếu thành chuỗi rỗng: coi như chưa cấu hình kho riêng tư.
+    allow = JSON.parse(process.env.GITHUB_BOT_PRIVATE_REPOS?.trim() || '{}');
   } catch {
     throw validationError('BTC cần sửa cấu hình GitHub riêng tư.');
   }

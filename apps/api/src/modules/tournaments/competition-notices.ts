@@ -24,6 +24,15 @@ interface PairRow {
 }
 
 const MY_TEAM = '/tournament?tab=mine';
+const COMPETE = '/competition';
+const at = (d: Date) =>
+  d.toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+  });
 
 @Injectable()
 export class CompetitionNotices {
@@ -64,6 +73,33 @@ export class CompetitionNotices {
         title: `${level.name} đã khóa`,
         body: `${level.name} bắt đầu với ${entrants.length} đội, ${level.rounds} vòng Swiss. Bot của đội đã được chốt cho cả mức. Cặp đấu sẽ báo khi BTC ghép vòng.`,
         href: MY_TEAM,
+      })),
+    );
+  }
+
+  /** Mở chọn bot cho mức sơ loại sắp tới (lập kế hoạch, đổi giờ khóa, hoặc nhắc trước giờ khóa). */
+  async levelBot(
+    tx: Tx,
+    level: { id: string; name: string },
+    teamIds: string[],
+    botLockAt: Date | null,
+    kind: 'open' | 'lock-at' | 'remind',
+  ) {
+    const when = botLockAt ? ` trước ${at(botLockAt)}` : ' trước khi BTC khóa mức';
+    const title =
+      kind === 'remind'
+        ? `Sắp khóa bot ${level.name}${botLockAt ? ` lúc ${at(botLockAt)}` : ''}`
+        : kind === 'lock-at'
+          ? `Giờ khóa bot ${level.name}: ${botLockAt ? at(botLockAt) : 'BTC khóa bằng tay'}`
+          : `Chọn bot cho ${level.name}`;
+    await this.send(
+      tx,
+      teamIds.map((teamId) => ({
+        teamId,
+        key: `comp:level-${kind}:${level.id}:${botLockAt?.getTime() ?? 0}`,
+        title,
+        body: `Mỗi đội một bot cho mọi trận Swiss của ${level.name}. Đội trưởng chọn ở Thi đấu của đội${when}; chưa chọn thì dùng bot mặc định.`,
+        href: COMPETE,
       })),
     );
   }
@@ -155,6 +191,7 @@ export class CompetitionNotices {
     entrants: string[],
     nextLabel: string,
     finishedAt: Date,
+    nextIsLevel = false,
   ) {
     const rank = new Map(qualified.map((id, i) => [id, i + 1]));
     await this.send(
@@ -166,7 +203,7 @@ export class CompetitionNotices {
           key: `comp:level-done:${level.id}:${finishedAt.getTime()}`,
           title: r ? `Đội bạn vượt qua ${level.name}` : `Đội bạn dừng lại ở ${level.name}`,
           body: r
-            ? `Đội bạn xếp thứ ${r}/${qualified.length} suất đi tiếp và vào ${nextLabel}.`
+            ? `Đội bạn xếp thứ ${r}/${qualified.length} suất đi tiếp và vào ${nextLabel}.${nextIsLevel ? ' Đội trưởng nhớ chọn bot cho mức mới ở Thi đấu của đội.' : ''}`
             : `Đội bạn không nằm trong ${qualified.length} suất đi tiếp của ${level.name}. Cảm ơn đội đã tham gia.`,
           href: MY_TEAM,
         };

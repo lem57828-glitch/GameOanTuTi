@@ -25,6 +25,6 @@ import { TeamsController } from './teams.controller.js';
     MailService,
     NotificationsService,
   ],
-  exports: [AccountsTeamsService, SessionMiddleware, NotificationsService],
+  exports: [AccountsTeamsService, SessionMiddleware, NotificationsService, CommunityService],
 })
 export class AccountsTeamsModule {}

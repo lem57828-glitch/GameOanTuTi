@@ -14,6 +14,8 @@ import { TournamentPage } from './features/tournaments/TournamentPage';
 import { TeamCompetitionPage } from './features/tournaments/TeamCompetitionPage';
 import { RoomPage } from './features/rooms-matches/RoomPage';
 import { RoomsPage } from './features/rooms-matches/RoomsPage';
+import { LiveMatchBanner } from './features/rooms-matches/LiveMatchBanner';
+import { NotificationPopups } from './features/accounts-teams/NotificationPopups';
 import { AdminPage } from './pages/AdminPage';
 import { HomePage } from './pages/HomePage';
 import { SiteBrand, SiteHeader } from './components/SiteHeader';
@@ -107,6 +109,10 @@ function ArenaApp() {
             </Alert>
           </div>
         )}
+        <div className={isHome ? 'ba-home-alert' : undefined}>
+          <LiveMatchBanner />
+        </div>
+        <NotificationPopups />
         <WorkspaceLayout user={user} onSearch={() => setCommandsOpen(true)}>
           <Routes>
             <Route path="/" element={<HomePage />} />

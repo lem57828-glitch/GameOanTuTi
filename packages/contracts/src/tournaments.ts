@@ -260,6 +260,8 @@ export type BracketView = z.infer<typeof BracketView>;
 export const CompetitionView = z.object({
   tournamentId: Id,
   demoKind: DemoKind.nullable(),
+  /** Giải trải nghiệm tự điều hành (demo): thí sinh bấm "Tiếp theo" thay cho các bước BTC. */
+  autopilot: z.boolean(),
   avoidRematch: AvoidRematchScope,
   eligibleTeams: Count,
   suggestedTargets: z.array(Count),
@@ -313,3 +315,22 @@ export const LevelBotView = z.object({
   reason: z.string().nullable(),
 });
 export type LevelBotView = z.infer<typeof LevelBotView>;
+
+/** Demo một thí sinh: bấm "Tiếp theo" để máy chủ làm bước BTC kế tiếp (trận vẫn do worker chạy bot thật). */
+export const AutopilotAdvanceRequest = z
+  .object({ useDefault: z.boolean().optional() })
+  .strict();
+export type AutopilotAdvanceRequest = z.infer<typeof AutopilotAdvanceRequest>;
+export const AutopilotView = z.object({
+  enabled: z.boolean(),
+  /** Bước BTC kế tiếp, ví dụ "Ghép vòng 2/3 — Mức 1". */
+  step: z.string(),
+  /** Các cặp của lượt đang thi (null khi không có trận đang chờ). */
+  waiting: z.object({ done: Count, total: Count }).nullable(),
+  /** Phòng loại trực tiếp đội bạn cần chọn kín bot và quân thứ 10. */
+  needsChoice: z.array(z.object({ roomId: z.string(), title: z.string() })),
+  canAdvance: z.boolean(),
+  done: z.boolean(),
+  message: z.string().nullable(),
+});
+export type AutopilotView = z.infer<typeof AutopilotView>;

@@ -60,7 +60,7 @@ export class AccountsTeamsRepository {
   listTournamentTeams(tournamentId: string) {
     return this.prisma.team.findMany({
       where: { tournamentId },
-      select: { id: true, name: true, status: true, captainId: true },
+      select: { id: true, name: true, status: true, captainId: true, isDemo: true },
       orderBy: { createdAt: 'asc' },
     });
   }

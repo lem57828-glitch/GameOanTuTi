@@ -19,6 +19,29 @@ BTC chọn loại khi tạo giải (**Khu vực BTC → Cấu hình giải → L
 
 ---
 
+## Cách nhanh nhất: một thí sinh, BTC tự động
+
+Dành cho người chấm hoặc người xem chỉ có một tài khoản và ít thời gian. **Không cần đăng nhập BTC**: thí sinh bấm **Tiếp theo**, hệ thống tự làm các bước BTC (lập kế hoạch, khóa mức, ghép vòng, mở phòng, xác nhận, chốt mức, sang loại trực tiếp). Mọi trận vẫn do worker chạy bot Python thật; không có kết quả mô phỏng.
+
+```powershell
+pnpm demo:experience -- --solo     # 1 đội thí sinh + 7 đội đối thủ, đã duyệt, có bot GitHub
+pnpm dev:demo                      # nếu chưa bật
+```
+
+1. Mở `http://localhost:5173/demo-login`, chọn **Thí sinh demo (BTC tự động) · tour_solo** (mỗi giải solo một tài khoản, tên kèm mã giải).
+2. Vào **Thi đấu của đội**. Khung **Bản demo một thí sinh** hiện bước kế tiếp. Lần đầu có thể phải đợi khoảng nửa phút để worker kiểm thử bot.
+3. Bấm **Tiếp theo →**. Các trận Swiss chạy ngay; thanh tiến độ cho biết bao nhiêu cặp đã xong. Trong lúc chờ có thể **Vào phòng** xem trực tiếp hoặc xem lại từng ván.
+4. Xong lượt thì nút sáng lại: bấm **Tiếp theo** để BTC tự xác nhận vòng và ghép vòng sau. Ba vòng Swiss, mỗi vòng khoảng 1 phút.
+5. Sau Mức 1 hệ thống lập cây 32 đội. Vòng 32 và Vòng 16 là xử thắng vì vắng đối thủ; **tứ kết có trận thật**.
+6. Ở tứ kết, bấm Tiếp theo là vào thẳng phòng. Mỗi hiệp đội bạn chọn kín bot và quân thứ 10 trong phòng, hoặc bấm **Dùng lựa chọn mặc định** ở trang Thi đấu của đội. Đội đối thủ (đội mẫu) tự dùng lựa chọn mặc định. Ở trang khác, dải thông báo phía trên báo hiệp nào đang chờ chọn, còn bao lâu; hộp "tự vào phòng sau 5 giây" hiện khi tới lượt đội.
+7. Chốt tứ kết thì có **Top 4**. Cả buổi khoảng 6–8 phút.
+
+Bảng xếp hạng và cây 32 → 4 nằm ngay dưới phần Trận đấu của trang Thi đấu của đội (liên kết **Xem bảng xếp hạng ↓** trong khung). Thông báo mới (ghép cặp, phòng mở, mỗi hiệp mở chọn, kết quả) bật lên góc màn hình và vẫn nằm trong mục Thông báo.
+
+Chơi lại cùng giải: đăng nhập **BTC Demo** → Điều hành thi đấu → chọn giải → **Bắt đầu lại phần thi đấu** (giữ đội, bot, chế độ tự động). Hoặc tạo giải mới bằng `--id`. Chỉ giải mở mới nhất là "giải hiện tại", nên dùng tài khoản của giải tạo gần nhất.
+
+Chế độ này chỉ bật ở demo, cho giải trải nghiệm có cờ tự điều hành (do lệnh `--solo` đặt). Thao tác BTC được ghi nhật ký với người làm là "hệ thống". Bản chính thức không có nút này. Muốn chạy lại từ đầu: `pnpm demo:experience -- --solo --id tour_solo_lan2`.
+
 ## 2. Chuẩn bị (làm một lần)
 
 Mở Docker Desktop, rồi ở thư mục dự án:

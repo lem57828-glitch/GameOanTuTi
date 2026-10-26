@@ -119,8 +119,9 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
     if (this.timer) clearInterval(this.timer);
   }
 
-  /** Tới mốc khóa bot của mức kế tiếp thì tự khóa (không phụ thuộc đồng hồ trình duyệt). */
+  /** Tới mốc khóa bot của mức kế tiếp thì tự khóa (không phụ thuộc đồng hồ trình duyệt); nhắc trước 1 giờ. */
   async tick(now = new Date()): Promise<void> {
+    await this.remindLevelBots(now).catch((e: Error) => this.log.warn(`Nhắc chọn bot: ${e.message}`));
     for (const due of await this.repo.dueLevels(now)) {
       try {
         await this.lockNextLevel(due.tournamentId, { id: null }, 'Tự khóa theo mốc khóa bot', true);
@@ -137,6 +138,24 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
     }
   }
 
+  /** Mức sắp tới giờ khóa bot (trong 1 giờ): nhắc các đội sẽ vào mức chọn bot. Mỗi mốc chỉ nhắc một lần. */
+  private async remindLevelBots(now: Date) {
+    for (const l of await this.repo.levelsLockingSoon(now, new Date(now.getTime() + 3_600_000))) {
+      const teamIds = await this.levelCandidates(l.tournamentId, l.ord);
+      await this.repo.run((tx) => this.notices.levelBot(tx, l, teamIds, l.botLockAt, 'remind'));
+    }
+  }
+
+  /** Đội sẽ vào mức: mức 1 = các đội đã duyệt; mức sau = đội đi tiếp của mức trước (bỏ đội đã rút). */
+  private async levelCandidates(tournamentId: string, ord: number): Promise<string[]> {
+    const teams = await this.accounts.tournamentTeams(tournamentId);
+    if (ord === 1) return teams.filter((x) => ELIGIBLE_TEAM.includes(x.status)).map((x) => x.id);
+    const t = await this.repo.findTournament(tournamentId);
+    const prev = t?.levels.find((x) => x.ord === ord - 1);
+    const withdrawn = new Set(teams.filter((x) => x.status === 'withdrawn').map((x) => x.id));
+    return ids(prev?.qualified ?? null).filter((id) => !withdrawn.has(id));
+  }
+
   // ================================================================== đọc
 
   async overview(tournamentId: string): Promise<CompetitionView> {
@@ -149,6 +168,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
     return {
       tournamentId: t.id,
       demoKind: t.demoKind === 'experience' || t.demoKind === 'simulation' ? t.demoKind : null,
+      autopilot: t.autopilot && t.demoKind === 'experience',
       avoidRematch: t.avoidRematch === 'qualifier' ? 'qualifier' : 'level',
       eligibleTeams: ctx.teams.filter((x) => ELIGIBLE_TEAM.includes(x.status)).length,
       suggestedTargets: suggestTargets(
@@ -332,6 +352,20 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
     }
   }
 
+  /**
+   * TV4: đội do hệ thống cầm ở giải trải nghiệm tự điều hành (đội mẫu, không có người điều khiển). Ở loại trực tiếp
+   * các đội này tự dùng lựa chọn mặc định (ghi auto) để trận không phải chờ hết hạn chọn.
+   */
+  async systemTeams(pairingId: string): Promise<Set<string>> {
+    const p = await this.repo.findPairing(pairingId);
+    const t = p && (await this.repo.findTournament(p.tournamentId));
+    if (!p || !t?.autopilot || t.demoKind !== 'experience') return new Set();
+    const teams = await this.accounts.tournamentTeams(t.id);
+    return new Set(
+      teams.filter((x) => x.isDemo && (x.id === p.teamAId || x.id === p.teamBId)).map((x) => x.id),
+    );
+  }
+
   /** TV4: bot đã chốt của đội cho mức chứa cặp đấu (Swiss/tranh suất); null nếu không có. */
   async levelBotFor(tx: Tx, pairingId: string, teamId: string): Promise<string | null> {
     const p = await this.repo.findPairing(pairingId, tx);
@@ -424,8 +458,9 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
       const rounds = Array.isArray(input.rounds) ? input.rounds : targets.map(() => input.rounds as number);
       if (rounds.length !== targets.length) throw invalid('Số phần tử của số vòng phải bằng số mức.');
       await tx.qualifierLevel.deleteMany({ where: { tournamentId } });
+      let first: { id: string; name: string } | null = null;
       for (let i = 0; i < targets.length; i++) {
-        await tx.qualifierLevel.create({
+        const created = await tx.qualifierLevel.create({
           data: {
             tournamentId,
             ord: i + 1,
@@ -434,8 +469,11 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
             rounds: rounds[i]!,
           },
         });
+        first ??= created;
       }
       await tx.tournament.update({ where: { id: tournamentId }, data: { avoidRematch: input.avoidRematch } });
+      if (first)
+        await this.notices.levelBot(tx, first, await this.levelCandidates(tournamentId, 1), null, 'open');
       return { targets, rounds, avoidRematch: input.avoidRematch };
     });
   }
@@ -462,6 +500,10 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
       const pub = data.publishAt !== undefined ? (data.publishAt as Date | null) : l.publishAt;
       if (lock && pub && pub <= lock) throw invalid('Mốc công bố phải sau mốc khóa bot.');
       await tx.qualifierLevel.update({ where: { id: l.id }, data });
+      // Mức kế tiếp đổi giờ khóa bot: báo các đội sẽ vào mức.
+      const nextPlanned = t.levels.find((x) => x.status === 'planned');
+      if (input.botLockAt !== undefined && nextPlanned?.id === l.id)
+        await this.notices.levelBot(tx, l, await this.levelCandidates(tournamentId, ord), lock, 'lock-at');
       return { level: ord };
     });
   }
@@ -1303,6 +1345,7 @@ export class CompetitionService implements OnApplicationBootstrap, OnModuleDestr
       ids(L.entrants),
       nextLevel?.name ?? (lastLevel?.id === L.id ? 'nhánh loại trực tiếp 32 đội' : 'mức sau'),
       finishedAt,
+      !!nextLevel,
     );
     if (lastLevel?.id === L.id) await this.buildBracket(tx, tournamentId, qualified);
   }

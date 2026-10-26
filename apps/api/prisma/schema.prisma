@@ -185,6 +185,8 @@ model Tournament {
   /// Loại giải demo: experience (trải nghiệm, kết quả chỉ từ worker chạy bot) | simulation (mô phỏng nhanh).
   /// Null với giải không phải demo. Không thay cho kiểm tra DEMO_MODE.
   demoKind             String?
+  /// Chỉ giải trải nghiệm ở demo: máy chủ làm thay các bước BTC khi thí sinh bấm "Tiếp theo".
+  autopilot            Boolean   @default(false)
   description          String    @default("")
   configStatus         String    @default("draft")
   revision             Int       @default(0)

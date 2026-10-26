@@ -32,6 +32,7 @@ import { AppError, conflict, forbidden, notFound } from '../../core/errors.js';
 import { parse } from '../../core/http.js';
 import { PrismaService, type Tx } from '../../core/prisma.service.js';
 import { AccountsTeamsService } from '../accounts-teams/accounts-teams.service.js';
+import { NotificationsService } from '../accounts-teams/notifications.service.js';
 import { BotsRunnerService, DEMO_LIMITS } from '../bots-runner/bots-runner.service.js';
 import { CompetitionService } from '../tournaments/competition.service.js';
 import { MatchesRepository, type MatchRow } from './matches.repository.js';
@@ -70,6 +71,7 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly bots: BotsRunnerService,
     private readonly competition: CompetitionService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
     @Inject(APP_CONFIG) private readonly cfg: AppConfig,
   ) {}
 
@@ -161,6 +163,7 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
         },
       });
       await this.competition.attachMatch(tx, pairingId, match.id);
+      if (!FIXED_BOT.has(kind)) await this.notifySelection(tx, match, a.title, 1);
       await this.audit.record(
         {
           actorId: actor.id,
@@ -359,10 +362,16 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
         const kind = m.kind as Kind;
         if (m.status === 'selecting') {
           const sels = m.selections.filter((s) => s.gameNo === m.currentNo);
-          const a = sels.find((s) => s.teamId === m.teamAId);
-          const b = sels.find((s) => s.teamId === m.teamBId);
+          let a = sels.find((s) => s.teamId === m.teamAId);
+          let b = sels.find((s) => s.teamId === m.teamBId);
           const expired = !!m.deadlineAt && m.deadlineAt <= new Date();
           const fixed = FIXED_BOT.has(kind);
+          // Giải trải nghiệm tự điều hành: đội mẫu (không người điều khiển) dùng lựa chọn mặc định ngay.
+          if (!fixed && m.pairId) {
+            const auto = await this.competition.systemTeams(m.pairId);
+            if (auto.has(m.teamAId) && !a?.ready) a = (await this.fallback(tx, m, m.teamAId)) ?? a;
+            if (auto.has(m.teamBId) && !b?.ready) b = (await this.fallback(tx, m, m.teamBId)) ?? b;
+          }
           if (!fixed && !(a?.ready && b?.ready) && !expired) return;
           const choiceA = fixed
             ? await this.levelChoice(tx, m, m.teamAId)
@@ -453,9 +462,15 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
                 deadlineAt: this.deadline(),
               },
             });
+            if (!FIXED_BOT.has(kind) && m.pairId) {
+              const title = (await this.competition.assignment(m.pairId)).title;
+              await this.notifySelection(tx, m, title, m.currentNo + 1);
+            }
             await tx.room.update({ where: { id: m.roomId }, data: { status: 'waiting' } });
-            // Sơ loại không có bước chọn: tạo hiệp kế tiếp ngay trong lượt xử lý này.
-            nextNow = FIXED_BOT.has(kind);
+            // Sơ loại không có bước chọn: tạo hiệp kế tiếp ngay. Giải tự điều hành: đội mẫu chọn ngay (trận hai đội
+            // mẫu chạy tiếp luôn, không chờ hết hạn chọn).
+            nextNow =
+              FIXED_BOT.has(kind) || (!!m.pairId && (await this.competition.systemTeams(m.pairId)).size > 0);
             return;
           }
           await tx.match.update({
@@ -691,6 +706,35 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
       tx,
       { matchId: m.id, gameNo: m.currentNo, teamId },
       { botVersionId, extraType: prev?.extraType ?? 'PAPER', ready: true, auto: true },
+    );
+  }
+
+  /** Loại trực tiếp: báo thành viên hai đội mở chọn kín hiệp `no` (mỗi hiệp một lần); đội mẫu không có thành viên. */
+  private async notifySelection(
+    tx: Tx,
+    m: { id: string; roomId: string; teamAId: string | null; teamBId: string | null },
+    pairingTitle: string,
+    no: number,
+  ) {
+    const teams = [m.teamAId, m.teamBId].filter((x): x is string => !!x);
+    const members = await tx.membership.findMany({
+      where: { teamId: { in: teams } },
+      select: { accountId: true },
+    });
+    if (!members.length) return;
+    const stage = pairingTitle.split(' · ')[0] ?? 'Loại trực tiếp';
+    const deadline = new Date(Date.now() + this.cfg.matchSelectSeconds * 1000).toLocaleTimeString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    await this.notifications.deliver(
+      tx,
+      members.map((x) => x.accountId),
+      `match:select:${m.id}:${no}`,
+      `${stage} · Hiệp ${no}: chọn bot và quân thứ 10`,
+      `Đội trưởng chọn kín trong phòng trước ${deadline}. Hết hạn chưa chọn, hệ thống dùng lựa chọn mặc định.`,
+      `/rooms/${m.roomId}`,
     );
   }
 

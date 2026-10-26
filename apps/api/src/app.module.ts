@@ -9,6 +9,7 @@ import { SessionMiddleware } from './modules/accounts-teams/session.middleware.j
 import { BotsRunnerModule } from './modules/bots-runner/bots-runner.module.js';
 import { RoomsMatchesModule } from './modules/rooms-matches/rooms-matches.module.js';
 import { CompetitionModule } from './modules/tournaments/competition.module.js';
+import { DemoAutopilotModule } from './modules/demo-autopilot/demo-autopilot.module.js';
 import { TournamentsModule } from './modules/tournaments/tournaments.module.js';
 import { HealthController } from './system/health.controller.js';
 import { OpenApiController } from './system/openapi.js';
@@ -21,6 +22,7 @@ import { OpenApiController } from './system/openapi.js';
     BotsRunnerModule,
     RoomsMatchesModule,
     CompetitionModule,
+    DemoAutopilotModule,
   ],
   controllers: [HealthController, OpenApiController],
   providers: [

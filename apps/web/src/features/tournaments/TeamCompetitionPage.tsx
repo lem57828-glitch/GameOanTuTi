@@ -3,10 +3,17 @@ import { LoadingState } from '@arena/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Alert, Badge, Button, Card, CardHeader, EmptyState } from '@arena/ui';
-import type { MyPairingView, StandingsView, TeamView, TournamentView } from '@arena/contracts';
+import type {
+  CompetitionView,
+  MyPairingView,
+  StandingsView,
+  TeamView,
+  TournamentView,
+} from '@arena/contracts';
 import { api, isApiError } from '../../lib/api';
 import { useSession } from '../../lib/session';
-import { DEMO_KIND } from './competition-ui';
+import { AutopilotCard } from './AutopilotCard';
+import { BracketPanel, DEMO_KIND, StandingsPanel } from './competition-ui';
 import { MyPairings } from './MyPairings';
 import { StageBotCard } from './StageBotCard';
 import { teamNextStep } from './team-competition';
@@ -39,6 +46,13 @@ export function TeamCompetitionPage() {
     queryFn: () => api<StandingsView>(`/tournaments/${t!.id}/standings`),
     enabled: !!own && own.tournamentId === t?.id,
     refetchInterval: 10000,
+  });
+  // Mức, cây đấu cho bảng xếp hạng / nhánh; giải trải nghiệm tự điều hành: nút "Tiếp theo" thay cho BTC.
+  const competition = useQuery({
+    queryKey: ['competition', t?.id],
+    queryFn: () => api<CompetitionView>(`/tournaments/${t!.id}/competition`),
+    enabled: !!t && !!own && own.tournamentId === t.id,
+    refetchInterval: 10_000,
   });
   if (isLoading) return <LoadingState label="Kiểm tra phiên đăng nhập" />;
   if (error)
@@ -79,6 +93,9 @@ export function TeamCompetitionPage() {
           </p>
         )}
       </FeatureHero>
+      {t && competition.data?.autopilot && own?.tournamentId === t.id && (
+        <AutopilotCard tournamentId={t.id} />
+      )}
       {(team.isLoading || tournament.isLoading || pairings.isLoading) && (
         <LoadingState label="Đang tải trạng thái thi đấu" />
       )}
@@ -134,6 +151,12 @@ export function TeamCompetitionPage() {
           </Button>
         </>
       )}
+      {own && t && own.tournamentId && own.tournamentId !== t.id && (
+        <Alert tone="warning" title="Đội của bạn không thuộc giải đang mở">
+          {own.name} đăng ký giải khác ({own.tournamentId}), còn giải hiện tại là {t.name}. Trang này chỉ
+          hiện trận đấu của giải hiện tại. Ở môi trường demo, hãy đăng xuất và chọn tài khoản của giải {t.id}.
+        </Alert>
+      )}
       {own && t && own.tournamentId === t.id && own.status !== 'withdrawn' && (
         <>
           <Card>
@@ -155,6 +178,16 @@ export function TeamCompetitionPage() {
             <h2 className="mb-4 text-xl font-bold">Trận đấu và kết quả</h2>
             <MyPairings tournamentId={t.id} />
           </section>
+          <section id="bang-xep-hang" aria-label="Bảng xếp hạng" className="scroll-mt-6">
+            <h2 className="mb-4 text-xl font-bold">Bảng xếp hạng</h2>
+            <StandingsPanel tournamentId={t.id} levels={competition.data?.levels ?? []} />
+          </section>
+          {competition.data?.bracket.some((r) => r.status !== 'pending') && (
+            <section aria-label="Nhánh loại trực tiếp">
+              <h2 className="mb-4 text-xl font-bold">Nhánh 32 → 4</h2>
+              <BracketPanel bracket={competition.data.bracket} top4={competition.data.top4} />
+            </section>
+          )}
         </>
       )}
       <Card>

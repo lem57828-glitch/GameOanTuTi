@@ -176,7 +176,8 @@ export class CommunityService {
       members: t.members.map((m) => ({ accountId: m.accountId, displayName: m.account.displayName })),
     }));
   }
-  async updateTeam(user: SessionUser, id: string, input: z.infer<typeof AdminTeamRequest>) {
+  /** `user` null = hệ thống (BTC tự động của giải trải nghiệm ở demo); vẫn áp dụng đủ luật duyệt đội. */
+  async updateTeam(user: SessionUser | null, id: string, input: z.infer<typeof AdminTeamRequest>) {
     await this.db.$transaction(async (tx) => {
       const initial = await tx.team.findUnique({ where: { id } });
       if (!initial) throw notFound('đội');
@@ -204,7 +205,7 @@ export class CommunityService {
       await tx.team.update({ where: { id }, data: { status: input.status } });
       await tx.auditLog.create({
         data: {
-          actorId: user.id,
+          actorId: user?.id ?? null,
           action: 'team.admin.update',
           target: id,
           reason: input.reason,

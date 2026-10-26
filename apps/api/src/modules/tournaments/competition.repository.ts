@@ -42,6 +42,23 @@ export class CompetitionRepository {
     });
   }
 
+  /** Transaction ngắn không khóa giải (vd. ghi thông báo nhắc lịch). */
+  run<T>(fn: (tx: Tx) => Promise<T>) {
+    return this.prisma.$transaction(fn);
+  }
+
+  /** Mức còn "planned" có mốc khóa bot trong khoảng (from, to] — để nhắc đội chọn bot. */
+  levelsLockingSoon(from: Date, to: Date) {
+    return this.prisma.qualifierLevel.findMany({
+      where: {
+        status: 'planned',
+        botLockAt: { gt: from, lte: to },
+        tournament: { status: { in: ['registration', 'running'] } },
+      },
+      orderBy: { ord: 'asc' },
+    });
+  }
+
   levelBots(where: Prisma.LevelBotWhereInput, tx: Tx = this.prisma) {
     return tx.levelBot.findMany({ where });
   }

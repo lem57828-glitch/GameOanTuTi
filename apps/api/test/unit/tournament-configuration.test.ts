@@ -12,6 +12,7 @@ const row = (): TournamentRow => ({
   status: 'draft',
   isDemo: false,
   demoKind: null,
+  autopilot: false,
   description: '',
   configStatus: 'draft',
   revision: 0,

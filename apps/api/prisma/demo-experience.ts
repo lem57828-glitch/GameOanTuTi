@@ -2,6 +2,7 @@
 //
 //   pnpm demo:experience                    # 3 đội đối thủ (cộng đội của sinh viên = 4 đội Swiss)
 //   pnpm demo:experience -- --opponents 7   # 7 đối thủ: cộng đội sinh viên = 8 đội → tứ kết có trận thật
+//   pnpm demo:experience -- --solo          # một thí sinh, không cần BTC: đội + bot dựng sẵn, bấm "Tiếp theo"
 //
 // Tạo (hoặc cập nhật, chạy lại an toàn):
 //   - Giải demo loại "experience", đã công bố, đang mở đăng ký; 2 giai đoạn đã duyệt.
@@ -28,12 +29,16 @@ const flag = (name: string) => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const OPPONENTS = Number(flag('opponents') ?? 3);
+// --solo: giải tự điều hành cho một người xem (người chấm): đội thí sinh đã duyệt, có bot GitHub; BTC tự động.
+const SOLO = args.includes('--solo');
+const OPPONENTS = Number(flag('opponents') ?? (SOLO ? 7 : 3));
 if (!Number.isInteger(OPPONENTS) || OPPONENTS < 1 || OPPONENTS > 15)
   throw new Error('--opponents phải là số nguyên 1–15.');
-const TID = flag('id') ?? 'tour_experience';
+const TID = flag('id') ?? (SOLO ? 'tour_solo' : 'tour_experience');
 if (!/^[a-z0-9_]{3,40}$/.test(TID)) throw new Error('--id chỉ gồm chữ thường, số, gạch dưới (3–40 ký tự).');
-const NAME = flag('name') ?? 'Giải trải nghiệm Bot Arena';
+// Tên kèm mã giải để phân biệt các giải demo (giải mở mới nhất là "giải hiện tại").
+const NAME =
+  flag('name') ?? (SOLO ? `Giải trải nghiệm · một thí sinh (${TID})` : `Giải trải nghiệm Bot Arena (${TID})`);
 
 // Repo công khai của dự án và commit đã chứa các bot mẫu (examples/bots, apps/api/prisma/sample-bots).
 const REPO = 'https://github.com/lem57828-glitch/GameOanTuTi';
@@ -70,7 +75,12 @@ const prisma = new PrismaClient();
 const root = join(process.cwd(), '..', '..');
 /** Cùng cách chuẩn hóa tên đội của TV1 (bỏ dấu, chữ thường) để chống trùng tên trong giải. */
 const teamKey = (s: string) =>
-  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 
 const BOM = String.fromCharCode(0xfeff);
 
@@ -83,6 +93,44 @@ function sourceAt(path: string): string {
       `Không đọc được ${path} ở commit ${COMMIT.slice(0, 7)}. Cần git và lịch sử repo (git fetch).`,
     );
   }
+}
+
+/** Bot GitHub thật (repo dự án, commit cố định): "pending" + sự kiện outbox như nộp qua web → worker kiểm tra. */
+async function githubBot(
+  botId: string,
+  teamId: string,
+  accountId: string,
+  src: { path: string; label: string },
+) {
+  if (await prisma.botVersion.findUnique({ where: { id: botId } })) return false;
+  const code = sourceAt(src.path);
+  await prisma.$transaction(async (tx) => {
+    await tx.botVersion.create({
+      data: {
+        id: botId,
+        teamId,
+        version: 1,
+        label: `${src.label} (GitHub ${COMMIT.slice(0, 7)})`,
+        sourceHash: createHash('sha256').update(code).digest('hex'),
+        sourceCode: code,
+        githubRepo: REPO,
+        commitSha: COMMIT,
+        sourcePath: src.path,
+        submittedById: accountId,
+        rulesetId: 'standard-32-4',
+        status: 'pending',
+        isDemo: false,
+      },
+    });
+    await tx.outboxEvent.create({
+      data: {
+        type: 'bot.validation.requested',
+        aggregateId: botId,
+        payload: { jobId: botId, requestKey: `validation:${botId}`, kind: 'validate_bot' },
+      },
+    });
+  });
+  return true;
 }
 
 async function main() {
@@ -105,7 +153,11 @@ async function main() {
   };
   await prisma.tournament.upsert({
     where: { id: TID },
-    update: { name: NAME, ...(existing?.status === 'draft' ? { status: 'registration' } : {}) },
+    update: {
+      name: NAME,
+      autopilot: SOLO,
+      ...(existing?.status === 'draft' ? { status: 'registration' } : {}),
+    },
     create: {
       id: TID,
       name: NAME,
@@ -115,6 +167,7 @@ async function main() {
       configStatus: 'confirmed',
       isDemo: true,
       demoKind: 'experience',
+      autopilot: SOLO,
       ...dates,
     },
   });
@@ -171,37 +224,7 @@ async function main() {
 
     const src = BOT_SOURCES[i % BOT_SOURCES.length]!;
     const botId = `${teamId}_bot`;
-    if (!(await prisma.botVersion.findUnique({ where: { id: botId } }))) {
-      const code = sourceAt(src.path);
-      await prisma.$transaction(async (tx) => {
-        await tx.botVersion.create({
-          data: {
-            id: botId,
-            teamId,
-            version: 1,
-            label: `${src.label} (GitHub ${COMMIT.slice(0, 7)})`,
-            sourceHash: createHash('sha256').update(code).digest('hex'),
-            sourceCode: code,
-            githubRepo: REPO,
-            commitSha: COMMIT,
-            sourcePath: src.path,
-            submittedById: accountId,
-            rulesetId: 'standard-32-4',
-            status: 'pending',
-            isDemo: false,
-          },
-        });
-        // Giống nộp bot qua web: worker kiểm tra hợp lệ trong sandbox rồi mới chuyển "valid".
-        await tx.outboxEvent.create({
-          data: {
-            type: 'bot.validation.requested',
-            aggregateId: botId,
-            payload: { jobId: botId, requestKey: `validation:${botId}`, kind: 'validate_bot' },
-          },
-        });
-      });
-      created.push(`${name}: ${src.path}`);
-    }
+    if (await githubBot(botId, teamId, accountId, src)) created.push(`${name}: ${src.path}`);
     for (const stage of stages) {
       await prisma.botStageSelection.upsert({
         where: { teamId_stageId: { teamId, stageId: stage.id } },
@@ -216,26 +239,75 @@ async function main() {
       tournamentId: TID,
       id: {
         startsWith: `${TID}_doi_`,
-        notIn: Array.from({ length: OPPONENTS }, (_, i) => `${TID}_doi_${i + 1}`),
+        notIn: [...Array.from({ length: OPPONENTS }, (_, i) => `${TID}_doi_${i + 1}`), `${TID}_doi_sv`],
       },
       status: { not: 'withdrawn' },
     },
     data: { status: 'withdrawn' },
   });
 
-  // 3) Sinh viên mẫu chưa có đội: tự lập đội, đăng ký giải, nộp bot (đội trưởng) / tham gia bằng mã (thành viên).
-  for (const [n, label] of [
-    [1, 'Sinh viên trải nghiệm (đội trưởng)'],
-    [2, 'Sinh viên trải nghiệm (thành viên)'],
-  ] as const) {
+  // 3a) --solo: thí sinh đã có đội được duyệt (đội thật, không phải đội mẫu) + bot GitHub tinh_truoc.py + bộ bot.
+  if (SOLO) {
+    const accountId = `${TID}_sv`;
+    const teamId = `${TID}_doi_sv`;
+    const name = `Đội Thí Sinh Demo · ${TID}`;
+    // Mỗi giải solo một tài khoản: ghi mã giải vào tên để phân biệt ở /demo-login.
+    const displayName = `Thí sinh demo (BTC tự động) · ${TID}`;
+    await prisma.account.upsert({
+      where: { id: accountId },
+      update: { displayName },
+      create: {
+        id: accountId,
+        username: accountId,
+        email: `${accountId}@demo.bot-arena.local`,
+        displayName,
+        role: 'student',
+        isDemo: true,
+        emailVerifiedAt: new Date(),
+      },
+    });
+    await prisma.team.upsert({
+      where: { id: teamId },
+      update: { status: 'approved', name, nameKey: teamKey(name) },
+      create: {
+        id: teamId,
+        tournamentId: TID,
+        name,
+        nameKey: teamKey(name),
+        captainId: accountId,
+        status: 'approved',
+      },
+    });
+    await prisma.membership.upsert({
+      where: { teamId_accountId: { teamId, accountId } },
+      update: {},
+      create: { teamId, accountId, tournamentId: TID },
+    });
+    const botId = `${teamId}_bot`;
+    await githubBot(botId, teamId, accountId, { path: 'examples/bots/tinh_truoc.py', label: 'Tính trước' });
+    for (const stage of stages)
+      await prisma.botStageSelection.upsert({
+        where: { teamId_stageId: { teamId, stageId: stage.id } },
+        update: {},
+        create: { teamId, stageId: stage.id, botVersionIds: [botId], locked: false },
+      });
+  }
+
+  // 3b) Sinh viên mẫu chưa có đội: tự lập đội, đăng ký giải, nộp bot (đội trưởng) / tham gia bằng mã (thành viên).
+  for (const [n, label] of SOLO
+    ? []
+    : ([
+        [1, 'Sinh viên trải nghiệm (đội trưởng)'],
+        [2, 'Sinh viên trải nghiệm (thành viên)'],
+      ] as const)) {
     await prisma.account.upsert({
       where: { id: `${TID}_sv${n}` },
-      update: {},
+      update: { displayName: `${label} · ${TID}` },
       create: {
         id: `${TID}_sv${n}`,
         username: `${TID}_sv${n}`,
         email: `${TID}_sv${n}@demo.bot-arena.local`,
-        displayName: label,
+        displayName: `${label} · ${TID}`,
         role: 'student',
         isDemo: true,
         emailVerifiedAt: new Date(),
@@ -246,9 +318,16 @@ async function main() {
   const teams = await prisma.team.count({
     where: { tournamentId: TID, status: { in: ['approved', 'locked'] } },
   });
-  console.log(`Giải trải nghiệm: ${NAME} (${TID}) — ${teams} đội đối thủ đã duyệt.`);
+  console.log(`Giải trải nghiệm: ${NAME} (${TID}) — ${teams} đội đã duyệt.`);
   if (created.length) console.log(`Bot GitHub mới (chờ worker kiểm tra):\n  - ${created.join('\n  - ')}`);
   if (extra.count) console.log(`${extra.count} đội đối thủ thừa từ lần chạy trước đã chuyển "withdrawn".`);
+  if (SOLO) {
+    console.log(
+      `Chế độ một thí sinh (BTC tự động): đăng nhập /demo-login → "Thí sinh demo (BTC tự động) · ${TID}" → Thi đấu của đội → bấm "Tiếp theo".\n` +
+        'Kịch bản: docs/DEMO_HAI_GOC_NHIN.md (mục Một thí sinh)',
+    );
+    return;
+  }
   console.log(
     `Sinh viên mẫu (đăng nhập ở /demo-login): ${TID}_sv1 (lập đội), ${TID}_sv2 (tham gia bằng mã đội).\n` +
       `Bot GitHub cho sinh viên: ${REPO} · commit ${COMMIT} · examples/bots/tinh_truoc.py\n` +
