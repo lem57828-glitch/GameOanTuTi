@@ -31,8 +31,8 @@ export class DemoAutopilotService {
    * BTC tự động duyệt các đội đã đăng ký (đang chờ duyệt) khi giải còn mở đăng ký, theo đúng luật của TV1
    * (2–3 thành viên, đủ điều kiện dự thi). Trả lý do của đội chưa duyệt được.
    */
-  private async approvePending(tournamentId: string): Promise<string[]> {
-    const problems: string[] = [];
+  private async approvePending(tournamentId: string): Promise<Array<{ teamId: string; text: string }>> {
+    const problems: Array<{ teamId: string; text: string }> = [];
     for (const t of await this.accounts.tournamentTeams(tournamentId)) {
       if (t.status !== 'draft') continue;
       await this.community
@@ -40,7 +40,7 @@ export class DemoAutopilotService {
           status: 'approved',
           reason: 'BTC tự động (giải trải nghiệm demo) duyệt đội đủ điều kiện',
         })
-        .catch((e: Error) => problems.push(`${t.name}: ${e.message}`));
+        .catch((e: Error) => problems.push({ teamId: t.id, text: `${t.name}: ${e.message}` }));
     }
     return problems;
   }
@@ -93,10 +93,11 @@ export class DemoAutopilotService {
       const first = await this.competition.overview(tournamentId);
       if (first.next.action === 'plan' || first.next.action === 'lock-level') {
         const problems = await this.approvePending(tournamentId);
-        if (problems.length) {
-          message = `Chưa duyệt được: ${problems.join('; ')}`;
-          return this.view(user, first, message);
-        }
+        // Đội chưa duyệt không vào giải nên không chặn các đội khác; chỉ dừng khi chính đội của người bấm chưa đủ điều kiện.
+        const own = problems.find((p) => p.teamId === user.teamId);
+        if (own) return this.view(user, first, `Đội bạn chưa được duyệt: ${own.text}`);
+        if (problems.length)
+          message = `Bỏ qua đội chưa đủ điều kiện (không dự thi): ${problems.map((p) => p.text).join('; ')}`;
       }
       for (let i = 0; i < MAX_STEPS; i++) {
         const c = await this.competition.overview(tournamentId);

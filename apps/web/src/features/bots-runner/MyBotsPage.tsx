@@ -23,6 +23,7 @@ import type { BotSourceDetail, BotVersion, PieceType, TestRunDetail } from '@are
 import { SubmitBotInput } from '@arena/contracts';
 import { api } from '../../lib/api';
 import { useSession } from '../../lib/session';
+import { usePublicHealth } from '../../lib/health';
 import { TestRunHistory } from './TestRunHistory';
 import { TestRunReplay } from './TestRunReplay';
 
@@ -32,8 +33,23 @@ const STATUS: Record<BotVersion['status'], { label: string; tone: 'neutral' | 's
   invalid: { label: 'Không hợp lệ', tone: 'danger' },
 };
 
+/** Demo: bot mẫu trong repo dự án ở một commit đã push, để thí sinh thử luồng nộp GitHub không cần repo riêng. */
+const DEMO_GITHUB_REPO = 'https://github.com/lem57828-glitch/GameOanTuTi';
+const DEMO_GITHUB_COMMIT = '41602c77f05274269e34f8ecdf1fe37b98deca34';
+const DEMO_GITHUB_BOTS = [
+  { label: 'Săn loại', path: 'examples/bots/san_loai.py' },
+  { label: 'Phòng thủ', path: 'examples/bots/phong_thu.py' },
+  { label: 'Tiến công', path: 'examples/bots/tien_cong.py' },
+  { label: 'Tính trước', path: 'examples/bots/tinh_truoc.py' },
+  { label: 'Ngẫu nhiên an toàn', path: 'examples/bots/ngau_nhien_an_toan.py' },
+  { label: 'Tham ăn', path: 'apps/api/prisma/sample-bots/tham_an.py' },
+  { label: 'Thận trọng', path: 'apps/api/prisma/sample-bots/than_trong.py' },
+  { label: 'Bot mẫu bán kết/chung kết', path: 'offline-kit/bot_mau.py' },
+];
+
 export function MyBotsPage() {
   const { user } = useSession();
+  const health = usePublicHealth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [filters, setFilters] = useSearchParams();
@@ -640,6 +656,38 @@ export function MyBotsPage() {
 
           {submitMode === 'github' ? (
             <div className="flex flex-col gap-3">
+              {health.data?.demoMode && (
+                <fieldset className="rounded-md border border-line p-3">
+                  <legend className="px-1 text-xs font-semibold text-ink-muted">
+                    Bot mẫu để thử (chỉ có ở demo) — bấm để điền sẵn
+                  </legend>
+                  <div className="flex flex-wrap gap-2">
+                    {DEMO_GITHUB_BOTS.map((b) => (
+                      <Button
+                        key={b.path}
+                        type="button"
+                        size="sm"
+                        variant={
+                          sourcePath === b.path && commitSha === DEMO_GITHUB_COMMIT ? 'primary' : 'secondary'
+                        }
+                        title={b.path}
+                        onClick={() => {
+                          setGithubRepo(DEMO_GITHUB_REPO);
+                          setCommitSha(DEMO_GITHUB_COMMIT);
+                          setSourcePath(b.path);
+                          if (!label.trim()) setLabel(b.label);
+                        }}
+                      >
+                        {b.label}
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-ink-muted">
+                    Một đội không nộp trùng một file hai lần. GitHub báo 403 nghĩa là máy đã hết 60 lượt/giờ,
+                    đợi rồi thử lại.
+                  </p>
+                </fieldset>
+              )}
               <Input
                 label="Repository GitHub"
                 placeholder="https://github.com/team/repository"

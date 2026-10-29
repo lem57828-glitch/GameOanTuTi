@@ -75,6 +75,9 @@ export class SandboxGameRunner implements GameRunner {
           } catch (err) {
             if (err instanceof PythonProcessError && err.type === 'SANDBOX_UNAVAILABLE')
               throw new PermanentRunError(err.message);
+            // Container chậm vì máy quá tải: không phải lỗi của bot, để worker chạy lại ván (cùng seed).
+            if (err instanceof PythonProcessError && err.type === 'SANDBOX_TIMEOUT')
+              throw new Error(err.message);
             return {
               winner: otherSide(side),
               reason:

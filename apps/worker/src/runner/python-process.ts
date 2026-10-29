@@ -21,6 +21,8 @@ export interface PythonProcessOptions {
 
 export type ProcessErrorType =
   | 'SANDBOX_UNAVAILABLE'
+  /** Container khởi động quá chậm (máy quá tải): lỗi tạm thời, worker thử lại job. */
+  | 'SANDBOX_TIMEOUT'
   | 'STARTUP_TIMEOUT'
   | 'STARTUP_ERROR'
   | 'MOVE_TIMEOUT'
@@ -139,13 +141,15 @@ export class PythonBotProcess {
             this.terminate();
             reject(
               new PythonProcessError(
-                local ? 'STARTUP_TIMEOUT' : 'SANDBOX_UNAVAILABLE',
+                local ? 'STARTUP_TIMEOUT' : 'SANDBOX_TIMEOUT',
                 `Môi trường Python/container chưa sẵn sàng. ${this.stderr}`,
               ),
             );
           }
         },
-        local ? startupMs : 15_000,
+        // Docker: gồm cả thời gian dựng container với hạn mức 0,2 CPU; máy bận có thể mất vài chục giây.
+        // Không tính vào thời gian suy nghĩ của bot (mỗi nước vẫn giới hạn riêng).
+        local ? startupMs : 45_000,
       );
 
       try {
@@ -355,7 +359,9 @@ export class PythonBotProcess {
         done = true;
         clearTimeout(timer);
         this.readline?.removeListener('line', onLine);
-        reject(new PythonProcessError('CRASH', `Tiến trình bot đã thoát khi đang tính nước đi. ${this.stderr}`));
+        reject(
+          new PythonProcessError('CRASH', `Tiến trình bot đã thoát khi đang tính nước đi. ${this.stderr}`),
+        );
       };
       this.child!.once('exit', onExit);
       this.readline!.once('line', onLine);

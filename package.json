@@ -11,6 +11,7 @@
     "env:init": "node scripts/init-profiles.mjs",
     "dev:demo": "node scripts/runtime.mjs demo dev",
     "dev:official": "node scripts/runtime.mjs official dev",
+    "tunnel:demo": "node scripts/tunnel-demo.mjs",
     "worker:demo": "node scripts/runtime.mjs demo worker",
     "worker:official": "node scripts/runtime.mjs official worker",
     "start:official": "node scripts/runtime.mjs official start",

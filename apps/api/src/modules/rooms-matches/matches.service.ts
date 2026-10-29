@@ -163,7 +163,8 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
           status: 'selecting',
           currentNo: 1,
           outcomes: json([]),
-          deadlineAt: this.deadline(),
+          // Sơ loại/bán kết/chung kết không có bước chọn: tới hạn ngay để bộ hẹn giờ tự chạy lại nếu lần đầu lỗi.
+          deadlineAt: FIXED_BOT.has(kind) ? new Date() : this.deadline(),
         },
       });
       await this.competition.attachMatch(tx, pairingId, match.id);
@@ -468,7 +469,8 @@ export class MatchesService implements OnApplicationBootstrap, OnModuleDestroy {
                 scoreB: pts('b'),
                 status: 'selecting',
                 currentNo: m.currentNo + 1,
-                deadlineAt: this.deadline(),
+                // Không có bước chọn: tới hạn ngay, nếu tạo ván kế tiếp lỗi (DB chậm) bộ hẹn giờ thử lại sau 2s.
+                deadlineAt: FIXED_BOT.has(kind) ? new Date() : this.deadline(),
               },
             });
             if (!FIXED_BOT.has(kind) && m.pairId) {

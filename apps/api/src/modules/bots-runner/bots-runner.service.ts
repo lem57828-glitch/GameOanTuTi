@@ -128,14 +128,24 @@ except (SyntaxError, ValueError) as e:
         ['-I', '-X', 'utf8', '-c', script],
         {
           encoding: 'utf8',
-          timeout: 3000,
+          // Chỉ phân tích cú pháp (không chạy bot) nên thường < 1s; nới rộng cho máy đang quá tải.
+          timeout: 15_000,
           maxBuffer: 64 * 1024,
         },
         (error, stdout) => {
-          if (error)
+          if (error) {
+            const e = error as NodeJS.ErrnoException & { killed?: boolean };
+            this.log.warn(`Trình kiểm tra Python lỗi: ${e.code ?? ''} ${e.message}`);
             return reject(
-              validationError('Không khởi chạy được trình kiểm tra Python. Báo BTC kiểm tra PYTHON_CMD.'),
+              validationError(
+                e.code === 'ENOENT'
+                  ? 'Máy chủ không tìm thấy Python. Báo BTC kiểm tra PYTHON_CMD.'
+                  : e.killed
+                    ? 'Máy chủ đang quá tải, kiểm tra cú pháp chưa xong. Thử nộp lại sau ít phút.'
+                    : 'Không chạy được trình kiểm tra Python. Báo BTC kiểm tra cài đặt Python trên máy chủ.',
+              ),
             );
+          }
           try {
             resolve(JSON.parse(stdout) as { valid: boolean; log: string });
           } catch {

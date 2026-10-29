@@ -277,11 +277,23 @@ it('BTC tự động duyệt đội tự lập khi đủ điều kiện (2–3 t
     expect(before).toMatchObject({ canAdvance: true });
     expect(before.message).toMatch(/chờ duyệt/);
     const one = (await call('acc_chi', `/tournaments/${tid2}/demo/autopilot/advance`, 'POST', {})).data;
-    expect(one.message).toMatch(/Chưa duyệt được: Đội Tự Lập: Đội phải có từ 2/);
+    expect(one.message).toMatch(/Đội bạn chưa được duyệt: Đội Tự Lập: Đội phải có từ 2/);
     expect((await prisma.team.findUniqueOrThrow({ where: { id: team.id } })).status).toBe('draft');
     await prisma.membership.create({ data: { teamId: team.id, accountId: 'acc_dung', tournamentId: tid2 } });
+    // Đội khác chỉ 1 thành viên (chưa đủ điều kiện) không chặn đội đã đủ: bị bỏ qua, vẫn chờ duyệt.
+    const other = await prisma.team.create({
+      data: {
+        tournamentId: tid2,
+        name: 'Đội Một Người',
+        nameKey: 'doi mot nguoi',
+        captainId: 'acc_em',
+        status: 'draft',
+      },
+    });
+    await prisma.membership.create({ data: { teamId: other.id, accountId: 'acc_em', tournamentId: tid2 } });
     const two = (await call('acc_chi', `/tournaments/${tid2}/demo/autopilot/advance`, 'POST', {})).data;
     expect((await prisma.team.findUniqueOrThrow({ where: { id: team.id } })).status).toBe('approved');
+    expect((await prisma.team.findUniqueOrThrow({ where: { id: other.id } })).status).toBe('draft');
     // Đội chưa có bot hợp lệ: không khóa mức, chỉ hướng dẫn nộp bot.
     expect(two.message).toMatch(/chưa có bot hợp lệ/);
     const audit = await prisma.auditLog.findFirstOrThrow({
@@ -292,9 +304,9 @@ it('BTC tự động duyệt đội tự lập khi đủ điều kiện (2–3 t
     await prisma.notification.deleteMany({
       where: { accountId: { in: ['acc_chi', 'acc_dung'] }, sourceKey: { startsWith: 'admin-team:' } },
     });
-    await prisma.auditLog.deleteMany({ where: { target: team.id } });
-    await prisma.membership.deleteMany({ where: { teamId: team.id } });
-    await prisma.team.delete({ where: { id: team.id } });
+    await prisma.auditLog.deleteMany({ where: { target: { in: [team.id, `${tid2}`] } } });
+    await prisma.membership.deleteMany({ where: { tournamentId: tid2 } });
+    await prisma.team.deleteMany({ where: { tournamentId: tid2 } });
     await prisma.tournament.delete({ where: { id: tid2 } });
   }
 });

@@ -6,6 +6,17 @@ import { defineConfig, loadEnv } from 'vite';
 export default defineConfig(({ mode }) => {
   const env = process.env.ARENA_PROFILE ? process.env : loadEnv(mode, '../..', '');
   const api = `http://localhost:${env.API_PORT || 3100}`;
+  // Tên miền công khai (vd. Cloudflare Tunnel) lấy từ WEB_ORIGIN — cùng danh sách API dùng để kiểm tra Origin.
+  const allowedHosts = (env.WEB_ORIGIN ?? '')
+    .split(',')
+    .map((o) => {
+      try {
+        return new URL(o.trim()).hostname;
+      } catch {
+        return '';
+      }
+    })
+    .filter((h) => h && h !== 'localhost');
   return {
     plugins: [react()],
     // Profile variables are injected by the launcher. Do not let Vite load the legacy root .env.
@@ -13,6 +24,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: Number(env.WEB_PORT || 5173),
       strictPort: true,
+      allowedHosts,
       proxy: {
         '/api': { target: api, changeOrigin: false },
         '/socket.io': { target: api, ws: true, changeOrigin: false },

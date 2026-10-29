@@ -16,36 +16,41 @@ const cfg = loadConfig();
 const keys = redisKeys(cfg.queuePrefix);
 const log = (msg: string) => console.log(`[worker ${cfg.workerId}] ${new Date().toISOString()} ${msg}`);
 
-// Fail at startup instead of accepting submitted bots into a broken runtime.
-try {
-  if (cfg.sandboxMode === 'trusted-local') {
-    execFileSync(
-      process.env.PYTHON_CMD || 'python',
-      ['-I', '-c', 'import sys; assert sys.version_info >= (3, 10)'],
-      {
-        timeout: 5000,
-        stdio: 'pipe',
-      },
+// Fail at startup instead of accepting submitted bots into a broken runtime. Máy quá tải có thể làm `docker info`
+// chậm vài chục giây: thử lại (chờ lâu dần) trước khi kết luận môi trường hỏng, để worker không chết khi tự nạp lại.
+for (let attempt = 1; ; attempt++) {
+  const wait = 10_000 * attempt;
+  try {
+    if (cfg.sandboxMode === 'trusted-local') {
+      execFileSync(
+        process.env.PYTHON_CMD || 'python',
+        ['-I', '-c', 'import sys; assert sys.version_info >= (3, 10)'],
+        { timeout: wait, stdio: 'pipe' },
+      );
+      log(
+        'Chế độ demo trusted-local: bot mẫu và bot Python nộp đều chạy được; chỉ dùng mã tin cậy của nhóm.',
+      );
+    } else {
+      execFileSync(process.env.BOT_CONTAINER_CMD || 'docker', ['info'], { timeout: wait, stdio: 'pipe' });
+      execFileSync(
+        process.env.BOT_CONTAINER_CMD || 'docker',
+        ['image', 'inspect', process.env.BOT_SANDBOX_IMAGE || 'python:3.13-slim'],
+        { timeout: wait, stdio: 'pipe' },
+      );
+      log('Môi trường Docker chạy bot đã sẵn sàng.');
+    }
+    break;
+  } catch {
+    if (attempt < 4) {
+      log(`Kiểm tra môi trường chạy bot chưa xong (lần ${attempt}/4, có thể do máy quá tải); thử lại.`);
+      continue;
+    }
+    throw new Error(
+      cfg.sandboxMode === 'trusted-local'
+        ? 'Không tìm thấy Python >= 3.10. Kiểm tra PYTHON_CMD rồi khởi động lại worker.'
+        : 'Docker/image chưa sẵn sàng. Bật Docker và tải image; demo local có thể cấu hình BOT_SANDBOX_MODE=trusted-local.',
     );
-    log('Chế độ demo trusted-local: bot mẫu và bot Python nộp đều chạy được; chỉ dùng mã tin cậy của nhóm.');
-  } else {
-    execFileSync(process.env.BOT_CONTAINER_CMD || 'docker', ['info'], { timeout: 10_000, stdio: 'pipe' });
-    execFileSync(
-      process.env.BOT_CONTAINER_CMD || 'docker',
-      ['image', 'inspect', process.env.BOT_SANDBOX_IMAGE || 'python:3.13-slim'],
-      {
-        timeout: 5000,
-        stdio: 'pipe',
-      },
-    );
-    log('Môi trường Docker chạy bot đã sẵn sàng.');
   }
-} catch {
-  throw new Error(
-    cfg.sandboxMode === 'trusted-local'
-      ? 'Không tìm thấy Python >= 3.10. Kiểm tra PYTHON_CMD rồi khởi động lại worker.'
-      : 'Docker/image chưa sẵn sàng. Bật Docker và tải image; demo local có thể cấu hình BOT_SANDBOX_MODE=trusted-local.',
-  );
 }
 
 const prisma = new PrismaClient();
