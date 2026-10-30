@@ -52,6 +52,17 @@ if (process.env.RUN_MIGRATIONS !== 'false') {
   }
 }
 
+// Nạp tài khoản/đội/bot mẫu cho /demo-login. seed.ts chạy lại an toàn (upsert theo id cố định, tự từ chối nếu không
+// phải demo) nên chạy mỗi lần khởi động được; lỗi seed không chặn khởi động. Tắt bằng SEED_DEMO=false.
+if (process.env.SEED_DEMO !== 'false' && process.env.DEMO_MODE === 'true') {
+  const r = spawnSync('node_modules/.bin/tsx', ['prisma/seed.ts'], {
+    cwd: '/app/apps/api',
+    stdio: 'inherit',
+    env: process.env,
+  });
+  if (r.status !== 0) console.error('[start] Nạp dữ liệu mẫu thất bại; bỏ qua, vẫn khởi động.');
+}
+
 // Chỉ nghe trong máy, không ghi đĩa: hàng đợi mất khi khởi động lại thì bộ quét job kẹt đưa lại từ PostgreSQL.
 run(
   'redis',
