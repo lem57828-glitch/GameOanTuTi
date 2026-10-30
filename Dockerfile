@@ -21,6 +21,18 @@ RUN apt-get update \
   && useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin bot
 COPY --from=build /app /app
 RUN chmod 755 /app/deploy/fly/sandbox-python.sh
-ENV NODE_ENV=development
+# Mặc định của bản demo: tạo service chỉ cần đặt DATABASE_URL, WEB_ORIGIN, SESSION_SECRET. fly.toml / render.yaml /
+# biến môi trường trên dashboard ghi đè được. Demo không chạy NODE_ENV=production (máy chủ từ chối DEMO_MODE).
+ENV NODE_ENV=development \
+  DEMO_MODE=true \
+  SERVE_WEB=true \
+  TRUST_PROXY=1 \
+  REDIS_URL=redis://127.0.0.1:6379/0 \
+  QUEUE_PREFIX=arena-demo \
+  SESSION_COOKIE_NAME=arena_demo_session \
+  MAIL_TRANSPORT=local \
+  BOT_SANDBOX_MODE=trusted-local \
+  PYTHON_CMD=/app/deploy/fly/sandbox-python.sh \
+  WORKER_CONCURRENCY=1
 EXPOSE 8080
 CMD ["node", "/app/deploy/fly/start.mjs"]

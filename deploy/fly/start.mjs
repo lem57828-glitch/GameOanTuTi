@@ -38,8 +38,9 @@ process.on('SIGINT', () => stop(0));
 // Nền tảng cấp cổng qua PORT (Render...): API nghe đúng cổng đó. Fly dùng API_PORT trong fly.toml.
 if (process.env.PORT && !process.env.API_PORT) process.env.API_PORT = process.env.PORT;
 
-// Nền tảng không có bước chạy trước khi deploy (Render gói miễn phí): áp migration ngay khi khởi động.
-if (process.env.RUN_MIGRATIONS === 'true') {
+// Áp migration ngay khi khởi động (Render gói miễn phí không có bước chạy trước deploy). Chạy lại khi đã áp xong không
+// làm gì; tắt bằng RUN_MIGRATIONS=false nếu nền tảng đã chạy migration riêng.
+if (process.env.RUN_MIGRATIONS !== 'false') {
   const r = spawnSync('node_modules/.bin/prisma', ['migrate', 'deploy'], {
     cwd: '/app/apps/api',
     stdio: 'inherit',

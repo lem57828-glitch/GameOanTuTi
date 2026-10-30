@@ -15,6 +15,13 @@ container. Dữ liệu ở **Neon PostgreSQL** (miễn phí). Cấu hình sẵn 
 - Bot chạy ở chế độ `trusted-local` (chỉ demo): user riêng không quyền, không đọc được mật khẩu DB của API/worker, giới
   hạn RAM/tiến trình; bot vẫn gọi được mạng. Không dùng cấu hình này cho bản chính thức.
 
+## Tạo service bằng tay (không dùng Blueprint)
+
+New → **Web Service** → repo `GameOanTuTi`, nhánh `main` → **Language: Docker** (Root Directory để trống, Dockerfile
+`./Dockerfile`) → Instance **Free** → Environment chỉ cần 3 biến: `DATABASE_URL`, `WEB_ORIGIN`, `SESSION_SECRET`
+(chuỗi ngẫu nhiên ≥ 32 ký tự). Mọi cấu hình demo khác đã đặt sẵn trong Dockerfile; migration tự chạy khi khởi động.
+Health Check Path: `/api/v1/health`.
+
 ## Các bước
 
 1. **Neon** (neon.tech) → project mới, region **Singapore** → copy connection string, thêm `&schema=arena_demo`:
