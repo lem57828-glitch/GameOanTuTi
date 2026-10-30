@@ -95,7 +95,13 @@ async function main(): Promise<void> {
       name: 'Giải mẫu Bot Arena (dữ liệu demo)',
       status: 'registration',
       isDemo: true,
+      demoKind: 'simulation',
     },
+  });
+  // Giải mẫu nạp trước khi có cột demoKind (hoặc database trống lúc migrate) → bổ sung, để trang BTC hiện công cụ thử nghiệm.
+  await prisma.tournament.updateMany({
+    where: { id: TOURNAMENT, demoKind: null },
+    data: { demoKind: 'simulation' },
   });
   const stages = [
     { ord: 1, kind: 'qualifier', name: 'Sơ loại (Swiss — số vòng chưa chốt)' },
