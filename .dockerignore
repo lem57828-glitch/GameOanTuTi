@@ -1,0 +1,18 @@
+# Không đưa bí mật, dữ liệu cá nhân và kết quả build/test của máy local vào image.
+.git
+**/node_modules
+**/dist
+.env
+.env.*
+data/
+deploy-snapshot/
+playwright-report/
+test-results/
+artifacts/
+coverage/
+.tools/
+.pnpm-store/
+**/__pycache__
+**/*.log
+**/*.tsbuildinfo
+docs/*.docx

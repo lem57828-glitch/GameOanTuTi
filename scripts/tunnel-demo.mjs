@@ -94,10 +94,14 @@ if (!url) {
 } else {
   // Link công khai đứng đầu: email/thư demo tạo liên kết theo origin đầu tiên.
   writeFileSync(envFile, original.replace(/^WEB_ORIGIN=.*$/m, `WEB_ORIGIN=${url},${baseOrigin}`));
+  // Log đi qua pipe thay vì ghi thẳng vào cửa sổ: console Windows bị tạm dừng khi bấm/bôi đen chữ (QuickEdit)
+  // sẽ chặn tiến trình đang ghi log — web treo cho người xem qua tunnel. Qua pipe, chỉ phần hiển thị bị chậm.
   const demo = spawn(process.execPath, [`${root}scripts/runtime.mjs`, 'demo', 'dev'], {
     cwd: root,
-    stdio: 'inherit',
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
+  demo.stdout.on('data', (b) => process.stdout.write(b));
+  demo.stderr.on('data', (b) => process.stderr.write(b));
   children.add(demo);
   demo.on('exit', (code) => stop(code ?? 0));
   const line = '═'.repeat(64);

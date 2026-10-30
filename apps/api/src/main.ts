@@ -42,7 +42,13 @@ async function bootstrap(): Promise<void> {
   app.useBodyParser('json', { limit: '4mb' });
   app.use(requestIdMiddleware);
   app.disable('x-powered-by');
-  app.set('trust proxy', 'loopback');
+  // Mặc định chỉ tin proxy trên cùng máy (Caddy/Nginx). Sau proxy của nền tảng (Fly.io...) đặt TRUST_PROXY=1
+  // (số tầng proxy) để lấy đúng IP người dùng cho giới hạn đăng nhập; không đặt thì mọi người chung một IP.
+  const trustProxy = process.env.TRUST_PROXY;
+  app.set(
+    'trust proxy',
+    trustProxy ? (/^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy) : 'loopback',
+  );
   app.setGlobalPrefix('api/v1');
   app.enableCors({ origin: cfg.webOrigins, credentials: true });
   app.useWebSocketAdapter(new ArenaIoAdapter(app, cfg));

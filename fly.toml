@@ -1,0 +1,48 @@
+# Bản DEMO Bot Arena trên Fly.io (có đăng nhập mẫu, nút "Tiếp theo"). Hướng dẫn: docs/DEPLOY_FLY.md.
+# Bí mật đặt bằng `fly secrets set` (không ghi vào file này): DATABASE_URL (Neon), SESSION_SECRET.
+# Redis chạy ngay trong máy (deploy/fly/start.mjs).
+app = "bot-arena-demo"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+  # Áp migration trước khi máy mới nhận request.
+  release_command = "sh -c 'cd /app/apps/api && node_modules/.bin/prisma migrate deploy'"
+
+[env]
+  # Demo không được chạy NODE_ENV=production (máy chủ từ chối DEMO_MODE ở production).
+  NODE_ENV = "development"
+  DEMO_MODE = "true"
+  SERVE_WEB = "true"
+  API_PORT = "8080"
+  WEB_ORIGIN = "https://bot-arena-demo.fly.dev"
+  TRUST_PROXY = "1"
+  REDIS_URL = "redis://127.0.0.1:6379/0"
+  QUEUE_PREFIX = "arena-demo"
+  SESSION_COOKIE_NAME = "arena_demo_session"
+  MAIL_TRANSPORT = "local"
+  BOT_SANDBOX_MODE = "trusted-local"
+  PYTHON_CMD = "/app/deploy/fly/sandbox-python.sh"
+  WORKER_CONCURRENCY = "2"
+  SIM_MOVE_DELAY_MS = "150"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Worker chạy cùng máy: không tự tắt máy khi vắng người xem, nếu không các trận sẽ dừng giữa chừng.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "60s"
+    interval = "30s"
+    method = "GET"
+    path = "/api/v1/health"
+    timeout = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
