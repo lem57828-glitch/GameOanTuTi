@@ -1,0 +1,46 @@
+# Bản DEMO Bot Arena trên Render (Blueprint): một Web Service chạy Dockerfile — Redis + API (phục vụ web) + worker.
+# Tạo: Render Dashboard → New → Blueprint → chọn repo. Hướng dẫn: docs/DEPLOY_RENDER.md.
+# Bí mật đặt trên Dashboard (sync: false), không ghi vào file này.
+services:
+  - type: web
+    name: bot-arena-demo
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL # Neon: postgresql://...?sslmode=require&schema=arena_demo
+        sync: false
+      - key: WEB_ORIGIN # https://<tên-service>.onrender.com (thêm tên miền Vercel, cách nhau bằng dấu phẩy)
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: RUN_MIGRATIONS
+        value: 'true'
+      # Demo không được chạy NODE_ENV=production (máy chủ từ chối DEMO_MODE ở production).
+      - key: NODE_ENV
+        value: development
+      - key: DEMO_MODE
+        value: 'true'
+      - key: SERVE_WEB
+        value: 'true'
+      - key: TRUST_PROXY
+        value: '1'
+      - key: REDIS_URL
+        value: redis://127.0.0.1:6379/0
+      - key: QUEUE_PREFIX
+        value: arena-demo
+      - key: SESSION_COOKIE_NAME
+        value: arena_demo_session
+      - key: MAIL_TRANSPORT
+        value: local
+      - key: BOT_SANDBOX_MODE
+        value: trusted-local
+      - key: PYTHON_CMD
+        value: /app/deploy/fly/sandbox-python.sh
+      # Gói miễn phí chỉ 512 MB RAM: chạy một ván mỗi lúc.
+      - key: WORKER_CONCURRENCY
+        value: '1'

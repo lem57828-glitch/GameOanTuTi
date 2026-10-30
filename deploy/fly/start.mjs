@@ -1,6 +1,6 @@
-// Tiến trình chính của máy Fly: Redis (hàng đợi, chỉ trong máy) → API (phục vụ cả web đã build) + worker.
+// Tiến trình chính của container demo (Fly.io, Render): Redis (hàng đợi, chỉ trong máy) → API (phục vụ cả web) + worker.
 // Một tiến trình dừng thì dừng cả máy để Fly khởi động lại — không để web sống mà worker/Redis đã chết.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { connect } from 'node:net';
 
 const children = [];
@@ -34,6 +34,22 @@ const redisReady = () =>
 
 process.on('SIGTERM', () => stop(0));
 process.on('SIGINT', () => stop(0));
+
+// Nền tảng cấp cổng qua PORT (Render...): API nghe đúng cổng đó. Fly dùng API_PORT trong fly.toml.
+if (process.env.PORT && !process.env.API_PORT) process.env.API_PORT = process.env.PORT;
+
+// Nền tảng không có bước chạy trước khi deploy (Render gói miễn phí): áp migration ngay khi khởi động.
+if (process.env.RUN_MIGRATIONS === 'true') {
+  const r = spawnSync('node_modules/.bin/prisma', ['migrate', 'deploy'], {
+    cwd: '/app/apps/api',
+    stdio: 'inherit',
+    env: process.env,
+  });
+  if (r.status !== 0) {
+    console.error('[start] Migration thất bại; kiểm tra DATABASE_URL.');
+    process.exit(1);
+  }
+}
 
 // Chỉ nghe trong máy, không ghi đĩa: hàng đợi mất khi khởi động lại thì bộ quét job kẹt đưa lại từ PostgreSQL.
 run(
