@@ -27,8 +27,9 @@ services:
         value: 'true'
       - key: SERVE_WEB
         value: 'true'
+      # Web trên Vercel chuyển /api sang đây: người dùng → Vercel → proxy Render → API (2 tầng proxy).
       - key: TRUST_PROXY
-        value: '1'
+        value: '2'
       - key: REDIS_URL
         value: redis://127.0.0.1:6379/0
       - key: QUEUE_PREFIX

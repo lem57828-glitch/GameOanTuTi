@@ -49,8 +49,16 @@ Remove-Item Env:DATABASE_URL
 
 Push lên `main` → Render tự build và deploy lại (`autoDeploy`). Dữ liệu ở Neon giữ nguyên.
 
-## Dùng kèm Vercel?
+## Web trên Vercel, backend trên Render
 
-Không cần: service Render đã phục vụ cả web. Nếu vẫn muốn web trên Vercel, Vercel phải chuyển `/api/*` và
-`/socket.io/*` sang địa chỉ Render (rewrites trong `vercel.json`), trả `index.html` cho các trang con, và tên miền
-Vercel phải có trong `WEB_ORIGIN`. Vercel không chuyển tiếp WebSocket nên xem trận trực tiếp sẽ dùng polling (chậm hơn).
+`vercel.json` (ở gốc repo và ở `apps/web` — Vercel đọc file ở Root Directory của project) chuyển `/api/*`,
+`/socket.io/*` sang `https://bot-arena-demo.onrender.com` và trả `index.html` cho các trang con. Trình duyệt chỉ thấy
+tên miền Vercel nên cookie đăng nhập hoạt động bình thường.
+
+1. Địa chỉ Render khác `bot-arena-demo.onrender.com` → sửa `destination` trong cả hai `vercel.json`.
+2. Trên Render, `WEB_ORIGIN` phải có **mọi** tên miền Vercel dùng để mở trang (API từ chối Origin lạ), cách nhau dấu
+   phẩy, ví dụ `https://bot-arena-demo.onrender.com,https://game-oan-tu-ti.vercel.app`.
+3. `TRUST_PROXY=2` (Vercel → proxy Render → API) để giới hạn đăng nhập tính đúng IP từng người.
+4. Vercel không chuyển tiếp WebSocket: xem trận trực tiếp tự chuyển sang polling (chậm hơn một chút).
+5. Mỗi lần deploy, Vercel tạo một link xem trước mới (có đoạn mã ngẫu nhiên). Link cố định là tên miền Production của
+   project (Settings → Domains) — dùng link đó và đưa nó vào `WEB_ORIGIN`.
