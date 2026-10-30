@@ -20,7 +20,7 @@ container. Dữ liệu ở **Neon PostgreSQL** (miễn phí). Cấu hình sẵn 
 New → **Web Service** → repo `GameOanTuTi`, nhánh `main` → **Language: Docker** (Root Directory để trống, Dockerfile
 `./Dockerfile`) → Instance **Free** → Environment chỉ cần 3 biến: `DATABASE_URL`, `WEB_ORIGIN`, `SESSION_SECRET`
 (chuỗi ngẫu nhiên ≥ 32 ký tự). Mọi cấu hình demo khác đã đặt sẵn trong Dockerfile; migration tự chạy khi khởi động.
-Health Check Path: `/api/v1/health`. Tài khoản mẫu (BTC Demo, Nguyễn An...) tự được nạp mỗi lần khởi động (`SEED_DEMO`, tắt bằng `SEED_DEMO=false`); giải một thí sinh thì nạp tay theo bước 5.
+Health Check Path: `/api/v1/health`. Mỗi lần khởi động, container tự nạp tài khoản mẫu (BTC Demo, Nguyễn An...; `SEED_DEMO=false` để tắt) và giải một thí sinh với tài khoản "Thí sinh demo (BTC tự động)" (`SEED_SOLO=false` để tắt). Cả hai chạy lại an toàn, không xóa hay tạo trùng dữ liệu; giải đã chơi dở thì được giữ nguyên.
 
 ## Các bước
 

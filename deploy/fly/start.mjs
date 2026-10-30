@@ -63,6 +63,17 @@ if (process.env.SEED_DEMO !== 'false' && process.env.DEMO_MODE === 'true') {
   if (r.status !== 0) console.error('[start] Nạp dữ liệu mẫu thất bại; bỏ qua, vẫn khởi động.');
 }
 
+// Giải một thí sinh (tài khoản "Thí sinh demo (BTC tự động)", 7 đội mẫu với bot thật, nút Tiếp theo). Đã có thì bỏ qua
+// phần đã tạo; giải đã chơi dở thì lệnh từ chối đổi đội/bot (chỉ ghi log) — không bao giờ xóa dữ liệu. Tắt: SEED_SOLO=false.
+if (process.env.SEED_SOLO !== 'false' && process.env.DEMO_MODE === 'true') {
+  const r = spawnSync('node_modules/.bin/tsx', ['prisma/demo-experience.ts', '--solo'], {
+    cwd: '/app/apps/api',
+    stdio: 'inherit',
+    env: process.env,
+  });
+  if (r.status !== 0) console.error('[start] Nạp giải một thí sinh không thành công (xem log trên); bỏ qua.');
+}
+
 // Chỉ nghe trong máy, không ghi đĩa: hàng đợi mất khi khởi động lại thì bộ quét job kẹt đưa lại từ PostgreSQL.
 run(
   'redis',

@@ -14,6 +14,7 @@
 // Không tạo mật khẩu, không sinh kết quả, không đụng dữ liệu ngoài phạm vi id của giải này.
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 
@@ -85,13 +86,18 @@ const teamKey = (s: string) =>
 const BOM = String.fromCharCode(0xfeff);
 
 function sourceAt(path: string): string {
+  const clean = (raw: string) => (raw.startsWith(BOM) ? raw.slice(1) : raw).replace(/\r\n/g, '\n');
   try {
-    const raw = execFileSync('git', ['show', `${COMMIT}:${path}`], { cwd: root, encoding: 'utf8' });
-    return (raw.startsWith(BOM) ? raw.slice(1) : raw).replace(/\r\n/g, '\n');
+    return clean(execFileSync('git', ['show', `${COMMIT}:${path}`], { cwd: root, encoding: 'utf8' }));
   } catch {
-    throw new Error(
-      `Không đọc được ${path} ở commit ${COMMIT.slice(0, 7)}. Cần git và lịch sử repo (git fetch).`,
-    );
+    // Image deploy không có thư mục .git: đọc file trong thư mục dự án (cùng nội dung bot mẫu đã commit).
+    try {
+      return clean(readFileSync(join(root, path), 'utf8'));
+    } catch {
+      throw new Error(
+        `Không đọc được ${path} ở commit ${COMMIT.slice(0, 7)} (git) và cũng không có file trong thư mục dự án.`,
+      );
+    }
   }
 }
 
