@@ -35,6 +35,9 @@ async function main() {
     'GITHUB_BOT_TOKEN',
     'GITHUB_BOT_PRIVATE_REPOS',
     'RESEND_API_KEY',
+    'GMAIL_CLIENT_ID',
+    'GMAIL_CLIENT_SECRET',
+    'GMAIL_REFRESH_TOKEN',
   ])
     env[key] = values[key] ?? '';
   if (action === 'start') {

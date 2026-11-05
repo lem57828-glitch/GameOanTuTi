@@ -74,6 +74,38 @@ Không cần các biến `SMTP_*` khi dùng Resend. Lỗi gửi ghi trong Logs d
 `RESEND_FORBIDDEN` = khóa sai hoặc `MAIL_FROM` chưa thuộc tên miền đã xác minh; `RESEND_INVALID` = địa chỉ gửi/nhận
 sai định dạng; `RESEND_RATE_LIMITED` = vượt hạn mức.
 
+### Hoặc: Gmail API qua HTTPS (không cần tên miền riêng)
+
+Gửi từ chính một tài khoản Gmail (vd. `btc.arena.ai@gmail.com`) qua HTTPS nên không bị chặn cổng SMTP và không cần
+tên miền. Giới hạn của Gmail thường: khoảng 500 thư/ngày.
+
+1. console.cloud.google.com → tạo project → **APIs & Services → Library** → bật **Gmail API**.
+2. **OAuth consent screen** (Google Auth Platform): User type **External**; điền tên app, email hỗ trợ. Ở
+   **Audience** bấm **Publish app** (chuyển sang _In production_). Nếu để _Testing_, refresh token **hết hạn sau 7
+   ngày** và thư ngừng gửi. App chưa được Google xác minh vẫn dùng được cho tài khoản của mình (màn hình cấp quyền
+   hiện cảnh báo, bấm _Advanced → Go to ... (unsafe)_).
+3. **Credentials → Create credentials → OAuth client ID** → loại **Desktop app** → lưu Client ID và Client secret.
+4. Trên máy có trình duyệt, ở thư mục repo:
+   ```sh
+   pnpm gmail:token -- <CLIENT_ID> <CLIENT_SECRET>
+   ```
+   Mở link hiện ra, đăng nhập **đúng tài khoản Gmail dùng để gửi**, cho phép quyền _Gửi email thay bạn_ (chỉ quyền
+   gửi, không đọc hộp thư). Terminal in ra `GMAIL_REFRESH_TOKEN`.
+5. Render → **Environment**:
+
+| Biến                    | Giá trị                                  |
+| ----------------------- | ---------------------------------------- |
+| `MAIL_TRANSPORT`        | `gmail`                                  |
+| `GMAIL_CLIENT_ID`       | Client ID ở bước 3                       |
+| `GMAIL_CLIENT_SECRET`   | Client secret ở bước 3                   |
+| `GMAIL_REFRESH_TOKEN`   | token ở bước 4                           |
+| `MAIL_FROM`             | `Bot Arena <địa-chỉ-gmail-đã-cấp-quyền>` |
+| `EMAIL_ALLOWED_DOMAINS` | `vnu.edu.vn`                             |
+
+Lỗi trong Logs: `GMAIL_TOKEN_REVOKED` = refresh token hết hạn/bị thu hồi (app còn ở _Testing_, đổi mật khẩu Google,
+hoặc gỡ quyền) → chạy lại bước 4; `GMAIL_CLIENT_INVALID` = Client ID/secret sai; `GMAIL_FORBIDDEN` = chưa bật Gmail API
+hoặc thiếu quyền gửi; `GMAIL_RATE_LIMITED` = vượt hạn mức ngày.
+
 ## Sửa code
 
 Push lên `main` → Render tự build và deploy lại (`autoDeploy`). Dữ liệu ở Neon giữ nguyên.

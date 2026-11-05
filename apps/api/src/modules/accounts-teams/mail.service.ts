@@ -6,6 +6,8 @@ import { PrismaService, type Tx } from '../../core/prisma.service.js';
 @Injectable()
 export class MailService {
   private readonly log = new Logger('Mail');
+  /** Access token Gmail (sống ~1 giờ) giữ trong bộ nhớ, làm mới bằng refresh token khi sắp hết hạn. */
+  private gmailToken?: { value: string; expiresAt: number };
   constructor(
     private readonly db: PrismaService,
     @Inject(APP_CONFIG) private readonly cfg: AppConfig,
@@ -70,9 +72,10 @@ export class MailService {
     });
   }
 
-  /** Gửi một thư thật qua SMTP hoặc Resend. Ném lỗi có mã ổn định (SMTP_* / RESEND_*) để ghi log chẩn đoán. */
+  /** Gửi một thư thật qua SMTP, Resend hoặc Gmail API. Ném lỗi có mã ổn định (SMTP_* / RESEND_* / GMAIL_*). */
   private async deliver(mail: { to: string; subject: string; text: string; id: string }) {
     if (this.cfg.mailTransport === 'resend') return this.sendViaResend(mail);
+    if (this.cfg.mailTransport === 'gmail') return this.sendViaGmail(mail);
     if (!this.cfg.smtpHost || !this.cfg.smtpUser || !this.cfg.smtpPassword?.trim())
       throw new Error('SMTP_NOT_CONFIGURED');
     const transport = this.transport();
@@ -131,6 +134,91 @@ export class MailService {
             : 'RESEND_FAILED',
     );
   }
+
+  /** Đổi refresh token lấy access token (OAuth2 của Google, HTTPS). Lỗi invalid_grant = token bị thu hồi/hết hạn. */
+  private async gmailAccessToken(): Promise<string> {
+    const g = this.cfg.gmail;
+    if (!g) throw new Error('GMAIL_NOT_CONFIGURED');
+    if (this.gmailToken && this.gmailToken.expiresAt > Date.now() + 60_000) return this.gmailToken.value;
+    let res: Response;
+    try {
+      res = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: g.clientId,
+          client_secret: g.clientSecret,
+          refresh_token: g.refreshToken,
+          grant_type: 'refresh_token',
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch {
+      throw new Error('GMAIL_UNREACHABLE');
+    }
+    const body = (await res.json().catch(() => null)) as {
+      access_token?: string;
+      expires_in?: number;
+      error?: string;
+    } | null;
+    if (!res.ok || !body?.access_token) {
+      // Chỉ ghi mã lỗi OAuth (invalid_grant, invalid_client...), không ghi client secret/refresh token.
+      this.log.warn(
+        `Google từ chối cấp access token (HTTP ${res.status}${body?.error ? `, ${body.error}` : ''}).`,
+      );
+      throw new Error(
+        body?.error === 'invalid_grant'
+          ? 'GMAIL_TOKEN_REVOKED'
+          : body?.error === 'invalid_client' || body?.error === 'unauthorized_client'
+            ? 'GMAIL_CLIENT_INVALID'
+            : 'GMAIL_AUTH_FAILED',
+      );
+    }
+    this.gmailToken = { value: body.access_token, expiresAt: Date.now() + (body.expires_in ?? 3600) * 1000 };
+    return body.access_token;
+  }
+
+  /**
+   * Gmail API users.messages.send qua HTTPS (cổng 443). Thư gửi từ chính tài khoản Gmail đã cấp quyền (scope
+   * gmail.send); Gmail đặt lại địa chỉ From nếu MAIL_FROM không phải tài khoản đó hoặc alias của nó.
+   */
+  private async sendViaGmail(mail: { to: string; subject: string; text: string; id: string }) {
+    const raw = buildMime({ from: this.cfg.mailFrom, ...mail });
+    for (let attempt = 0; ; attempt++) {
+      const token = await this.gmailAccessToken();
+      let res: Response;
+      try {
+        res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ raw }),
+          signal: AbortSignal.timeout(15000),
+        });
+      } catch {
+        throw new Error('GMAIL_UNREACHABLE');
+      }
+      if (res.ok) return;
+      // Access token bị thu hồi giữa chừng: bỏ token đệm và thử lại một lần với token mới.
+      if (res.status === 401 && attempt === 0) {
+        this.gmailToken = undefined;
+        continue;
+      }
+      const body = (await res.json().catch(() => null)) as { error?: { status?: string } } | null;
+      this.log.warn(
+        `Gmail API từ chối thư (HTTP ${res.status}${body?.error?.status ? `, ${body.error.status}` : ''}).`,
+      );
+      throw new Error(
+        res.status === 401 || res.status === 403
+          ? 'GMAIL_FORBIDDEN'
+          : res.status === 400
+            ? 'GMAIL_INVALID'
+            : res.status === 429
+              ? 'GMAIL_RATE_LIMITED'
+              : 'GMAIL_FAILED',
+      );
+    }
+  }
+
   async drain() {
     const rows = await this.db.$transaction(async (tx) => {
       const claimed = await tx.$queryRaw<
@@ -153,17 +241,54 @@ export class MailService {
         });
       } catch (e) {
         const reason =
-          e instanceof Error && /^(SMTP|RESEND)_[A-Z_]+$/.test(e.message) ? e.message : 'SEND_FAILED';
+          e instanceof Error && /^(SMTP|RESEND|GMAIL)_[A-Z_]+$/.test(e.message) ? e.message : 'SEND_FAILED';
         this.log.warn(`Không gửi được email ${row.id} (${reason}); sẽ thử lại theo lịch.`);
         await this.db.emailMessage.update({
           where: { id: row.id },
           data: {
             status: row.attempts >= 4 ? 'failed' : 'pending',
-            lastError: `Không gửi được qua ${this.cfg.mailTransport === 'resend' ? 'Resend' : 'SMTP'} (${reason}). Kiểm tra cấu hình email.`,
+            lastError: `Không gửi được qua ${TRANSPORT_LABEL[this.cfg.mailTransport]} (${reason}). Kiểm tra cấu hình email.`,
             availableAt: new Date(Date.now() + Math.min(300000, 10000 * 2 ** row.attempts)),
           },
         });
       }
     }
   }
+}
+
+const TRANSPORT_LABEL = {
+  local: 'hộp thư thử nghiệm',
+  smtp: 'SMTP',
+  resend: 'Resend',
+  gmail: 'Gmail API',
+} as const;
+
+/** Tiêu đề có ký tự ngoài ASCII (tiếng Việt) mã hóa theo RFC 2047. */
+function encodeHeader(value: string) {
+  return /^[ -~]*$/.test(value) ? value : `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
+}
+
+/** "Tên <a@b>": chỉ mã hóa phần tên, giữ nguyên địa chỉ. */
+function encodeAddress(value: string) {
+  const m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(value);
+  return m && m[1] ? `${encodeHeader(m[1])} <${m[2]}>` : value.trim();
+}
+
+/** Thư RFC 5322 dạng text/plain UTF-8, nội dung base64, trả về base64url cho trường `raw` của Gmail API. */
+export function buildMime(mail: { from: string; to: string; subject: string; text: string; id: string }) {
+  if (/[\r\n]/.test(mail.to + mail.from + mail.subject)) throw new Error('GMAIL_INVALID');
+  const body = Buffer.from(mail.text, 'utf8').toString('base64').replace(/.{76}/g, '$&\r\n');
+  const lines = [
+    `From: ${encodeAddress(mail.from)}`,
+    `To: ${mail.to}`,
+    `Subject: ${encodeHeader(mail.subject)}`,
+    `Message-ID: <${mail.id}@bot-arena>`,
+    `Date: ${new Date().toUTCString()}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    body,
+  ];
+  return Buffer.from(lines.join('\r\n'), 'utf8').toString('base64url');
 }

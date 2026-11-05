@@ -431,7 +431,9 @@ export function Tv1Admin() {
                 ? 'Gửi email qua SMTP'
                 : mail.data?.transport === 'resend'
                   ? 'Gửi email qua Resend'
-                  : 'Hộp thư thử nghiệm đang hoạt động'
+                  : mail.data?.transport === 'gmail'
+                    ? 'Gửi email qua Gmail API'
+                    : 'Hộp thư thử nghiệm đang hoạt động'
             }
           >
             Email lỗi được thử lại tự động tối đa 5 lần. Quản trị viên có thể xếp hàng gửi lại sau khi sửa cấu

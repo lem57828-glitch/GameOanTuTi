@@ -72,7 +72,7 @@ export class IdentityService {
       const code =
         error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
           ? error.code
-          : error instanceof Error && /^(SMTP|RESEND)_[A-Z_]+$/.test(error.message)
+          : error instanceof Error && /^(SMTP|RESEND|GMAIL)_[A-Z_]+$/.test(error.message)
             ? error.message
             : 'UNKNOWN';
       this.log.error(
@@ -81,7 +81,9 @@ export class IdentityService {
             ? 'Database schema is outdated; run pnpm db:migrate and restart the API.'
             : code.startsWith('RESEND_')
               ? 'Check RESEND_API_KEY and that MAIL_FROM uses a domain verified on Resend.'
-              : 'Check database availability and SMTP configuration.'),
+              : code.startsWith('GMAIL_')
+                ? 'Check GMAIL_CLIENT_ID/SECRET/REFRESH_TOKEN (run pnpm gmail:token to get a new refresh token).'
+                : 'Check database availability and SMTP configuration.'),
       );
       throw new AppError(
         'INTERNAL_ERROR',

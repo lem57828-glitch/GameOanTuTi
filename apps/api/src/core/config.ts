@@ -15,9 +15,15 @@ const Env = z.object({
           ),
       'EMAIL_ALLOWED_DOMAINS phải là các miền email hợp lệ, ngăn cách bằng dấu phẩy.',
     ),
-  /** local: hộp thư thử nghiệm (demo). smtp: máy chủ SMTP. resend: HTTP API của Resend (không cần cổng SMTP). */
-  MAIL_TRANSPORT: z.enum(['local', 'smtp', 'resend']).default('local'),
+  /**
+   * local: hộp thư thử nghiệm (demo). smtp: máy chủ SMTP. resend: HTTP API của Resend. gmail: Gmail API qua HTTPS
+   * (OAuth2 refresh token). resend và gmail không cần cổng SMTP.
+   */
+  MAIL_TRANSPORT: z.enum(['local', 'smtp', 'resend', 'gmail']).default('local'),
   RESEND_API_KEY: z.string().optional(),
+  GMAIL_CLIENT_ID: z.string().optional(),
+  GMAIL_CLIENT_SECRET: z.string().optional(),
+  GMAIL_REFRESH_TOKEN: z.string().optional(),
   MAIL_FROM: z.string().default('Bot Arena <noreply@localhost>'),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
@@ -47,8 +53,9 @@ const Env = z.object({
 
 export interface AppConfig {
   emailDomains: string[];
-  mailTransport: 'local' | 'smtp' | 'resend';
+  mailTransport: 'local' | 'smtp' | 'resend' | 'gmail';
   resendApiKey?: string;
+  gmail?: { clientId: string; clientSecret: string; refreshToken: string };
   mailFrom: string;
   smtpHost?: string;
   smtpPort: number;
@@ -87,17 +94,23 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error('Từ chối khởi động: SESSION_SECRET vẫn là giá trị mẫu.');
   }
   if (e.NODE_ENV === 'production' && e.MAIL_TRANSPORT === 'local')
-    throw new Error('Production yêu cầu MAIL_TRANSPORT=smtp.');
+    throw new Error('Production yêu cầu gửi email thật (MAIL_TRANSPORT=smtp, resend hoặc gmail).');
   if (e.MAIL_TRANSPORT === 'smtp' && !e.SMTP_HOST) throw new Error('SMTP_HOST là bắt buộc.');
   if (e.MAIL_TRANSPORT === 'resend' && !e.RESEND_API_KEY?.trim())
     throw new Error('MAIL_TRANSPORT=resend cần RESEND_API_KEY.');
   if (
+    e.MAIL_TRANSPORT === 'gmail' &&
+    (!e.GMAIL_CLIENT_ID?.trim() || !e.GMAIL_CLIENT_SECRET?.trim() || !e.GMAIL_REFRESH_TOKEN?.trim())
+  )
+    throw new Error('MAIL_TRANSPORT=gmail cần GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET và GMAIL_REFRESH_TOKEN.');
+  if (
     source.ARENA_PROFILE === 'official' &&
     e.MAIL_TRANSPORT !== 'resend' &&
+    e.MAIL_TRANSPORT !== 'gmail' &&
     (e.MAIL_TRANSPORT !== 'smtp' || !e.SMTP_USER?.trim() || !e.SMTP_PASSWORD?.trim())
   )
     throw new Error(
-      'Official yêu cầu gửi email thật: SMTP (SMTP_USER, SMTP_PASSWORD) hoặc Resend (RESEND_API_KEY) trong .env.official.',
+      'Official yêu cầu gửi email thật: SMTP (SMTP_USER, SMTP_PASSWORD), Resend (RESEND_API_KEY) hoặc Gmail API (GMAIL_*) trong .env.official.',
     );
   return {
     emailDomains: e.EMAIL_ALLOWED_DOMAINS.split(',')
@@ -105,6 +118,14 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       .filter(Boolean),
     mailTransport: e.MAIL_TRANSPORT,
     resendApiKey: e.RESEND_API_KEY?.trim() || undefined,
+    gmail:
+      e.MAIL_TRANSPORT === 'gmail'
+        ? {
+            clientId: e.GMAIL_CLIENT_ID!.trim(),
+            clientSecret: e.GMAIL_CLIENT_SECRET!.trim(),
+            refreshToken: e.GMAIL_REFRESH_TOKEN!.trim(),
+          }
+        : undefined,
     mailFrom: e.MAIL_FROM,
     smtpHost: e.SMTP_HOST,
     smtpPort: e.SMTP_PORT,
