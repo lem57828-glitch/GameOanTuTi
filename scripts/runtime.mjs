@@ -38,6 +38,7 @@ async function main() {
     'GMAIL_CLIENT_ID',
     'GMAIL_CLIENT_SECRET',
     'GMAIL_REFRESH_TOKEN',
+    'GMAIL_SENDER_EMAIL',
   ])
     env[key] = values[key] ?? '';
   if (action === 'start') {

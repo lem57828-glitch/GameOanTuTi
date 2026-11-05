@@ -82,7 +82,7 @@ export class IdentityService {
             : code.startsWith('RESEND_')
               ? 'Check RESEND_API_KEY and that MAIL_FROM uses a domain verified on Resend.'
               : code.startsWith('GMAIL_')
-                ? 'Check GMAIL_CLIENT_ID/SECRET/REFRESH_TOKEN (run pnpm gmail:token to get a new refresh token).'
+                ? 'Check GMAIL_CLIENT_ID/SECRET/REFRESH_TOKEN/SENDER_EMAIL (run pnpm gmail:token to get a new refresh token).'
                 : 'Check database availability and SMTP configuration.'),
       );
       throw new AppError(

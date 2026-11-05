@@ -74,10 +74,15 @@ Không cần các biến `SMTP_*` khi dùng Resend. Lỗi gửi ghi trong Logs d
 `RESEND_FORBIDDEN` = khóa sai hoặc `MAIL_FROM` chưa thuộc tên miền đã xác minh; `RESEND_INVALID` = địa chỉ gửi/nhận
 sai định dạng; `RESEND_RATE_LIMITED` = vượt hạn mức.
 
-### Hoặc: Gmail API qua HTTPS (không cần tên miền riêng)
+### Hoặc: Gmail API qua HTTPS (`MAIL_TRANSPORT=gmail_api`, không cần tên miền riêng)
 
-Gửi từ chính một tài khoản Gmail (vd. `btc.arena.ai@gmail.com`) qua HTTPS nên không bị chặn cổng SMTP và không cần
-tên miền. Giới hạn của Gmail thường: khoảng 500 thư/ngày.
+Gửi từ chính một tài khoản Gmail (vd. `btc.arena.ai@gmail.com`) bằng Gmail API `users.messages.send` qua HTTPS (cổng
+443), nên không bị Render chặn cổng SMTP. Áp dụng cho mã OTP đăng ký, thư xác minh email và đặt lại mật khẩu. Cơ chế
+OTP (120 giây, dùng một lần), chống gửi trùng và giới hạn tần suất giữ nguyên. Server tự đổi refresh token lấy access
+token (sống ~1 giờ) và làm mới khi hết hạn. Logs không bao giờ chứa mã OTP, client secret hay token. Giới hạn của Gmail
+thường: khoảng 500 thư/ngày.
+
+Google Cloud Console là nơi duy nhất cấp OAuth Client ID/Secret cho Gmail API, nên cần làm các bước sau **một lần**:
 
 1. console.cloud.google.com → tạo project → **APIs & Services → Library** → bật **Gmail API**.
 2. **OAuth consent screen** (Google Auth Platform): User type **External**; điền tên app, email hỗ trợ. Ở
@@ -89,22 +94,25 @@ tên miền. Giới hạn của Gmail thường: khoảng 500 thư/ngày.
    ```sh
    pnpm gmail:token -- <CLIENT_ID> <CLIENT_SECRET>
    ```
-   Mở link hiện ra, đăng nhập **đúng tài khoản Gmail dùng để gửi**, cho phép quyền _Gửi email thay bạn_ (chỉ quyền
-   gửi, không đọc hộp thư). Terminal in ra `GMAIL_REFRESH_TOKEN`.
+   Mở link hiện ra, đăng nhập **đúng tài khoản Gmail dùng để gửi**, cho phép quyền _Gửi email thay bạn_ (scope
+   `gmail.send`: chỉ gửi, không đọc hộp thư). Terminal in ra `GMAIL_REFRESH_TOKEN`.
 5. Render → **Environment**:
 
-| Biến                    | Giá trị                                  |
-| ----------------------- | ---------------------------------------- |
-| `MAIL_TRANSPORT`        | `gmail`                                  |
-| `GMAIL_CLIENT_ID`       | Client ID ở bước 3                       |
-| `GMAIL_CLIENT_SECRET`   | Client secret ở bước 3                   |
-| `GMAIL_REFRESH_TOKEN`   | token ở bước 4                           |
-| `MAIL_FROM`             | `Bot Arena <địa-chỉ-gmail-đã-cấp-quyền>` |
-| `EMAIL_ALLOWED_DOMAINS` | `vnu.edu.vn`                             |
+| Biến                    | Giá trị                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `MAIL_TRANSPORT`        | `gmail_api`                                                                   |
+| `GMAIL_CLIENT_ID`       | Client ID ở bước 3                                                            |
+| `GMAIL_CLIENT_SECRET`   | Client secret ở bước 3                                                        |
+| `GMAIL_REFRESH_TOKEN`   | token ở bước 4                                                                |
+| `GMAIL_SENDER_EMAIL`    | địa chỉ Gmail đã cấp quyền ở bước 4 (người gửi), vd. `btc.arena.ai@gmail.com` |
+| `MAIL_FROM`             | (tùy chọn) chỉ dùng phần tên hiển thị, vd. `Bot Arena <...>`                  |
+| `EMAIL_ALLOWED_DOMAINS` | `vnu.edu.vn`                                                                  |
 
-Lỗi trong Logs: `GMAIL_TOKEN_REVOKED` = refresh token hết hạn/bị thu hồi (app còn ở _Testing_, đổi mật khẩu Google,
-hoặc gỡ quyền) → chạy lại bước 4; `GMAIL_CLIENT_INVALID` = Client ID/secret sai; `GMAIL_FORBIDDEN` = chưa bật Gmail API
-hoặc thiếu quyền gửi; `GMAIL_RATE_LIMITED` = vượt hạn mức ngày.
+Không cần `SMTP_*` hay `RESEND_API_KEY`. Thiếu một trong bốn biến `GMAIL_*` thì API từ chối khởi động và báo tên biến
+thiếu. Lỗi gửi trong Logs: `GMAIL_TOKEN_REVOKED` = refresh token hết hạn/bị thu hồi (app còn ở _Testing_, đổi mật khẩu
+Google, hoặc gỡ quyền) → chạy lại bước 4; `GMAIL_CLIENT_INVALID` = Client ID/secret sai; `GMAIL_FORBIDDEN` = chưa bật
+Gmail API, thiếu quyền gửi hoặc `GMAIL_SENDER_EMAIL` không phải tài khoản đã cấp quyền; `GMAIL_RATE_LIMITED` = vượt hạn
+mức ngày. Thư xác minh/đặt lại mật khẩu lỗi được tự thử lại tối đa 5 lần.
 
 ## Sửa code
 

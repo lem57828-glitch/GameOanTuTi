@@ -1,4 +1,4 @@
-// Lấy GMAIL_REFRESH_TOKEN cho MAIL_TRANSPORT=gmail (chạy một lần trên máy có trình duyệt).
+// Lấy GMAIL_REFRESH_TOKEN cho MAIL_TRANSPORT=gmail_api (chạy một lần trên máy có trình duyệt).
 //   pnpm gmail:token -- <CLIENT_ID> <CLIENT_SECRET>
 // hoặc đặt biến môi trường GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET rồi chạy `pnpm gmail:token`.
 // OAuth client phải thuộc loại "Desktop app" (cho phép chuyển hướng về http://127.0.0.1:<cổng bất kỳ>).

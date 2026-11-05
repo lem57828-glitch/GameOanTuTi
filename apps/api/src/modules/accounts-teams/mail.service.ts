@@ -75,7 +75,7 @@ export class MailService {
   /** Gửi một thư thật qua SMTP, Resend hoặc Gmail API. Ném lỗi có mã ổn định (SMTP_* / RESEND_* / GMAIL_*). */
   private async deliver(mail: { to: string; subject: string; text: string; id: string }) {
     if (this.cfg.mailTransport === 'resend') return this.sendViaResend(mail);
-    if (this.cfg.mailTransport === 'gmail') return this.sendViaGmail(mail);
+    if (this.cfg.mailTransport === 'gmail_api') return this.sendViaGmail(mail);
     if (!this.cfg.smtpHost || !this.cfg.smtpUser || !this.cfg.smtpPassword?.trim())
       throw new Error('SMTP_NOT_CONFIGURED');
     const transport = this.transport();
@@ -179,11 +179,11 @@ export class MailService {
   }
 
   /**
-   * Gmail API users.messages.send qua HTTPS (cổng 443). Thư gửi từ chính tài khoản Gmail đã cấp quyền (scope
-   * gmail.send); Gmail đặt lại địa chỉ From nếu MAIL_FROM không phải tài khoản đó hoặc alias của nó.
+   * Gmail API users.messages.send qua HTTPS (cổng 443), scope gmail.send. Người gửi là GMAIL_SENDER_EMAIL (tài khoản đã
+   * cấp quyền hoặc alias của nó); tên hiển thị lấy từ MAIL_FROM nếu có.
    */
   private async sendViaGmail(mail: { to: string; subject: string; text: string; id: string }) {
-    const raw = buildMime({ from: this.cfg.mailFrom, ...mail });
+    const raw = buildMime({ from: gmailFrom(this.cfg.mailFrom, this.cfg.gmail!.senderEmail), ...mail });
     for (let attempt = 0; ; attempt++) {
       const token = await this.gmailAccessToken();
       let res: Response;
@@ -260,12 +260,18 @@ const TRANSPORT_LABEL = {
   local: 'hộp thư thử nghiệm',
   smtp: 'SMTP',
   resend: 'Resend',
-  gmail: 'Gmail API',
+  gmail_api: 'Gmail API',
 } as const;
 
 /** Tiêu đề có ký tự ngoài ASCII (tiếng Việt) mã hóa theo RFC 2047. */
 function encodeHeader(value: string) {
   return /^[ -~]*$/.test(value) ? value : `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
+}
+
+/** From cho Gmail API: tên hiển thị từ MAIL_FROM ("Bot Arena <...>"), địa chỉ luôn là GMAIL_SENDER_EMAIL. */
+export function gmailFrom(mailFrom: string, senderEmail: string) {
+  const name = /^\s*"?([^"<]*?)"?\s*</.exec(mailFrom)?.[1]?.trim();
+  return `${name || 'Bot Arena'} <${senderEmail}>`;
 }
 
 /** "Tên <a@b>": chỉ mã hóa phần tên, giữ nguyên địa chỉ. */

@@ -431,7 +431,7 @@ export function Tv1Admin() {
                 ? 'Gửi email qua SMTP'
                 : mail.data?.transport === 'resend'
                   ? 'Gửi email qua Resend'
-                  : mail.data?.transport === 'gmail'
+                  : mail.data?.transport === 'gmail_api'
                     ? 'Gửi email qua Gmail API'
                     : 'Hộp thư thử nghiệm đang hoạt động'
             }

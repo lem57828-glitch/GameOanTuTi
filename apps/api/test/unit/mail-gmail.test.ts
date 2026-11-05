@@ -1,4 +1,5 @@
-// Gửi mã xác minh qua Gmail API (MAIL_TRANSPORT=gmail): không gọi Google thật, fetch được giả lập.
+// Gửi mã xác minh qua Gmail API (MAIL_TRANSPORT=gmail_api): không gọi Google thật, fetch được giả lập.
+import { Logger } from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadConfig } from '../../src/core/config.js';
 import { MailService, buildMime } from '../../src/modules/accounts-teams/mail.service.js';
@@ -8,13 +9,14 @@ const base = {
   DATABASE_URL: 'postgresql://test',
   REDIS_URL: 'redis://localhost',
   SESSION_SECRET: 'unit-test-secret-0123456789abcdef0123456789',
-  MAIL_FROM: 'Ban tổ chức <btc.arena.ai@gmail.com>',
+  MAIL_FROM: 'Ban tổ chức <noreply@khac.example>',
 } as const;
 const gmailEnv = {
-  MAIL_TRANSPORT: 'gmail',
+  MAIL_TRANSPORT: 'gmail_api',
   GMAIL_CLIENT_ID: 'cid.apps.googleusercontent.com',
   GMAIL_CLIENT_SECRET: 'csecret',
   GMAIL_REFRESH_TOKEN: '1//refresh',
+  GMAIL_SENDER_EMAIL: 'btc.arena.ai@gmail.com',
 } as const;
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
@@ -35,7 +37,10 @@ function setup(responses: Response[]) {
 
 const decode = (raw: string) => Buffer.from(raw, 'base64url').toString('utf8');
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe('gửi email qua Gmail API', () => {
   it('đổi refresh token lấy access token, gửi thư MIME UTF-8, dùng lại token cho thư sau', async () => {
@@ -87,10 +92,50 @@ describe('gửi email qua Gmail API', () => {
     expect(created).toHaveLength(0);
   });
 
-  it('cấu hình gmail bắt buộc đủ 3 biến; chặn chèn header qua xuống dòng', () => {
-    expect(() => loadConfig({ ...base, MAIL_TRANSPORT: 'gmail', GMAIL_CLIENT_ID: 'x' })).toThrow(/GMAIL_/);
+  it('cấu hình gmail_api bắt buộc đủ 4 biến, người gửi hợp lệ; chặn chèn header qua xuống dòng', () => {
+    expect(() => loadConfig({ ...base, MAIL_TRANSPORT: 'gmail_api', GMAIL_CLIENT_ID: 'x' })).toThrow(
+      /GMAIL_/,
+    );
+    const { GMAIL_SENDER_EMAIL: _omit, ...noSender } = gmailEnv;
+    expect(() => loadConfig({ ...base, ...noSender })).toThrow(/GMAIL_SENDER_EMAIL/);
+    expect(() => loadConfig({ ...base, ...gmailEnv, GMAIL_SENDER_EMAIL: 'khong-phai-email' })).toThrow(
+      /GMAIL_SENDER_EMAIL/,
+    );
+    expect(() => loadConfig({ ...base, MAIL_TRANSPORT: 'gmail' })).toThrow();
     expect(() =>
       buildMime({ from: 'a@b.c', to: 'x@y.z\r\nBcc: e@f.g', subject: 's', text: 't', id: 'i' }),
     ).toThrow('GMAIL_INVALID');
+  });
+
+  it('thư xác minh email / đặt lại mật khẩu (hàng đợi) cũng gửi qua Gmail API; lỗi → thử lại, không ghi credentials', async () => {
+    const cfg = loadConfig({ ...base, ...gmailEnv });
+    const rows = [
+      { id: 'e1', to: 'a@vnu.edu.vn', subject: 'Khôi phục mật khẩu Bot Arena', text: 'link', attempts: 0 },
+      { id: 'e2', to: 'b@vnu.edu.vn', subject: 'Xác minh email Bot Arena', text: 'link', attempts: 0 },
+    ];
+    const updates: Array<Record<string, unknown>> = [];
+    const db = {
+      $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({ $queryRaw: async () => rows, emailMessage: { update: async () => ({}) } }),
+      emailMessage: {
+        update: async ({ data }: { data: Record<string, unknown> }) => updates.push(data),
+      },
+    };
+    const responses = [
+      json({ access_token: 'tok', expires_in: 3600 }),
+      json({ id: 'm1' }),
+      json({ error: { status: 'RESOURCE_EXHAUSTED' } }, 429),
+    ];
+    const fetchMock = vi.fn(async () => responses.shift()!);
+    vi.stubGlobal('fetch', fetchMock);
+    const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await new MailService(db as any, cfg).drain();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(updates[0]).toMatchObject({ status: 'sent', lastError: null });
+    expect(updates[1]).toMatchObject({ status: 'pending' });
+    expect(String(updates[1]!.lastError)).toContain('GMAIL_RATE_LIMITED');
+    const logged = warn.mock.calls.flat().join(' ');
+    expect(logged).not.toMatch(/csecret|1\/\/refresh|tok\b/);
   });
 });
