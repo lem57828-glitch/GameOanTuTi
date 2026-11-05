@@ -34,6 +34,7 @@ async function main() {
     'MAIL_FROM',
     'GITHUB_BOT_TOKEN',
     'GITHUB_BOT_PRIVATE_REPOS',
+    'RESEND_API_KEY',
   ])
     env[key] = values[key] ?? '';
   if (action === 'start') {

@@ -56,32 +56,80 @@ export class MailService {
       });
       return;
     }
+    await this.deliver({ to: email, subject, text, id: `registration-${nonce}` });
+    // Do not store live OTPs in the email outbox or retry them after they have expired.
+    await tx.emailMessage.create({
+      data: {
+        to: email,
+        subject,
+        text: 'Mã xác minh dùng một lần, có hiệu lực 120 giây.',
+        dedupeKey: `registration:${nonce}`,
+        status: 'sent',
+        sentAt: new Date(),
+      },
+    });
+  }
+
+  /** Gửi một thư thật qua SMTP hoặc Resend. Ném lỗi có mã ổn định (SMTP_* / RESEND_*) để ghi log chẩn đoán. */
+  private async deliver(mail: { to: string; subject: string; text: string; id: string }) {
+    if (this.cfg.mailTransport === 'resend') return this.sendViaResend(mail);
     if (!this.cfg.smtpHost || !this.cfg.smtpUser || !this.cfg.smtpPassword?.trim())
       throw new Error('SMTP_NOT_CONFIGURED');
     const transport = this.transport();
     try {
       const result = await transport.sendMail({
         from: this.cfg.mailFrom,
-        to: email,
-        subject,
-        text,
-        messageId: `<registration-${nonce}@bot-arena>`,
+        to: mail.to,
+        subject: mail.subject,
+        text: mail.text,
+        messageId: `<${mail.id}@bot-arena>`,
       });
       if (!result.accepted?.length) throw new Error('SMTP_RECIPIENT_REJECTED');
-      // Do not store live OTPs in the email outbox or retry them after they have expired.
-      await tx.emailMessage.create({
-        data: {
-          to: email,
-          subject,
-          text: 'Mã xác minh dùng một lần, có hiệu lực 120 giây.',
-          dedupeKey: `registration:${nonce}`,
-          status: 'sent',
-          sentAt: new Date(),
-        },
-      });
     } finally {
       transport.close();
     }
+  }
+
+  /**
+   * Resend HTTP API: gửi qua HTTPS (cổng 443) nên không bị nền tảng chặn cổng SMTP. Idempotency-Key theo id thư để
+   * lần thử lại không gửi trùng. MAIL_FROM phải thuộc tên miền đã xác minh trên Resend; địa chỉ thử nghiệm
+   * onboarding@resend.dev chỉ gửi được tới email của chính chủ tài khoản Resend.
+   */
+  private async sendViaResend(mail: { to: string; subject: string; text: string; id: string }) {
+    if (!this.cfg.resendApiKey) throw new Error('RESEND_NOT_CONFIGURED');
+    let res: Response;
+    try {
+      res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${this.cfg.resendApiKey}`,
+          'content-type': 'application/json',
+          'idempotency-key': mail.id,
+        },
+        body: JSON.stringify({
+          from: this.cfg.mailFrom,
+          to: [mail.to],
+          subject: mail.subject,
+          text: mail.text,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch {
+      throw new Error('RESEND_UNREACHABLE');
+    }
+    if (res.ok) return;
+    // Chỉ ghi mã lỗi của Resend (vd. validation_error, missing_api_key) — không ghi khóa API hay nội dung thư.
+    const body = (await res.json().catch(() => null)) as { name?: string } | null;
+    this.log.warn(`Resend từ chối thư (HTTP ${res.status}${body?.name ? `, ${body.name}` : ''}).`);
+    throw new Error(
+      res.status === 401 || res.status === 403
+        ? 'RESEND_FORBIDDEN'
+        : res.status === 422
+          ? 'RESEND_INVALID'
+          : res.status === 429
+            ? 'RESEND_RATE_LIMITED'
+            : 'RESEND_FAILED',
+    );
   }
   async drain() {
     const rows = await this.db.$transaction(async (tx) => {
@@ -95,33 +143,27 @@ export class MailService {
         });
       return claimed;
     });
-    const transport = this.cfg.mailTransport === 'smtp' ? this.transport() : null;
+    const live = this.cfg.mailTransport !== 'local';
     for (const row of rows) {
       try {
-        if (transport)
-          await transport.sendMail({
-            from: this.cfg.mailFrom,
-            to: row.to,
-            subject: row.subject,
-            text: row.text,
-            messageId: `<${row.id}@bot-arena>`,
-          });
+        if (live) await this.deliver({ to: row.to, subject: row.subject, text: row.text, id: row.id });
         await this.db.emailMessage.update({
           where: { id: row.id },
-          data: { status: transport ? 'sent' : 'local', sentAt: new Date(), lastError: null },
+          data: { status: live ? 'sent' : 'local', sentAt: new Date(), lastError: null },
         });
-      } catch {
-        this.log.warn(`Không gửi được email ${row.id}; sẽ thử lại theo lịch.`);
+      } catch (e) {
+        const reason =
+          e instanceof Error && /^(SMTP|RESEND)_[A-Z_]+$/.test(e.message) ? e.message : 'SEND_FAILED';
+        this.log.warn(`Không gửi được email ${row.id} (${reason}); sẽ thử lại theo lịch.`);
         await this.db.emailMessage.update({
           where: { id: row.id },
           data: {
             status: row.attempts >= 4 ? 'failed' : 'pending',
-            lastError: 'Không kết nối hoặc gửi được qua SMTP. Kiểm tra cấu hình email.',
+            lastError: `Không gửi được qua ${this.cfg.mailTransport === 'resend' ? 'Resend' : 'SMTP'} (${reason}). Kiểm tra cấu hình email.`,
             availableAt: new Date(Date.now() + Math.min(300000, 10000 * 2 ** row.attempts)),
           },
         });
       }
     }
-    transport?.close();
   }
 }

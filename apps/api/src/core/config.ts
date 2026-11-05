@@ -15,7 +15,9 @@ const Env = z.object({
           ),
       'EMAIL_ALLOWED_DOMAINS phải là các miền email hợp lệ, ngăn cách bằng dấu phẩy.',
     ),
-  MAIL_TRANSPORT: z.enum(['local', 'smtp']).default('local'),
+  /** local: hộp thư thử nghiệm (demo). smtp: máy chủ SMTP. resend: HTTP API của Resend (không cần cổng SMTP). */
+  MAIL_TRANSPORT: z.enum(['local', 'smtp', 'resend']).default('local'),
+  RESEND_API_KEY: z.string().optional(),
   MAIL_FROM: z.string().default('Bot Arena <noreply@localhost>'),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
@@ -45,7 +47,8 @@ const Env = z.object({
 
 export interface AppConfig {
   emailDomains: string[];
-  mailTransport: 'local' | 'smtp';
+  mailTransport: 'local' | 'smtp' | 'resend';
+  resendApiKey?: string;
   mailFrom: string;
   smtpHost?: string;
   smtpPort: number;
@@ -86,16 +89,22 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   if (e.NODE_ENV === 'production' && e.MAIL_TRANSPORT === 'local')
     throw new Error('Production yêu cầu MAIL_TRANSPORT=smtp.');
   if (e.MAIL_TRANSPORT === 'smtp' && !e.SMTP_HOST) throw new Error('SMTP_HOST là bắt buộc.');
+  if (e.MAIL_TRANSPORT === 'resend' && !e.RESEND_API_KEY?.trim())
+    throw new Error('MAIL_TRANSPORT=resend cần RESEND_API_KEY.');
   if (
     source.ARENA_PROFILE === 'official' &&
+    e.MAIL_TRANSPORT !== 'resend' &&
     (e.MAIL_TRANSPORT !== 'smtp' || !e.SMTP_USER?.trim() || !e.SMTP_PASSWORD?.trim())
   )
-    throw new Error('Official yêu cầu SMTP thật: điền SMTP_USER và SMTP_PASSWORD trong .env.official.');
+    throw new Error(
+      'Official yêu cầu gửi email thật: SMTP (SMTP_USER, SMTP_PASSWORD) hoặc Resend (RESEND_API_KEY) trong .env.official.',
+    );
   return {
     emailDomains: e.EMAIL_ALLOWED_DOMAINS.split(',')
       .map((d) => d.trim().replace(/^@/, '').toLowerCase())
       .filter(Boolean),
     mailTransport: e.MAIL_TRANSPORT,
+    resendApiKey: e.RESEND_API_KEY?.trim() || undefined,
     mailFrom: e.MAIL_FROM,
     smtpHost: e.SMTP_HOST,
     smtpPort: e.SMTP_PORT,

@@ -72,14 +72,16 @@ export class IdentityService {
       const code =
         error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
           ? error.code
-          : error instanceof Error && /^SMTP_[A-Z_]+$/.test(error.message)
+          : error instanceof Error && /^(SMTP|RESEND)_[A-Z_]+$/.test(error.message)
             ? error.message
             : 'UNKNOWN';
       this.log.error(
         `Registration code failed (${code}). ` +
           (code === 'P2021' || code === 'P2022'
             ? 'Database schema is outdated; run pnpm db:migrate and restart the API.'
-            : 'Check database availability and SMTP configuration.'),
+            : code.startsWith('RESEND_')
+              ? 'Check RESEND_API_KEY and that MAIL_FROM uses a domain verified on Resend.'
+              : 'Check database availability and SMTP configuration.'),
       );
       throw new AppError(
         'INTERNAL_ERROR',

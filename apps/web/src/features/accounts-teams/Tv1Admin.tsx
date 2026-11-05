@@ -427,7 +427,11 @@ export function Tv1Admin() {
           <ErrorMessage error={mail.error} />
           <Alert
             title={
-              mail.data?.transport === 'smtp' ? 'Gửi email qua SMTP' : 'Hộp thư thử nghiệm đang hoạt động'
+              mail.data?.transport === 'smtp'
+                ? 'Gửi email qua SMTP'
+                : mail.data?.transport === 'resend'
+                  ? 'Gửi email qua Resend'
+                  : 'Hộp thư thử nghiệm đang hoạt động'
             }
           >
             Email lỗi được thử lại tự động tối đa 5 lần. Quản trị viên có thể xếp hàng gửi lại sau khi sửa cấu

@@ -52,6 +52,28 @@ pnpm exec tsx prisma/demo-experience.ts --solo
 Remove-Item Env:DATABASE_URL
 ```
 
+## Gửi email thật (mã xác minh đăng ký)
+
+Mặc định bản demo dùng hộp thư thử nghiệm (`MAIL_TRANSPORT=local`, xem mã ở `/mailbox`) — không gửi thư thật. Render gói
+Free chặn cổng SMTP nên dùng **Resend** (gửi qua HTTPS):
+
+1. resend.com → **Domains → Add domain** → thêm các bản ghi DNS Resend đưa ra vào nhà quản lý tên miền → chờ trạng thái
+   **Verified**. Không có tên miền đã xác minh, Resend chỉ cho gửi từ `onboarding@resend.dev` **tới đúng email chủ tài
+   khoản Resend** — sinh viên khác sẽ không nhận được.
+2. Resend → **API Keys → Create API Key** (quyền Sending access).
+3. Render → **Environment**:
+
+| Biến                    | Giá trị                                                       |
+| ----------------------- | ------------------------------------------------------------- |
+| `MAIL_TRANSPORT`        | `resend`                                                      |
+| `RESEND_API_KEY`        | khóa ở bước 2 (`re_...`)                                      |
+| `MAIL_FROM`             | `Bot Arena <no-reply@ten-mien-da-xac-minh>`                   |
+| `EMAIL_ALLOWED_DOMAINS` | `vnu.edu.vn` (thêm `,gmail.com`... nếu cho đăng ký miền khác) |
+
+Không cần các biến `SMTP_*` khi dùng Resend. Lỗi gửi ghi trong Logs dạng `Registration code failed (RESEND_FORBIDDEN)`:
+`RESEND_FORBIDDEN` = khóa sai hoặc `MAIL_FROM` chưa thuộc tên miền đã xác minh; `RESEND_INVALID` = địa chỉ gửi/nhận
+sai định dạng; `RESEND_RATE_LIMITED` = vượt hạn mức.
+
 ## Sửa code
 
 Push lên `main` → Render tự build và deploy lại (`autoDeploy`). Dữ liệu ở Neon giữ nguyên.
